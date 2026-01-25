@@ -210,22 +210,29 @@ struct ProgramIconButton: View {
                     .font(.system(size: 32))
                     .foregroundStyle(.blue)
                     .frame(width: 50, height: 50)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(isHovering ? Color.secondary.opacity(0.1) : Color.clear)
-                    )
 
                 Text(name)
                     .font(.caption)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
             }
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .onHover { hover in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                isHovering = hover
-            }
-        }
+        .buttonStyle(ProgramIconButtonStyle())
+    }
+}
+
+struct ProgramIconButtonStyle: ButtonStyle {
+    @State private var isHovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(4)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isHovering ? Color.secondary.opacity(0.1) : Color.clear)
+            )
+            .opacity(configuration.isPressed ? 0.7 : 1.0)
+            .onHover { isHovering = $0 }
     }
 }

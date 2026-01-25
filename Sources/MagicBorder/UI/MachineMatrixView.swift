@@ -79,13 +79,19 @@ struct MachineCardButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(
+                .regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(configuration.isPressed ? Color.primary.opacity(0.05) : Color.clear)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.separator.opacity(isHovering || configuration.isPressed ? 1.0 : 0.2), lineWidth: 1)
+                    .stroke(
+                        .separator.opacity(isHovering || configuration.isPressed ? 1.0 : 0.2),
+                        lineWidth: 1)
             }
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.snappy(duration: 0.1), value: configuration.isPressed)
             .onHover { isHovering = $0 }
             .contentShape(Rectangle())
     }

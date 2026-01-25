@@ -223,16 +223,9 @@ private struct DragDropOverlayView: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(16)
         .frame(maxWidth: 360)
-        .background(.ultraThinMaterial)
-        .clipShape(.rect(cornerRadius: 14))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
-        )
-        .shadow(radius: 8, y: 2)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -355,29 +348,29 @@ struct AccessibilityWarningBanner: View {
     let service: MBAccessibilityService
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-                .font(.title3)
+        GroupBox {
+            HStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .font(.title3)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Accessibility Permissions Required")
-                    .font(.headline)
-                Text("MagicBorder needs control to share input.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Accessibility Permissions Required")
+                        .font(.headline)
+                    Text("MagicBorder needs control to share input.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button("Open Settings") {
+                    service.promptForPermission()
+                }
+                .controlSize(.small)
             }
-
-            Spacer()
-
-            Button("Open Settings") {
-                service.promptForPermission()
-            }
-            .controlSize(.small)
+            .padding(4)
         }
-        .padding()
-        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.3), lineWidth: 1))
         .padding(.horizontal)
     }
 }
