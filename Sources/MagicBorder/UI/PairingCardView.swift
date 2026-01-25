@@ -57,7 +57,7 @@ struct PairingCardView: View {
 }
 
 #Preview {
-    @State var key = "1234567890ABCDEF"
+    @Previewable @State var key = "1234567890ABCDEF"
     PairingCardView(securityKey: $key)
         .padding()
 }

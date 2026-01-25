@@ -1,9 +1,11 @@
 import Foundation
 import Network
+import Observation
 import QuartzCore  // For CACurrentMediaTime() or similar if needed
 
 @MainActor
-public class MWBClient: ObservableObject {
+@Observable
+public class MWBClient {
     public init() {}
     private var connection: NWConnection?
     private let crypto = MWBCrypto.shared
@@ -11,8 +13,8 @@ public class MWBClient: ObservableObject {
     // Valid 32-bit ID (Simulated)
     private let machineID: Int32 = Int32.random(in: 1000...999999)
 
-    @Published public var status: String = "Idle"
-    @Published public var isConnected: Bool = false
+    public var status: String = "Idle"
+    public var isConnected: Bool = false
 
     // Config
     var targetIP: String = ""

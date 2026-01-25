@@ -12,23 +12,40 @@ struct MachineMatrixView: View {
     @State private var draggingMachine: Machine?
 
     var body: some View {
-        HStack(spacing: 20) {
-            ForEach(machines) { machine in
-                MachineCard(name: machine.name, isOnline: machine.isOnline)
-                    .onDrag {
-                        self.draggingMachine = machine
-                        return NSItemProvider(object: machine.id.uuidString as NSString)
+        Grid(horizontalSpacing: 20, verticalSpacing: 20) {
+            // Display machines in a grid (e.g., 2 columns)
+            // For simplicity in this specialized view, we use chunks if more than 2
+            let rows = machines.chunked(into: 2)
+            ForEach(0..<rows.count, id: \.self) { rowIndex in
+                GridRow {
+                    ForEach(rows[rowIndex]) { machine in
+                        MachineCard(name: machine.name, isOnline: machine.isOnline)
+                            .onDrag {
+                                self.draggingMachine = machine
+                                return NSItemProvider(object: machine.id.uuidString as NSString)
+                            }
+                            .onDrop(
+                                of: [UTType.text],
+                                delegate: MachineDropDelegate(
+                                    item: machine, machines: $machines,
+                                    draggingItem: $draggingMachine))
                     }
-                    .onDrop(
-                        of: [UTType.text],
-                        delegate: MachineDropDelegate(
-                            item: machine, machines: $machines, draggingItem: $draggingMachine))
+                }
             }
         }
         .padding()
         .background(Material.ultraThin)
         .cornerRadius(12)
         .animation(.default, value: machines)
+    }
+}
+
+// Helper for grid chunking
+extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
+        }
     }
 }
 
@@ -42,14 +59,10 @@ struct MachineCard: View {
             .frame(width: 120, height: 80)
             .overlay {
                 VStack {
-                    if #available(macOS 14.0, *) {
-                        Image(systemName: "desktopcomputer")
-                            .font(.largeTitle)
-                            .symbolEffect(.bounce, value: isOnline)
-                    } else {
-                        Image(systemName: "desktopcomputer")
-                            .font(.largeTitle)
-                    }
+                    Image(systemName: "desktopcomputer")
+                        .font(.largeTitle)
+                        .symbolEffect(.bounce, value: isOnline)
+
                     Text(name)
                         .font(.caption)
                         .fontWeight(.medium)
@@ -89,7 +102,7 @@ struct MachineDropDelegate: DropDelegate {
 
 // Preview
 #Preview {
-    @State var demoMachines = [
+    @Previewable @State var demoMachines = [
         Machine(id: UUID(), name: "MacBook Pro", isOnline: true),
         Machine(id: UUID(), name: "Windows PC", isOnline: false),
         Machine(id: UUID(), name: "Linux Server", isOnline: false),

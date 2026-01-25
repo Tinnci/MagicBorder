@@ -1,10 +1,12 @@
 import AppKit
 import Foundation
 import Network
+import Observation
 
 @MainActor
-public class NetworkManager: ObservableObject {
-    public static let shared = NetworkManager()
+@Observable
+public class MBNetworkManager: Observation.Observable {
+    public static let shared = MBNetworkManager()
 
     // Config
     let port: NWEndpoint.Port = 12345
@@ -15,7 +17,7 @@ public class NetworkManager: ObservableObject {
     private var browser: NWBrowser?
 
     // Connections
-    @Published public var peers: [NWConnection] = []
+    public var peers: [NWConnection] = []
 
     public struct ConnectedMachine: Identifiable, Equatable {
         public let id: UUID
@@ -26,9 +28,9 @@ public class NetworkManager: ObservableObject {
             return lhs.id == rhs.id
         }
     }
-    @Published public var connectedMachines: [ConnectedMachine] = []
+    public var connectedMachines: [ConnectedMachine] = []
 
-    @Published public var availablePeers: [NWBrowser.Result] = []
+    public var availablePeers: [NWBrowser.Result] = []
 
     // Unified Discovery
     public struct DiscoveredPeer: Identifiable, Equatable, Hashable {
@@ -54,7 +56,7 @@ public class NetworkManager: ObservableObject {
         }
     }
 
-    @Published public var discoveredPeers: [DiscoveredPeer] = []
+    public var discoveredPeers: [DiscoveredPeer] = []
 
     // Identity
     let localID = UUID()
@@ -126,7 +128,7 @@ public class NetworkManager: ObservableObject {
         let connection = NWConnection(to: result.endpoint, using: .tcp)
         handleNewConnection(connection)
     }
-    
+
     public func connect(to endpoint: NWEndpoint) {
         let connection = NWConnection(to: endpoint, using: .tcp)
         handleNewConnection(connection)

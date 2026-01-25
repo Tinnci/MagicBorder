@@ -1,14 +1,16 @@
 @preconcurrency import Cocoa
 import CoreGraphics
+import Observation
 
 @MainActor
-public class InputManager: ObservableObject {
-    public static let shared = InputManager()
+@Observable
+public class MBInputManager: Observation.Observable {
+    public static let shared = MBInputManager()
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
-    @Published public var isIntercepting: Bool = false
+    public var isIntercepting: Bool = false
 
     public func toggleInterception(_ enable: Bool) {
         if enable {
@@ -90,7 +92,7 @@ func globalEventTapCallback(
         return Unmanaged.passRetained(event)
     }
 
-    let manager = Unmanaged<InputManager>.fromOpaque(refcon).takeUnretainedValue()
+    let manager = Unmanaged<MBInputManager>.fromOpaque(refcon).takeUnretainedValue()
     // Directly call nonisolated handle method
     return manager.handle(proxy: proxy, type: type, event: event)
 }

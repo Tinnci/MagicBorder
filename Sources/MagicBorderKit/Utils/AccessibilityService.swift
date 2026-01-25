@@ -1,9 +1,11 @@
 @preconcurrency import ApplicationServices
+import Observation
 import SwiftUI
 
 @MainActor
-public class AccessibilityService: ObservableObject {
-    @Published public var isTrusted: Bool = false
+@Observable
+public class MBAccessibilityService: Observation.Observable {
+    public var isTrusted: Bool = false
 
     public init() {
         checkStatus()
@@ -15,10 +17,21 @@ public class AccessibilityService: ObservableObject {
         self.isTrusted = AXIsProcessTrustedWithOptions(options)
     }
 
+    /// Prompts the user with system alert if permission is missing (2026 best practice)
     public func promptForPermission() {
         let options =
             [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        AXIsProcessTrustedWithOptions(options)
+        let granted = AXIsProcessTrustedWithOptions(options)
+        self.isTrusted = granted
+    }
+
+    /// Opens System Settings directly to Accessibility privacy pane (2026 UX best practice)
+    public func openSystemSettings() {
+        if let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     /// Polling loop to check permission status periodically
