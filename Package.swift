@@ -5,6 +5,7 @@ import PackageDescription
 
 let package = Package(
     name: "MagicBorder",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v14)
     ],

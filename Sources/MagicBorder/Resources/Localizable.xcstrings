@@ -25,16 +25,196 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "就绪" } }
       }
     },
+    "System Services Ready" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "System Services Ready" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "系统服务正常" } }
+      }
+    },
     "Accessibility Permission Needed" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Accessibility Permission Needed" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要辅助功能权限" } }
       }
     },
+    "Grant Access" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Grant Access" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "授予权限" } }
+      }
+    },
     "Search machines" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Search machines" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索设备" } }
+      }
+    },
+    "Main" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Main" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主要" } }
+      }
+    },
+    "Machines" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Machines" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "设备列表" } }
+      }
+    },
+    "MagicBorder" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "MagicBorder" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "MagicBorder" } }
+      }
+    },
+    "Machine Arrangement" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Machine Arrangement" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "设备布局" } }
+      }
+    },
+    "Switching" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Switching" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "切换状态" } }
+      }
+    },
+    "Active: %@" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Active: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前活跃: %@" } }
+      }
+    },
+    "Matrix Options" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Matrix Options" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "矩阵选项" } }
+      }
+    },
+    "Two Row Matrix" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Two Row Matrix" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "双行矩阵" } }
+      }
+    },
+    "Swap Matrix Order" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Swap Matrix Order" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "交换矩阵顺序" } }
+      }
+    },
+    "Send Files (MWB DragDrop)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send Files (MWB DragDrop)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送文件 (MWB 拖放)" } }
+      }
+    },
+    "Clipboard" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clipboard" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "剪贴板" } }
+      }
+    },
+    "Share Clipboard" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Share Clipboard" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "共享剪贴板" } }
+      }
+    },
+    "Transfer Files" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Transfer Files" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "传输文件" } }
+      }
+    },
+    "Cursor" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cursor" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "光标" } }
+      }
+    },
+    "Wrap Mouse at Screen Edge" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Wrap Mouse at Screen Edge" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "屏幕边缘循环光标" } }
+      }
+    },
+    "Hide Mouse at Edge" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide Mouse at Edge" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "边缘隐藏光标" } }
+      }
+    },
+    "Network" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Network" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "网络" } }
+      }
+    },
+    "Message Port" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Message Port" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "消息端口" } }
+      }
+    },
+    "Clipboard Port" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clipboard Port" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "剪贴板端口" } }
+      }
+    },
+    "Matrix" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Matrix" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "矩阵" } }
+      }
+    },
+    "Matrix One Row" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Matrix One Row" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "单行矩阵" } }
+      }
+    },
+    "Matrix Circle (Swap)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Matrix Circle (Swap)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "循环矩阵 (交换)" } }
+      }
+    },
+    "Security" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Security" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "安全" } }
+      }
+    },
+    "Security Key" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Security Key" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "安全密钥" } }
+      }
+    },
+    "Validate Key" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Validate Key" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "验证密钥" } }
+      }
+    },
+    "Connect" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接" } }
+      }
+    },
+    "Scanning for machines..." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Scanning for machines..." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在扫描设备..." } }
+      }
+    },
+    "Select an item from the sidebar" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select an item from the sidebar" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "从侧边栏选择一项" } }
       }
     }
   },

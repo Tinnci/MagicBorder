@@ -1,7 +1,7 @@
 /*
  * MagicBorder - A native macOS application for mouse and keyboard sharing.
  * Copyright (C) 2026 MagicBorder Contributors
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -27,9 +27,9 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case arrangement
     case settings
     case machines
-    
+
     var id: String { self.rawValue }
-    
+
     var title: String {
         switch self {
         case .arrangement: return "Arrangement"
@@ -37,7 +37,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .machines: return "Discovered Machines"
         }
     }
-    
+
     var icon: String {
         switch self {
         case .arrangement: return "square.grid.2x2"
@@ -61,13 +61,13 @@ private struct StatusDot: View {
 
 struct MachineDetailView: View {
     let machine: Machine
-    
+
     private let columns = [
         GridItem(.adaptive(minimum: 70))
     ]
-    
+
     @State private var isRefreshing = false
-    
+
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
@@ -82,7 +82,7 @@ struct MachineDetailView: View {
                                 .font(.system(size: 40))
                                 .foregroundStyle(.blue.gradient)
                         }
-                        
+
                         VStack(alignment: .leading, spacing: 4) {
                             Text(machine.name)
                                 .font(.title)
@@ -96,16 +96,17 @@ struct MachineDetailView: View {
                         Spacer()
                     }
                     .padding()
-                    .background(RoundedRectangle(cornerRadius: 16).fill(Color.primary.opacity(0.03)))
-                    
+                    .background(
+                        RoundedRectangle(cornerRadius: 16).fill(Color.primary.opacity(0.03)))
+
                     Divider()
-                    
+
                     // Pinned Programs Grid
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Pinned Programs")
                             .font(.headline)
                             .foregroundStyle(.secondary)
-                        
+
                         LazyVGrid(columns: columns, spacing: 16) {
                             ForEach(0..<8) { i in
                                 ProgramIconButton(name: "App \(i+1)", icon: "app.dashed")
@@ -113,13 +114,13 @@ struct MachineDetailView: View {
                         }
                     }
                     .padding()
-                    
+
                     // Quick Links / Configuration
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Configuration")
                             .font(.headline)
                             .foregroundStyle(.secondary)
-                        
+
                         GroupBox {
                             VStack(spacing: 0) {
                                 NavigationLink(destination: Text("Display Settings Content")) {
@@ -136,25 +137,25 @@ struct MachineDetailView: View {
                 }
                 .padding()
             }
-            
+
             // Bottom Toolbar Divider
             Divider()
-            
+
             HStack {
                 Button(action: {}) {
                     Label("Restart", systemImage: "restart")
                 }
                 .buttonStyle(.plain)
                 .help("Restart connection")
-                
+
                 Button(action: {}) {
                     Label("Disconnect", systemImage: "xmark.circle")
                 }
                 .buttonStyle(.plain)
                 .help("Disconnect machine")
-                
+
                 Spacer()
-                
+
                 Button(action: {
                     isRefreshing = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -163,7 +164,10 @@ struct MachineDetailView: View {
                 }) {
                     Image(systemName: "arrow.clockwise")
                         .rotationEffect(.degrees(isRefreshing ? 360 : 0))
-                        .animation(isRefreshing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: isRefreshing)
+                        .animation(
+                            isRefreshing
+                                ? .linear(duration: 1).repeatForever(autoreverses: false)
+                                : .default, value: isRefreshing)
                 }
                 .buttonStyle(.plain)
                 .help("Refresh Status")
@@ -180,14 +184,14 @@ private struct ProgramIconButton: View {
     let name: String
     let icon: String
     @State private var isHovering = false
-    
+
     var body: some View {
         VStack {
             ZStack {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(isHovering ? Color.primary.opacity(0.1) : Color.primary.opacity(0.05))
                     .frame(width: 60, height: 60)
-                
+
                 Image(systemName: icon)
                     .font(.title)
                     .foregroundStyle(.secondary)
@@ -210,7 +214,7 @@ private struct ProgramIconButton: View {
 private struct LinkRow: View {
     let title: String
     let icon: String
-    
+
     var body: some View {
         HStack {
             Label(title, systemImage: icon)
@@ -236,14 +240,15 @@ struct DashboardView: View {
         MagicBorderKit.MBInputManager
 
     @Binding var showSettings: Bool
-    
+
     @State private var selection: SidebarItem? = .arrangement
     @State private var searchText = ""
     @State private var isRefreshing = false
 
-    @State private var machines: [Machine] = [
-        Machine(id: UUID(), name: Host.current().localizedName ?? "Local Mac", isOnline: true)
-    ]
+    // Stable ID for local machine to avoid list flashes
+    private let localMachineId = UUID()
+
+    @State private var machines: [Machine] = []
 
     @SceneStorage("securityKey") private var securityKey: String = "YOUR_SECURE_KEY_123"
 
@@ -253,6 +258,14 @@ struct DashboardView: View {
         } else {
             return machines.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
         }
+    }
+
+    // Initializer to set initial machine state
+    init(showSettings: Binding<Bool>) {
+        self._showSettings = showSettings
+        self._machines = State(initialValue: [
+            Machine(id: UUID(), name: Host.current().localizedName ?? "Local Mac", isOnline: true)
+        ])
     }
 
     var body: some View {
@@ -265,7 +278,7 @@ struct DashboardView: View {
                         }
                     }
                 }
-                
+
                 Section("Machines") {
                     ForEach(filteredMachines) { machine in
                         NavigationLink(destination: MachineDetailView(machine: machine)) {
@@ -284,25 +297,22 @@ struct DashboardView: View {
             .searchable(text: $searchText, placement: .sidebar, prompt: "Search machines")
             .toolbar {
                 ToolbarItem {
-                    Button(action: { /* Add machine action */ }) {
+                    Button(action: { /* Add machine action */  }) {
                         Image(systemName: "plus")
                     }
                     .help("Add Machine")
                 }
-                        ToolbarItem {
-                            Button(action: {
-                                isRefreshing = true
-                                // Simulate a refresh
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                    isRefreshing = false
-                                }
-                            }) {
-                                Image(systemName: "arrow.clockwise")
-                                    .rotationEffect(.degrees(isRefreshing ? 360 : 0))
-                                    .animation(isRefreshing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: isRefreshing)
-                            }
-                            .help("Refresh Machines")
-                        }
+                ToolbarItem {
+                    Button(action: refreshMachines) {
+                        Image(systemName: "arrow.clockwise")
+                            .rotationEffect(.degrees(isRefreshing ? 360 : 0))
+                            .animation(
+                                isRefreshing
+                                    ? .linear(duration: 1).repeatForever(autoreverses: false)
+                                    : .default, value: isRefreshing)
+                    }
+                    .help("Refresh Machines")
+                }
             }
         } detail: {
             if let selection = selection {
@@ -324,6 +334,13 @@ struct DashboardView: View {
             networkManager.securityKey = securityKey
             networkManager.compatibilitySettings.securityKey = securityKey
             networkManager.applyCompatibilitySettings()
+
+            // Ensure local machine has stable ID on start
+            machines = [
+                Machine(
+                    id: localMachineId, name: Host.current().localizedName ?? "Local Mac",
+                    isOnline: true)
+            ]
         }
         .onChange(of: securityKey) { _, newValue in
             networkManager.securityKey = newValue
@@ -335,9 +352,19 @@ struct DashboardView: View {
         }
     }
 
+    private func refreshMachines() {
+        isRefreshing = true
+        // Simulate a refresh
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            isRefreshing = false
+        }
+    }
+
     private func updateMachines(from connected: [MBNetworkManager.ConnectedMachine]) {
         var newMachines = [
-            Machine(id: UUID(), name: Host.current().localizedName ?? "Local Mac", isOnline: true)
+            Machine(
+                id: localMachineId, name: Host.current().localizedName ?? "Local Mac",
+                isOnline: true)
         ]
 
         for peer in connected {
@@ -353,7 +380,8 @@ struct DashboardView: View {
 struct ArrangementDetailView: View {
     @Binding var machines: [Machine]
     @Binding var securityKey: String
-    @Environment(MBAccessibilityService.self) private var accessibilityService: MBAccessibilityService
+    @Environment(MBAccessibilityService.self) private var accessibilityService:
+        MBAccessibilityService
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager:
         MagicBorderKit.MBNetworkManager
 
@@ -369,15 +397,18 @@ struct ArrangementDetailView: View {
             set: { networkManager.compatibilitySettings.matrixCircle = $0 }
         )
     }
-    
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
                 // Header status
                 HStack {
                     StatusDot(active: accessibilityService.isTrusted)
-                    Text(accessibilityService.isTrusted ? "System Services Ready" : "Accessibility Permission Needed")
-                        .font(.subheadline)
+                    Text(
+                        accessibilityService.isTrusted
+                            ? "System Services Ready" : "Accessibility Permission Needed"
+                    )
+                    .font(.subheadline)
                     Spacer()
                     if !accessibilityService.isTrusted {
                         Button("Grant Access") {
@@ -404,7 +435,7 @@ struct ArrangementDetailView: View {
                         machines: $machines,
                         columns: matrixTwoRowBinding.wrappedValue ? 2 : max(1, machines.count)
                     )
-                        .frame(height: 200)
+                    .frame(height: 200)
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
@@ -470,7 +501,7 @@ struct ArrangementDetailView: View {
                         .padding(.horizontal)
                 }
                 .buttonStyle(.bordered)
-                
+
                 Spacer()
             }
         }
@@ -501,14 +532,14 @@ struct ArrangementDetailView: View {
 
 struct DiscoveredMachinesListView: View {
     var networkManager: MBNetworkManager
-    
+
     var body: some View {
         List(networkManager.discoveredPeers) { peer in
             HStack {
                 Image(systemName: peer.type == .scanned ? "pc" : "laptopcomputer")
                     .font(.title2)
                     .foregroundStyle(.blue)
-                
+
                 VStack(alignment: .leading) {
                     Text(peer.name)
                         .font(.headline)
@@ -516,9 +547,9 @@ struct DiscoveredMachinesListView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 Button("Connect") {
                     networkManager.connect(to: peer.endpoint)
                 }
@@ -541,7 +572,7 @@ struct DiscoveredMachinesListView: View {
 struct ContentUnderlineView: View {
     let title: String
     let systemImage: String
-    
+
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: systemImage)
