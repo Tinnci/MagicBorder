@@ -128,11 +128,17 @@ public final class MWBCompatibilityService: ObservableObject {
             let connection = NWConnection(to: .hostPort(host: host, port: port), using: .tcp)
             handleNewConnection(connection, kind: .message, isOutbound: true)
         }
+    }
 
-        if let port = NWEndpoint.Port(rawValue: clipboardPort ?? self.clipboardPort) {
-            let connection = NWConnection(to: .hostPort(host: host, port: port), using: .tcp)
-            handleNewConnection(connection, kind: .clipboard, isOutbound: true)
-        }
+    private func connectClipboardIfNeeded() {
+        guard clipboardSessions.isEmpty else { return }
+        guard let host = lastConnectHost,
+              let portValue = lastConnectClipboardPort
+        else { return }
+        guard let port = NWEndpoint.Port(rawValue: portValue) else { return }
+
+        let connection = NWConnection(to: .hostPort(host: .init(host), port: port), using: .tcp)
+        handleNewConnection(connection, kind: .clipboard, isOutbound: true)
     }
 
     public func sendMachineMatrix(_ machines: [String], twoRow: Bool = false, swap: Bool = false) {
@@ -353,6 +359,13 @@ public final class MWBCompatibilityService: ObservableObject {
             onDisconnected?(peer)
         }
 
+        if session.kind == .message {
+            for clipboard in clipboardSessions {
+                clipboard.close()
+            }
+            clipboardSessions.removeAll()
+        }
+
         scheduleReconnectIfNeeded(for: session)
     }
 
@@ -441,6 +454,8 @@ public final class MWBCompatibilityService: ObservableObject {
                     session.startHeartbeat(initial: true)
                     if session.kind == .message {
                         session.sendHelloBurst()
+                        session.startClipboardBeat()
+                        connectClipboardIfNeeded()
                     }
                 }
             } else if session.handshakeChallenge != nil {
@@ -480,7 +495,6 @@ public final class MWBCompatibilityService: ObservableObject {
                     onConnected?(peer)
                 }
                 session.sendClipboardHandshake(push: packet.type == .clipboardPush)
-                session.startClipboardBeat()
             }
         case .mouse:
             let event = MWBMouseEvent(
@@ -658,6 +672,7 @@ private final class MWBSession {
     private var heartbeatTimer: Task<Void, Never>?
     private var clipboardBeatTimer: Task<Void, Never>?
     private var helloBurstTask: Task<Void, Never>?
+    private var packetCounter: Int32 = 0
 
     init(
         connection: NWConnection,
@@ -986,6 +1001,10 @@ private final class MWBSession {
 
     private func finalize(_ packet: MWBPacket) -> MWBPacket? {
         var packet = packet
+        if packet.id == 0 {
+            packetCounter &+= 1
+            packet.id = packetCounter
+        }
         packet.finalizeForSend(magicNumber: crypto.magicNumber)
         if packet.isBigPackage {
             packet.data = packet.data.prefix(MWBPacket.extendedSize)
