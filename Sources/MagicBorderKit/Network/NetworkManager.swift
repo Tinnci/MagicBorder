@@ -99,6 +99,9 @@ public class MBNetworkManager: Observation.Observable {
 
     public var compatibilitySettings = MBCompatibilitySettings()
 
+    public var pairingDebugLog: [String] = []
+    public var pairingError: String?
+
     private var pasteboardMonitor: MBPasteboardMonitor?
     private var localMatrix: [String] = []
     private var lastEdgeSwitchTime: TimeInterval = 0
@@ -121,6 +124,24 @@ public class MBNetworkManager: Observation.Observable {
         setupPasteboardMonitoring()
     }
 
+    public func appendPairingLog(_ message: String) {
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        pairingDebugLog.append("[\(timestamp)] \(message)")
+        if pairingDebugLog.count > 200 {
+            pairingDebugLog.removeFirst(pairingDebugLog.count - 200)
+        }
+    }
+
+    public func setPairingError(_ message: String) {
+        pairingError = message
+        appendPairingLog("ERROR: \(message)")
+    }
+
+    public func clearPairingDiagnostics() {
+        pairingError = nil
+        pairingDebugLog.removeAll()
+    }
+
     private func configureCompatibility() {
         guard protocolMode != .modern else { return }
         let service = MWBCompatibilityService(
@@ -129,6 +150,12 @@ public class MBNetworkManager: Observation.Observable {
             messagePort: compatibilitySettings.messagePort,
             clipboardPort: compatibilitySettings.clipboardPort
         )
+        service.onLog = { [weak self] message in
+            self?.appendPairingLog(message)
+        }
+        service.onError = { [weak self] message in
+            self?.setPairingError(message)
+        }
         service.onConnected = { [weak self] peer in
             guard let self else { return }
             let id = self.uuid(for: peer.id)

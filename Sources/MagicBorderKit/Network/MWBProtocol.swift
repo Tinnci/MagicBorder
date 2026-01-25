@@ -270,18 +270,32 @@ public struct MWBPacket {
 
     public func validate(magicNumber: UInt32) -> Bool {
         guard data.count >= MWBPacket.baseSize else { return false }
+
         let expected = UInt16((magicNumber >> 16) & 0xFFFF)
-        let actual = UInt16((UInt16(data[3]) << 8) | UInt16(data[2]))
+        var b2: UInt8 = 0
+        var b3: UInt8 = 0
+        let headerOK = data.withUnsafeBytes { raw -> Bool in
+            guard let base = raw.baseAddress, raw.count >= 4 else { return false }
+            b2 = base.load(fromByteOffset: 2, as: UInt8.self)
+            b3 = base.load(fromByteOffset: 3, as: UInt8.self)
+            return true
+        }
+        guard headerOK else { return false }
+        let actual = UInt16((UInt16(b3) << 8) | UInt16(b2))
         if actual != expected {
             return false
         }
 
         let endIndex = isBigPackage ? MWBPacket.extendedSize : MWBPacket.baseSize
         guard data.count >= endIndex else { return false }
-        var sum: UInt8 = 0
-        for i in 2..<endIndex {
-            sum = sum &+ data[i]
+        return data.withUnsafeBytes { raw -> Bool in
+            guard let base = raw.baseAddress else { return false }
+            let bytes = base.assumingMemoryBound(to: UInt8.self)
+            var sum: UInt8 = 0
+            for i in 2..<endIndex {
+                sum = sum &+ bytes[i]
+            }
+            return bytes[1] == sum
         }
-        return data[1] == sum
     }
 }

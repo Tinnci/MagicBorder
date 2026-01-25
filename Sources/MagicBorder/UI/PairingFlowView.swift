@@ -13,6 +13,7 @@ struct PairingFlowView: View {
     @State private var statusMessage: String?
     @State private var statusStyle: StatusStyle = .neutral
     @State private var showChecklist = false
+    @State private var showDebugLog = false
 
     private var trimmedKey: String {
         securityKey.replacingOccurrences(of: " ", with: "")
@@ -66,6 +67,37 @@ struct PairingFlowView: View {
                     .foregroundStyle(statusStyle.color)
             }
 
+            DisclosureGroup("Debug log", isExpanded: $showDebugLog) {
+                if networkManager.pairingDebugLog.isEmpty {
+                    Text("No logs yet")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(Array(networkManager.pairingDebugLog.suffix(12)).reversed(), id: \.self) { line in
+                                Text(line)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 120)
+
+                    HStack {
+                        Button("Copy Log") {
+                            let pasteboard = NSPasteboard.general
+                            pasteboard.clearContents()
+                            pasteboard.setString(networkManager.pairingDebugLog.joined(separator: "\n"), forType: .string)
+                        }
+                        .buttonStyle(.bordered)
+                        Spacer()
+                    }
+                }
+            }
+
             HStack {
                 Text("Windows IP")
                 Spacer()
@@ -90,10 +122,28 @@ struct PairingFlowView: View {
                 showStatus(text: "连接成功", style: .success)
             }
         }
+        .alert(
+            "Pairing Error",
+            isPresented: Binding(
+                get: { networkManager.pairingError != nil },
+                set: { if !$0 { networkManager.pairingError = nil } }
+            )
+        ) {
+            Button("Copy Details") {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(networkManager.pairingError ?? "", forType: .string)
+            }
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(networkManager.pairingError ?? "")
+        }
     }
 
     private func startConnecting() {
         guard !ipAddress.isEmpty, isKeyValid else { return }
+        networkManager.clearPairingDiagnostics()
+        networkManager.appendPairingLog("User initiated connect")
         isConnecting = true
         networkManager.connectToHost(ip: ipAddress)
         showStatus(text: "已发送连接请求", style: .neutral)

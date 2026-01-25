@@ -43,6 +43,8 @@ public final class MWBCompatibilityService: ObservableObject {
     public var onDragDropBegin: ((String?) -> Void)?
     public var onDragDropEnd: (() -> Void)?
     public var onCaptureScreen: ((Int32?) -> Void)?
+    public var onLog: ((String) -> Void)?
+    public var onError: ((String) -> Void)?
 
     public init(localName: String, localId: Int32, messagePort: UInt16 = 15101, clipboardPort: UInt16 = 15100) {
         self.localName = localName
@@ -56,6 +58,7 @@ public final class MWBCompatibilityService: ObservableObject {
         crypto.deriveKey(from: securityKey)
         startMessageListener()
         startClipboardListener()
+        onLog?("MWB service started. messagePort=\(messagePort) clipboardPort=\(clipboardPort)")
     }
 
     public func stop() {
@@ -85,6 +88,8 @@ public final class MWBCompatibilityService: ObservableObject {
     public func connectToHost(ip: String, messagePort: UInt16? = nil, clipboardPort: UInt16? = nil) {
         guard !ip.isEmpty else { return }
         let host = NWEndpoint.Host(ip)
+
+        onLog?("Connecting to \(ip):\(messagePort ?? self.messagePort) and \(ip):\(clipboardPort ?? self.clipboardPort)")
 
         if let port = NWEndpoint.Port(rawValue: messagePort ?? self.messagePort) {
             let connection = NWConnection(to: .hostPort(host: host, port: port), using: .tcp)
@@ -209,7 +214,9 @@ public final class MWBCompatibilityService: ObservableObject {
     private func startMessageListener() {
         do {
             guard let port = NWEndpoint.Port(rawValue: messagePort) else {
-                print("MWBCompatibility: invalid message port: \(messagePort)")
+                let message = "MWB invalid message port: \(messagePort)"
+                onError?(message)
+                onLog?(message)
                 return
             }
             let listener = try NWListener(using: .tcp, on: port)
@@ -221,14 +228,18 @@ public final class MWBCompatibilityService: ObservableObject {
             }
             listener.start(queue: DispatchQueue.main)
         } catch {
-            print("MWBCompatibility: failed to start message listener: \(error)")
+            let message = "MWB message listener failed: \(error.localizedDescription)"
+            onError?(message)
+            onLog?(message)
         }
     }
 
     private func startClipboardListener() {
         do {
             guard let port = NWEndpoint.Port(rawValue: clipboardPort) else {
-                print("MWBCompatibility: invalid clipboard port: \(clipboardPort)")
+                let message = "MWB invalid clipboard port: \(clipboardPort)"
+                onError?(message)
+                onLog?(message)
                 return
             }
             let listener = try NWListener(using: .tcp, on: port)
@@ -240,7 +251,9 @@ public final class MWBCompatibilityService: ObservableObject {
             }
             listener.start(queue: DispatchQueue.main)
         } catch {
-            print("MWBCompatibility: failed to start clipboard listener: \(error)")
+            let message = "MWB clipboard listener failed: \(error.localizedDescription)"
+            onError?(message)
+            onLog?(message)
         }
     }
 
@@ -261,6 +274,11 @@ public final class MWBCompatibilityService: ObservableObject {
         session.onPacket = { [weak self, weak session] packet in
             guard let self, let session else { return }
             self.handlePacket(packet, from: session)
+        }
+
+        session.onError = { [weak self] message in
+            self?.onError?(message)
+            self?.onLog?(message)
         }
 
         session.onDisconnected = { [weak self, weak session] in
@@ -465,6 +483,7 @@ private final class MWBSession {
 
     var onPacket: ((MWBPacket) -> Void)?
     var onDisconnected: (() -> Void)?
+    var onError: ((String) -> Void)?
 
     private var encryptor: MWBStreamCipher?
     private var decryptor: MWBStreamCipher?
@@ -498,7 +517,13 @@ private final class MWBSession {
                         self.sendHandshakeBurst()
                     }
                     self.receiveLoop()
-                case .failed, .cancelled:
+                case .waiting(let error):
+                    self.onError?("Connection waiting: \(error.localizedDescription)")
+                case .failed(let error):
+                    self.onError?("Connection failed: \(error.localizedDescription)")
+                    self.onDisconnected?()
+                case .cancelled:
+                    self.onError?("Connection cancelled")
                     self.onDisconnected?()
                 default:
                     break
@@ -597,7 +622,12 @@ private final class MWBSession {
             let chunk = encryptedBuffer.prefix(16)
             encryptedBuffer.removeFirst(16)
             if let decrypted = decrypt(chunk) {
+                if decrypted.count != 16 {
+                    MBLogger.network.error("MWB decrypt block size mismatch: \(decrypted.count, privacy: .public)")
+                }
                 plainBuffer.append(decrypted)
+            } else {
+                MBLogger.network.error("MWB decrypt failed")
             }
         }
 
@@ -618,7 +648,12 @@ private final class MWBSession {
             plainBuffer.removeFirst(needed)
             var packet = MWBPacket(data: packetData)
 
-            guard packet.validate(magicNumber: crypto.magicNumber) else { continue }
+            guard packet.validate(magicNumber: crypto.magicNumber) else {
+                MBLogger.network.debug(
+                    "MWB packet rejected. size=\(packet.data.count, privacy: .public) rawType=\(rawType, privacy: .public)"
+                )
+                continue
+            }
 
             packet.data[1] = 0
             packet.data[2] = 0
