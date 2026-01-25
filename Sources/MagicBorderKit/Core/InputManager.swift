@@ -100,9 +100,11 @@ public class MBInputManager: Observation.Observable {
         MBLogger.input.info("Input interception stopped.")
     }
 
-    nonisolated func handle(proxy _: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<
-        CGEvent
-    >? {
+    nonisolated func handle(proxy _: CGEventTapProxy, type: CGEventType, event: CGEvent)
+        -> Unmanaged<
+            CGEvent
+        >?
+    {
         if self.shouldAllowLocalInteraction(type: type) {
             return Unmanaged.passUnretained(event)
         }
@@ -296,6 +298,16 @@ public class MBInputManager: Observation.Observable {
             type = .mouseMoved
         }
 
+        var mouseButton: CGMouseButton = .left
+        switch type {
+        case .rightMouseDown, .rightMouseUp, .rightMouseDragged:
+            mouseButton = .right
+        case .otherMouseDown, .otherMouseUp, .otherMouseDragged:
+            mouseButton = .center
+        default:
+            mouseButton = .left
+        }
+
         if type == .scrollWheel {
             let scroll = CGEvent(
                 scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1,
@@ -306,7 +318,7 @@ public class MBInputManager: Observation.Observable {
 
         if let cgEvent = CGEvent(
             mouseEventSource: nil, mouseType: type, mouseCursorPosition: location,
-            mouseButton: .left)
+            mouseButton: mouseButton)
         {
             cgEvent.post(tap: .cghidEventTap)
         }
