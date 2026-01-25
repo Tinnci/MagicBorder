@@ -319,6 +319,12 @@ struct DashboardView: View {
             }
         }
         .frame(minWidth: 800, minHeight: 600)
+        .onAppear {
+            networkManager.securityKey = securityKey
+        }
+        .onChange(of: securityKey) { _, newValue in
+            networkManager.securityKey = newValue
+        }
         .onChange(of: networkManager.connectedMachines, initial: true) { _, connected in
             updateMachines(from: connected)
         }

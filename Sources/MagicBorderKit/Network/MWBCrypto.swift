@@ -171,3 +171,100 @@ public class MWBCrypto: @unchecked Sendable {
         return nil
     }
 }
+
+// MARK: - Streaming Cipher (CBC, Zero Padding)
+
+public struct MWBStreamCipher {
+    private var cryptor: CCCryptorRef?
+
+    public init?(operation: CCOperation, key: Data, iv: Data) {
+        var cryptorOut: CCCryptorRef?
+        let status = key.withUnsafeBytes { keyBytes in
+            iv.withUnsafeBytes { ivBytes in
+                CCCryptorCreate(
+                    operation,
+                    CCAlgorithm(kCCAlgorithmAES),
+                    CCOptions(0),
+                    keyBytes.baseAddress, key.count,
+                    ivBytes.baseAddress,
+                    &cryptorOut
+                )
+            }
+        }
+
+        guard status == kCCSuccess, let cryptorOut else {
+            return nil
+        }
+
+        self.cryptor = cryptorOut
+    }
+
+    public mutating func update(_ data: Data) -> Data? {
+        guard let cryptor else { return nil }
+
+        let blockSize = kCCBlockSizeAES128
+        var padded = data
+        let remainder = padded.count % blockSize
+        if remainder != 0 {
+            padded.append(Data(count: blockSize - remainder))
+        }
+
+        let outLength = CCCryptorGetOutputLength(cryptor, padded.count, false)
+        var outData = Data(count: outLength)
+        var bytesOut: size_t = 0
+
+        let status = outData.withUnsafeMutableBytes { outBytes in
+            padded.withUnsafeBytes { inBytes in
+                CCCryptorUpdate(
+                    cryptor,
+                    inBytes.baseAddress, padded.count,
+                    outBytes.baseAddress, outLength,
+                    &bytesOut
+                )
+            }
+        }
+
+        guard status == kCCSuccess else { return nil }
+        return outData.prefix(bytesOut)
+    }
+
+    public mutating func final() -> Data? {
+        guard let cryptor else { return nil }
+
+        let outLength = CCCryptorGetOutputLength(cryptor, 0, true)
+        var outData = Data(count: outLength)
+        var bytesOut: size_t = 0
+
+        let status = outData.withUnsafeMutableBytes { outBytes in
+            CCCryptorFinal(
+                cryptor,
+                outBytes.baseAddress, outLength,
+                &bytesOut
+            )
+        }
+
+        guard status == kCCSuccess else { return nil }
+        return outData.prefix(bytesOut)
+    }
+
+    public mutating func close() {
+        if let cryptor {
+            CCCryptorRelease(cryptor)
+            self.cryptor = nil
+        }
+    }
+}
+
+public extension MWBCrypto {
+    func makeEncryptor() -> MWBStreamCipher? {
+        guard let key = sessionKey else { return nil }
+        let iv = generateIV()
+        return MWBStreamCipher(operation: CCOperation(kCCEncrypt), key: key, iv: iv)
+    }
+
+    func makeDecryptor() -> MWBStreamCipher? {
+        guard let key = sessionKey else { return nil }
+        let iv = generateIV()
+        return MWBStreamCipher(operation: CCOperation(kCCDecrypt), key: key, iv: iv)
+    }
+}

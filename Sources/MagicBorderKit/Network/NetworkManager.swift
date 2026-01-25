@@ -61,11 +61,72 @@ public class MBNetworkManager: Observation.Observable {
     // Identity
     let localID = UUID()
     let localName = Host.current().localizedName ?? "Unknown Mac"
+    let localNumericID: Int32 = Int32.random(in: 1000...999999)
+
+    public var protocolMode: MBProtocolMode = .dual
+    public var securityKey: String = "YOUR_SECURE_KEY_123" {
+        didSet {
+            compatibilityService?.updateSecurityKey(securityKey)
+        }
+    }
+
+    private var compatibilityService: MWBCompatibilityService?
+    private var mwbIdToUuid: [Int32: UUID] = [:]
 
     init() {
         startAdvertising()
         startBrowsing()
         startSubnetScanning()
+        configureCompatibility()
+    }
+
+    private func configureCompatibility() {
+        guard protocolMode != .modern else { return }
+        let service = MWBCompatibilityService(localName: localName, localId: localNumericID)
+        service.onConnected = { [weak self] peer in
+            guard let self else { return }
+            let id = self.uuid(for: peer.id)
+            if !self.connectedMachines.contains(where: { $0.id == id }) {
+                let machine = ConnectedMachine(id: id, name: peer.name, connection: NWConnection(to: .hostPort(host: .ipv4(.any), port: 15101), using: .tcp))
+                self.connectedMachines.append(machine)
+            }
+        }
+        service.onDisconnected = { [weak self] peer in
+            guard let self else { return }
+            let id = self.uuid(for: peer.id)
+            self.connectedMachines.removeAll { $0.id == id }
+        }
+        service.onRemoteMouse = { event in
+            MBInputManager.shared.simulateMouseEvent(event)
+        }
+        service.onRemoteKey = { event in
+            MBInputManager.shared.simulateKeyEvent(event)
+        }
+        service.onClipboardText = { text in
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        }
+        service.onClipboardImage = { data in
+            if let image = NSImage(data: data) {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.writeObjects([image])
+            }
+        }
+        service.onClipboardFiles = { urls in
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.writeObjects(urls as [NSURL])
+        }
+        self.compatibilityService = service
+        service.start(securityKey: securityKey)
+    }
+
+    private func uuid(for id: Int32) -> UUID {
+        if let existing = mwbIdToUuid[id] {
+            return existing
+        }
+        let newId = UUID()
+        mwbIdToUuid[id] = newId
+        return newId
     }
 
     // MARK: - Hosting (Server)

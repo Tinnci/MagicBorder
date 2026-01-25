@@ -1,31 +1,59 @@
-import CryptoKit
 import Foundation
 
 public enum MWBPacketType: UInt8 {
     case invalid = 0xFF
-    case heartbeat = 20
+    case error = 0xFE
+
+    case hi = 2
     case hello = 3
     case byeBye = 4
+
+    case heartbeat = 20
+    case awake = 21
+    case hideMouse = 50
+    case heartbeatEx = 51
+    case heartbeatExL2 = 52
+    case heartbeatExL3 = 53
+
+    case clipboard = 69
+    case clipboardDragDrop = 70
+    case clipboardDragDropEnd = 71
+    case explorerDragDrop = 72
+    case clipboardCapture = 73
+    case captureScreenCommand = 74
+    case clipboardDragDropOperation = 75
+    case clipboardDataEnd = 76
+    case machineSwitched = 77
+    case clipboardAsk = 78
+    case clipboardPush = 79
+
+    case nextMachine = 121
     case keyboard = 122
     case mouse = 123
+    case clipboardText = 124
+    case clipboardImage = 125
+
     case handshake = 126
     case handshakeAck = 127
-    // Add others as needed
+
+    case matrix = 128
 }
 
 public struct MWBPacket {
+    public static let baseSize = 32
+    public static let extendedSize = 64
+
     /// Raw data storage (Fixed 64 bytes to accommodate all cases)
     public var data: Data
 
     public init() {
-        self.data = Data(count: 64)
+        self.data = Data(count: MWBPacket.extendedSize)
     }
 
     public init(data: Data) {
         self.data = data
-        if self.data.count < 64 {
-            // Padding to 64 bytes
-            self.data.append(Data(count: 64 - self.data.count))
+        if self.data.count < MWBPacket.extendedSize {
+            self.data.append(Data(count: MWBPacket.extendedSize - self.data.count))
         }
     }
 
@@ -42,13 +70,15 @@ public struct MWBPacket {
     }
 
     // Magic Number occupies data[2] and data[3]
-    public var magic: UInt16 {
-        get { data.withUnsafeBytes { $0.load(fromByteOffset: 2, as: UInt16.self) } }
+    public var magicHigh16: UInt16 {
+        get {
+            let b2 = UInt16(data[2])
+            let b3 = UInt16(data[3])
+            return (b3 << 8) | b2
+        }
         set {
-            var val = newValue
-            let bytes = Data(bytes: &val, count: 2)
-            data[2] = bytes[0]
-            data[3] = bytes[1]
+            data[2] = UInt8(newValue & 0xFF)
+            data[3] = UInt8((newValue >> 8) & 0xFF)
         }
     }
 
@@ -69,36 +99,103 @@ public struct MWBPacket {
         set { setInt32(newValue, at: 12) }
     }
 
-    // MARK: - Payload (24-31) [Union Area]
+    // MARK: - Payload (16-31) [Union Area]
 
-    // Mouse Mode
-    public var x: Int32 {
+    public var timeStamp: Int64 {
+        get { getInt64(at: 16) }
+        set { setInt64(newValue, at: 16) }
+    }
+
+    // Mouse Mode (MOUSEDATA)
+    public var mouseX: Int32 {
+        get { getInt32(at: 16) }
+        set { setInt32(newValue, at: 16) }
+    }
+
+    public var mouseY: Int32 {
+        get { getInt32(at: 20) }
+        set { setInt32(newValue, at: 20) }
+    }
+
+    public var mouseWheel: Int32 {
         get { getInt32(at: 24) }
         set { setInt32(newValue, at: 24) }
     }
 
-    public var y: Int32 {
+    public var mouseFlags: Int32 {
         get { getInt32(at: 28) }
         set { setInt32(newValue, at: 28) }
     }
 
-    // Keyboard Mode (Memory reuse)
-    public var key: Int32 {
-        get { getInt32(at: 24) }
-        set { setInt32(newValue, at: 24) }
+    // Keyboard Mode (KEYBDDATA)
+    public var keyCode: Int32 {
+        get { getInt32(at: 16) }
+        set { setInt32(newValue, at: 16) }
     }
 
-    // MARK: - Extended (32+)
+    public var keyFlags: Int32 {
+        get { getInt32(at: 20) }
+        set { setInt32(newValue, at: 20) }
+    }
 
-    public var wheel: Int32 {
+    // Machine IDs / Matrix data (overlaps)
+    public var machine1: Int32 {
+        get { getInt32(at: 16) }
+        set { setInt32(newValue, at: 16) }
+    }
+
+    public var machine2: Int32 {
+        get { getInt32(at: 20) }
+        set { setInt32(newValue, at: 20) }
+    }
+
+    public var machine3: Int32 {
         get { getInt32(at: 32) }
         set { setInt32(newValue, at: 32) }
+    }
+
+    public var machine4: Int32 {
+        get { getInt32(at: 36) }
+        set { setInt32(newValue, at: 36) }
+    }
+
+    // Clipboard payload (last 48 bytes of extended packet)
+    public var clipboardPayload: Data {
+        get {
+            let start = MWBPacket.extendedSize - 48
+            return data.subdata(in: start..<MWBPacket.extendedSize)
+        }
+        set {
+            let start = MWBPacket.extendedSize - 48
+            var payload = newValue
+            if payload.count < 48 {
+                payload.append(Data(count: 48 - payload.count))
+            }
+            data.replaceSubrange(start..<MWBPacket.extendedSize, with: payload.prefix(48))
+        }
+    }
+
+    // Machine name is ASCII, 32 bytes at offset 32 (big packet only)
+    public var machineName: String {
+        get {
+            let nameData = data.subdata(in: 32..<64)
+            return String(bytes: nameData, encoding: .ascii)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        set {
+            var bytes = Data(newValue.padding(toLength: 32, withPad: " ", startingAt: 0).data(using: .ascii) ?? Data())
+            if bytes.count > 32 {
+                bytes = bytes.prefix(32)
+            } else if bytes.count < 32 {
+                bytes.append(Data(count: 32 - bytes.count))
+            }
+            data.replaceSubrange(32..<64, with: bytes)
+        }
     }
 
     // MARK: - Helpers
 
     private func getInt32(at offset: Int) -> Int32 {
-        return data.withUnsafeBytes { $0.load(fromByteOffset: offset, as: Int32.self) }
+        data.withUnsafeBytes { $0.load(fromByteOffset: offset, as: Int32.self) }
     }
 
     private mutating func setInt32(_ value: Int32, at offset: Int) {
@@ -107,28 +204,72 @@ public struct MWBPacket {
         data.replaceSubrange(offset..<offset + 4, with: bytes)
     }
 
+    private func getInt64(at offset: Int) -> Int64 {
+        data.withUnsafeBytes { $0.load(fromByteOffset: offset, as: Int64.self) }
+    }
+
+    private mutating func setInt64(_ value: Int64, at offset: Int) {
+        var val = value
+        let bytes = Data(bytes: &val, count: 8)
+        data.replaceSubrange(offset..<offset + 8, with: bytes)
+    }
+
+    public var isMatrixPacket: Bool {
+        (type.rawValue & MWBPacketType.matrix.rawValue) == MWBPacketType.matrix.rawValue
+    }
+
+    public var isBigPackage: Bool {
+        if type == .invalid { return false }
+        if isMatrixPacket { return true }
+        switch type {
+        case .hello, .awake, .heartbeat, .heartbeatEx, .handshake, .handshakeAck, .clipboardPush, .clipboard, .clipboardAsk, .clipboardImage, .clipboardText, .clipboardDataEnd:
+            return true
+        default:
+            return false
+        }
+    }
+
+    public static func isBigType(_ type: MWBPacketType) -> Bool {
+        if (type.rawValue & MWBPacketType.matrix.rawValue) == MWBPacketType.matrix.rawValue {
+            return true
+        }
+        switch type {
+        case .hello, .awake, .heartbeat, .heartbeatEx, .handshake, .handshakeAck, .clipboardPush, .clipboard, .clipboardAsk, .clipboardImage, .clipboardText, .clipboardDataEnd:
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Prepare for sending: Calculate checksum and fill Magic
     public mutating func finalizeForSend(magicNumber: UInt32) {
-        // 1. Set Magic (Take high 16 bits of MagicNumber)
-        // C# Logic: bytes[3] = (magic >> 24), bytes[2] = (magic >> 16)
+        // bytes[3] = (magic >> 24), bytes[2] = (magic >> 16)
         data[3] = UInt8((magicNumber >> 24) & 0xFF)
         data[2] = UInt8((magicNumber >> 16) & 0xFF)
 
-        // 2. Clear Checksum for calculation
+        // Clear checksum for calculation
         data[1] = 0
 
-        // 3. Calculate Checksum (Byte 2 to End)
-        let endIndex = isBigPackage ? 64 : 32
+        let endIndex = isBigPackage ? MWBPacket.extendedSize : MWBPacket.baseSize
         var sum: UInt8 = 0
         for i in 2..<endIndex {
-            sum = sum &+ data[i]  // &+ is Swift overflow operator
+            sum = sum &+ data[i]
         }
         data[1] = sum
     }
 
-    var isBigPackage: Bool {
-        if type == .invalid { return false }
-        // For initial version, stick to 32 bytes unless extended features needed
-        return false
+    public func validate(magicNumber: UInt32) -> Bool {
+        let expected = UInt16((magicNumber >> 16) & 0xFFFF)
+        let actual = UInt16((UInt16(data[3]) << 8) | UInt16(data[2]))
+        if actual != expected {
+            return false
+        }
+
+        let endIndex = isBigPackage ? MWBPacket.extendedSize : MWBPacket.baseSize
+        var sum: UInt8 = 0
+        for i in 2..<endIndex {
+            sum = sum &+ data[i]
+        }
+        return data[1] == sum
     }
 }

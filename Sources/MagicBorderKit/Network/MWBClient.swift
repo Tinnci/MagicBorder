@@ -143,9 +143,9 @@ public class MWBClient {
             let packet = MWBPacket(data: decrypted.prefix(32))
 
             // Check Magic
-            if packet.magic != (crypto.magicNumber >> 16) & 0xFFFF {
+            if packet.magicHigh16 != (crypto.magicNumber >> 16) & 0xFFFF {
                 print(
-                    "Invalid Magic Number received: \(packet.magic) vs expected \((crypto.magicNumber >> 16) & 0xFFFF)"
+                    "Invalid Magic Number received: \(packet.magicHigh16) vs expected \((crypto.magicNumber >> 16) & 0xFFFF)"
                 )
                 // return // Continue for now to see what happens
             }
@@ -174,116 +174,5 @@ public class MWBClient {
                     print("Send error: \(error)")
                 }
             })
-    }
-}
-
-// Extension to help setting Name in MWBPacket
-extension MWBPacket {
-    var machineName: String {
-        get { return "" }  // Not implemented retrieval yet
-        set {
-            // MWB puts Machine Name in a specific layout or just end of payload?
-            // "DATA.cs" structure shows:
-            // machineNameP1 (Long/8 bytes) at Offset 64? No, offsets 64 is OUTSIDE standard 64 byte packet?
-            // "StructLayout(LayoutKind.Explicit)" ...
-            // [FieldOffset(sizeof(PackageType) + (7 * sizeof(uint)))] = 32 + 28 = 60?
-            // Wait, PACKET_SIZE_EX is 64.
-            // Let's look at DATA.cs again.
-
-            /*
-            [FieldOffset(sizeof(PackageType) + (7 * sizeof(uint)))]
-            private long machineNameP1;
-            
-            sizeof(PackageType) = 4 (Enum is Int32 in C# usually? No, PackageType is usually byte in packet but field is Int32 aligned?)
-            Wait, DATA.cs:
-            [FieldOffset(0)] internal PackageType Type; // 4 bytes!
-            [FieldOffset(4)] internal int Id;
-            ...
-            
-            So header in DATA struct is aligned to 4 bytes.
-            Offset 0: Type (4)
-            Offset 4: Id (4)
-            Offset 8: Src (4)
-            Offset 12: Des (4)
-            Offset 16: DateTime (8)
-            Offset 24: Union (X/Key) (4)
-            Offset 28: Union (Y/Param) (4) (Total 32 Bytes so far. This matches PACKAGE_SIZE)
-            
-            Offset 32: Wheel (4)
-            Offset 36: Machine1 (4)
-            ...
-            Offset 48: PostAction (4)
-            Offset 52: MachineNameP1 (8)
-            Offset 60: MachineNameP2 (8)
-            Offset 68: MachineNameP3 (8)
-            Offset 76: MachineNameP4 (8)
-            
-            Wait, this exceeds 64 bytes (PACKAGE_SIZE_EX).
-            DATA.cs struct size might be larger than the network packet size?
-            "internal const byte PACKAGE_SIZE = 32;"
-            "internal const byte PACKAGE_SIZE_EX = 64;"
-            
-            If `Bytes` property in DATA.cs:
-            "Array.Copy(StructToBytes(this), buf, IsBigPackage ? Package.PACKAGE_SIZE_EX : Package.PACKAGE_SIZE);"
-            
-            This implies the DATA struct matches the Packet layout EXACTLY.
-            
-            Let's re-calculate offsets:
-            0: Type (4)
-            4: Id (4)
-            8: Src (4)
-            12: Des (4)
-            16: DateTime (8) -> Ends at 24
-            24: Union 1 (4) -> Ends at 28
-            28: Union 2 (4) -> Ends at 32. -> Fits in 32 Byte Packet.
-            
-            Big Package (64 Bytes):
-            32: Machine1 (4)? No.
-            
-            Let's verify DATA.cs offsets again in your provided file Content.
-            
-             27:    [FieldOffset(0)] Type; // 4
-             30:    [FieldOffset(4)] Id; // 4
-             33:    [FieldOffset(8)] Src; // 4
-             36:    [FieldOffset(12)] Des; // 4
-             39:    [FieldOffset(16)] DateTime; // 8 (long)
-             42:    [FieldOffset(24)] Kd; // Struct?
-             45:    [FieldOffset(24)] Md; // Struct?
-             // KD/MD are likely 8 bytes total (2 ints).
-            
-             48:    [FieldOffset(24)] Machine1; (ID is uint/4 bytes)
-             51:    [FieldOffset(28)] Machine2;
-            
-             54:    [FieldOffset(32)] Machine3;
-             57:    [FieldOffset(36)] Machine4;
-            
-             63:    [FieldOffset(32)] machineNameP1; // Wait, Offset is `sizeof(PackageType) + (7 * sizeof(uint))`
-             sizeof(Type)=4. 7*4=28. 4+28 = 32.
-             So MachineNameP1 starts at 32.
-            
-             MachineNameP1: 8 bytes -> 32-40
-             MachineNameP2: 8 bytes -> 40-48
-             MachineNameP3: 8 bytes -> 48-56
-             MachineNameP4: 8 bytes -> 56-64
-            
-             Total 64 Bytes. Matches exactly!
-            */
-
-            // So Machine Name is stored in bytes 32-64 (4 * Int64).
-            // We need to write the string bytes into range 32..<64.
-
-            guard let strData = newValue.data(using: .utf8) else { return }
-            let maxLen = 32
-            // let copyLen = min(strData.count, maxLen)
-
-            // Pad with spaces as per C# "value.PadRight(32, ' ')"
-            var padded = strData
-            if padded.count < maxLen {
-                padded.append(contentsOf: (Data(count: maxLen - padded.count).map { _ in 0x20 }))  // 0x20 is Space
-            }
-
-            // Write to data[32...63]
-            data.replaceSubrange(32..<64, with: padded.prefix(32))
-        }
     }
 }
