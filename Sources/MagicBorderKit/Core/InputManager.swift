@@ -100,6 +100,8 @@ public class MBInputManager: Observation.Observable {
         MBLogger.input.info("Input interception stopped.")
     }
 
+    private var virtualCursorPosition: CGPoint?
+
     nonisolated func handle(proxy _: CGEventTapProxy, type: CGEventType, event: CGEvent)
         -> Unmanaged<
             CGEvent
@@ -110,7 +112,7 @@ public class MBInputManager: Observation.Observable {
         }
 
         // Create snapshot synchronously (safe)
-        let snapshot = EventSnapshot(from: event, type: type)
+        var snapshot = EventSnapshot(from: event, type: type)
 
         // Core Logic
         guard self._remoteID.withLock({ $0 }) != nil else {
@@ -120,17 +122,60 @@ public class MBInputManager: Observation.Observable {
                 }
             }
             // Local mode: pass-through
+            // Reset virtual cursor when in local mode
+            Task { @MainActor in
+                self.virtualCursorPosition = nil
+            }
             return Unmanaged.passUnretained(event)
         }
 
         // Remote mode: intercept and send
-        guard self.convertToRemoteEvent(snapshot: snapshot) != nil else {
-            // If we can't convert it (e.g. some system event), maybe let it pass or just consume?
-            // Safest is to consume if we are "in remote mode" to avoid local ghost clicks.
-            return nil
-        }
 
+        // Virtual Cursor Logic
         Task { @MainActor in
+            let settings = MBNetworkManager.shared.compatibilitySettings
+
+            if type == .mouseMoved || type == .leftMouseDragged || type == .rightMouseDragged {
+                // Use captured properties
+                let deltaX = snapshot.mouseDeltaX
+                let deltaY = snapshot.mouseDeltaY
+                let startLocation = snapshot.location // Use snapshot location which is safe
+
+                // Initialize virtual cursor if needed
+                if self.virtualCursorPosition == nil {
+                    self.virtualCursorPosition = startLocation
+                }
+
+                if var vPos = self.virtualCursorPosition {
+                    vPos.x += CGFloat(deltaX)
+                    vPos.y += CGFloat(deltaY)
+
+                    // Clamp to screen bounds
+                    if let screen = NSScreen.main {
+                        vPos.x = max(screen.frame.minX, min(vPos.x, screen.frame.maxX))
+                        vPos.y = max(screen.frame.minY, min(vPos.y, screen.frame.maxY))
+                    }
+                    self.virtualCursorPosition = vPos
+
+                    // Update snapshot with virtual location
+                    snapshot = EventSnapshot(
+                        location: vPos,
+                        type: snapshot.type,
+                        keyCode: snapshot.keyCode,
+                        scrollDeltaY: snapshot.scrollDeltaY,
+                        scrollDeltaX: snapshot.scrollDeltaX,
+                        mouseDeltaX: snapshot.mouseDeltaX,
+                        mouseDeltaY: snapshot.mouseDeltaY,
+                        flags: snapshot.flags)
+                }
+
+                // Cursor Warping (Barrier-style)
+                if settings.wrapCursor, let screen = NSScreen.main {
+                    let center = CGPoint(x: screen.frame.midX, y: screen.frame.midY)
+                    CGWarpMouseCursorPosition(center)
+                }
+            }
+
             MBNetworkManager.shared.sendRemoteInput(snapshot: snapshot)
         }
 

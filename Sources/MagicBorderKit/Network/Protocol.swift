@@ -91,6 +91,8 @@ public struct EventSnapshot: Sendable {
     public let keyCode: Int64
     public let scrollDeltaY: Int64
     public let scrollDeltaX: Int64
+    public let mouseDeltaX: Int64
+    public let mouseDeltaY: Int64
     public let flags: CGEventFlags
 
     public init(from event: CGEvent, type: CGEventType) {
@@ -99,6 +101,22 @@ public struct EventSnapshot: Sendable {
         self.keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         self.scrollDeltaY = event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
         self.scrollDeltaX = event.getIntegerValueField(.scrollWheelEventDeltaAxis2)
+        self.mouseDeltaX = event.getIntegerValueField(.mouseEventDeltaX)
+        self.mouseDeltaY = event.getIntegerValueField(.mouseEventDeltaY)
         self.flags = event.flags
+    }
+
+    public init(
+        location: CGPoint, type: CGEventType, keyCode: Int64, scrollDeltaY: Int64,
+        scrollDeltaX: Int64, mouseDeltaX: Int64, mouseDeltaY: Int64, flags: CGEventFlags)
+    {
+        self.location = location
+        self.type = type
+        self.keyCode = keyCode
+        self.scrollDeltaY = scrollDeltaY
+        self.scrollDeltaX = scrollDeltaX
+        self.mouseDeltaX = mouseDeltaX
+        self.mouseDeltaY = mouseDeltaY
+        self.flags = flags
     }
 }

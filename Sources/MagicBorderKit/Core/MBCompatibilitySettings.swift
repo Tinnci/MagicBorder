@@ -15,6 +15,7 @@ public final class MBCompatibilitySettings {
         static let messagePort = "compat.messagePort"
         static let clipboardPort = "compat.clipboardPort"
         static let securityKey = "compat.securityKey"
+        static let wrapCursor = "compat.wrapCursor"
     }
 
     private let defaults = UserDefaults.standard
@@ -59,6 +60,10 @@ public final class MBCompatibilitySettings {
         didSet { self.defaults.set(self.securityKey, forKey: Keys.securityKey) }
     }
 
+    public var wrapCursor: Bool {
+        didSet { self.defaults.set(self.wrapCursor, forKey: Keys.wrapCursor) }
+    }
+
     public var validationMessage: String?
 
     public init() {
@@ -66,7 +71,8 @@ public final class MBCompatibilitySettings {
         self.transferFiles = self.defaults.object(forKey: Keys.transferFiles) as? Bool ?? false
         self.switchByMouse = self.defaults.object(forKey: Keys.switchByMouse) as? Bool ?? true
         self.blockCorners = self.defaults.object(forKey: Keys.blockCorners) as? Bool ?? false
-        self.moveMouseRelatively = self.defaults.object(forKey: Keys.moveMouseRelatively) as? Bool ?? false
+        self.moveMouseRelatively =
+            self.defaults.object(forKey: Keys.moveMouseRelatively) as? Bool ?? false
         self.matrixOneRow = self.defaults.object(forKey: Keys.matrixOneRow) as? Bool ?? true
         self.matrixCircle = self.defaults.object(forKey: Keys.matrixCircle) as? Bool ?? false
         if self.defaults.object(forKey: Keys.messagePort) != nil {
@@ -80,6 +86,7 @@ public final class MBCompatibilitySettings {
             self.clipboardPort = 15100
         }
         self.securityKey = self.defaults.string(forKey: Keys.securityKey) ?? ""
+        self.wrapCursor = self.defaults.object(forKey: Keys.wrapCursor) as? Bool ?? true
     }
 
     public func validateSecurityKey() -> Bool {
