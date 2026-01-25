@@ -269,6 +269,7 @@ public struct MWBPacket {
     }
 
     public func validate(magicNumber: UInt32) -> Bool {
+        guard data.count >= MWBPacket.baseSize else { return false }
         let expected = UInt16((magicNumber >> 16) & 0xFFFF)
         let actual = UInt16((UInt16(data[3]) << 8) | UInt16(data[2]))
         if actual != expected {
@@ -276,6 +277,7 @@ public struct MWBPacket {
         }
 
         let endIndex = isBigPackage ? MWBPacket.extendedSize : MWBPacket.baseSize
+        guard data.count >= endIndex else { return false }
         var sum: UInt8 = 0
         for i in 2..<endIndex {
             sum = sum &+ data[i]
