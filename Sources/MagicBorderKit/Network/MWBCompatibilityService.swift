@@ -551,7 +551,7 @@ private final class MWBSession {
     private var plainBuffer = Data()
     private var initialBlockDiscarded = false
 
-    private var handshakeChallenge: (Int32, Int32, Int32, Int32)?
+    var handshakeChallenge: (Int32, Int32, Int32, Int32)?
 
     private var clipboardAccumulator = Data()
     private var clipboardIsImage = false
