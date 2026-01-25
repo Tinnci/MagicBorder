@@ -66,7 +66,9 @@ struct PairingFlowView: View {
                     .foregroundStyle(statusStyle.color)
             }
 
-            LabeledContent("Windows IP") {
+            HStack {
+                Text("Windows IP")
+                Spacer()
                 TextField("192.168.1.5", text: $ipAddress)
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()

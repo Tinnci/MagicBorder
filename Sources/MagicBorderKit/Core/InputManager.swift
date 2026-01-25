@@ -108,7 +108,7 @@ public class MBInputManager: Observation.Observable {
                 }
             }
             // Local mode: pass-through
-            return Unmanaged.passRetained(event)
+            return Unmanaged.passUnretained(event)
         }
 
         // Remote mode: intercept and send
@@ -389,7 +389,7 @@ func globalEventTapCallback(
     proxy: CGEventTapProxy, type: CGEventType, event: CGEvent, refcon: UnsafeMutableRawPointer?
 ) -> Unmanaged<CGEvent>? {
     guard let refcon = refcon else {
-        return Unmanaged.passRetained(event)
+        return Unmanaged.passUnretained(event)
     }
 
     let manager = Unmanaged<MBInputManager>.fromOpaque(refcon).takeUnretainedValue()
