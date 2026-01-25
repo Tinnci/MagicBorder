@@ -338,12 +338,14 @@ public final class MWBCompatibilityService: ObservableObject {
         case .handshake:
             session.peer = MWBPeer(id: packet.src, name: packet.machineName)
             if let peer = session.peer {
+                onLog?("Handshake received from '\(peer.name)' (ID=\(peer.id))")
                 onConnected?(peer)
             }
             session.sendHandshakeAck()
         case .handshakeAck:
             session.peer = MWBPeer(id: packet.src, name: packet.machineName)
             if let peer = session.peer {
+                onLog?("HandshakeAck received from '\(peer.name)' (ID=\(peer.id))")
                 onConnected?(peer)
             }
         case .hello, .hi, .awake, .heartbeat, .heartbeatEx, .heartbeatExL2, .heartbeatExL3:
@@ -551,18 +553,20 @@ private final class MWBSession {
                 guard let self else { return }
                 switch state {
                 case .ready:
+                    self.onLog?("Session ready, kind=\(self.kind)")
                     self.sendInitialIVBlock()
                     if self.kind == .message {
+                        self.onLog?("Sending handshake burst (10 packets)")
                         self.sendHandshakeBurst()
                     }
                     self.receiveLoop()
                 case .waiting(let error):
-                    self.onError?("Connection waiting: \(error.localizedDescription)")
+                    self.onLog?("Connection waiting: \(error.localizedDescription)")
                 case .failed(let error):
-                    self.onError?("Connection failed: \(error.localizedDescription)")
+                    self.onLog?("Connection failed: \(error.localizedDescription)")
                     self.onDisconnected?()
                 case .cancelled:
-                    self.onError?("Connection cancelled")
+                    self.onLog?("Connection cancelled")
                     self.onDisconnected?()
                 default:
                     break
@@ -577,6 +581,7 @@ private final class MWBSession {
             let encrypted = encrypt(packetToSend.data)
         else { return }
 
+        onLog?("TX Packet: type=\(packetToSend.type) src=\(packetToSend.src) des=\(packetToSend.des)")
         connection.send(content: encrypted, completion: .contentProcessed { _ in })
     }
 
@@ -635,6 +640,7 @@ private final class MWBSession {
     private func sendInitialIVBlock() {
         let random = Data((0..<16).map { _ in UInt8.random(in: 0...255) })
         if let encrypted = encrypt(random) {
+            onLog?("Sending initial IV block (16 random bytes encrypted)")
             connection.send(content: encrypted, completion: .contentProcessed { _ in })
         }
     }
@@ -645,6 +651,7 @@ private final class MWBSession {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let content {
+                    onLog?("Received \(content.count) encrypted bytes")
                     self.encryptedBuffer.append(content)
                     self.decryptAvailable()
                     self.parsePackets()
@@ -675,6 +682,7 @@ private final class MWBSession {
         }
 
         if !initialBlockDiscarded, plainBuffer.count >= 16 {
+            onLog?("Discarding initial IV block (16 bytes)")
             plainBuffer.removeFirst(16)
             initialBlockDiscarded = true
         }
@@ -699,7 +707,7 @@ private final class MWBSession {
             guard packet.validate(magicNumber: crypto.magicNumber) else {
                 let expected = (crypto.magicNumber >> 16) & 0xFFFF
                 let msg =
-                    "MWB packet rejected. Magic mismatch: Got \(packet.magicHigh16) vs Expected \(expected). RawType=\(rawType)"
+                    "MWB packet rejected. Magic=\(packet.magicHigh16) Expected=\(expected) RawType=\(rawType) Len=\(packet.data.count)"
                 MBLogger.network.debug("\(msg)")
                 // Only log frequency to avoid spamming UI?
                 // For diagnosis, let's log it once or periodically.
@@ -715,6 +723,7 @@ private final class MWBSession {
             packet.data[2] = 0
             packet.data[3] = 0
 
+            onLog?("RX Packet: type=\(packet.type) src=\(packet.src) des=\(packet.des) name='\(packet.machineName)'")
             onPacket?(packet)
         }
     }

@@ -288,7 +288,8 @@ public struct MWBPacket {
         // Clear checksum for calculation
         data[1] = 0
 
-        let endIndex = isBigPackage ? MWBPacket.extendedSize : MWBPacket.baseSize
+        // C# computes checksum only over the first 32 bytes even for big packets.
+        let endIndex = MWBPacket.baseSize
         var sum: UInt8 = 0
         for i in 2..<endIndex {
             sum = sum &+ data[i]
@@ -314,8 +315,7 @@ public struct MWBPacket {
             return false
         }
 
-        let endIndex = isBigPackage ? MWBPacket.extendedSize : MWBPacket.baseSize
-        guard data.count >= endIndex else { return false }
+        let endIndex = MWBPacket.baseSize
         return data.withUnsafeBytes { raw -> Bool in
             guard let base = raw.baseAddress else { return false }
             let bytes = base.assumingMemoryBound(to: UInt8.self)

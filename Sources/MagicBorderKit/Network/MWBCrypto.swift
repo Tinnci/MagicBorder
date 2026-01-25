@@ -21,7 +21,8 @@ public class MWBCrypto: @unchecked Sendable {
         let trimmedKey = secretKey.replacingOccurrences(of: " ", with: "")
         guard !trimmedKey.isEmpty,
             let passwordData = trimmedKey.data(using: .utf8),
-            let saltData = saltString.data(using: .utf8)
+            // C# uses Common.GetBytesU (UTF-16LE) for the salt.
+            let saltData = saltString.data(using: .utf16LittleEndian)
         else {
             sessionKey = nil
             magicNumber = 0
