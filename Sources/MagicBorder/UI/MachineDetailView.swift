@@ -12,60 +12,113 @@ struct MachineDetailView: View {
     ]
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack(spacing: 16) {
-                Image(systemName: "desktopcomputer")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 48, height: 48)
-                    .foregroundStyle(.blue)
-                    .symbolRenderingMode(.hierarchical)
+        ScrollView {
+            VStack(spacing: 24) {
+                // Header Section
+                VStack(spacing: 12) {
+                    Image(systemName: "desktopcomputer")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.blue.gradient)
+                        .shadow(radius: 2, y: 1)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(machine.name)
-                        .font(.title2)
-                        .fontWeight(.medium)
-                    HStack(spacing: 6) {
-                        StatusDot(active: machine.isOnline)
-                        Text(machine.isOnline ? "Online" : "Offline")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-            }
-            .padding(20)
-            .background(Color(nsColor: .controlBackgroundColor))
+                    VStack(spacing: 4) {
+                        Text(machine.name)
+                            .font(.title2)
+                            .fontWeight(.semibold)
 
-            Divider()
-
-            Form {
-                Section("Pinned Programs") {
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(0..<8) { i in
-                            ProgramIconButton(name: "App \(i+1)", icon: "app.dashed")
+                        HStack(spacing: 6) {
+                            StatusDot(active: machine.isOnline)
+                            Text(machine.isOnline ? "Online" : "Offline")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .padding(.vertical, 8)
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 32)
+                .background(Material.regular, in: RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal)
 
-                Section("Configuration") {
-                    NavigationLink {
-                        MachineDisplaySettingsView(machine: machine)
-                    } label: {
-                        Label("Display Settings", systemImage: "display")
+                // Content
+                VStack(alignment: .leading, spacing: 24) {
+                    // Pinned Apps
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Pinned Apps")
+                            .font(.headline)
+                            .padding(.horizontal)
+
+                        LazyVGrid(columns: columns, spacing: 16) {
+                            ForEach(0..<8) { i in
+                                ProgramIconButton(name: "App \(i+1)", icon: "app.dashed")
+                            }
+                        }
+                        .padding(16)
+                        .background(
+                            Color(nsColor: .controlBackgroundColor),
+                            in: RoundedRectangle(cornerRadius: 12)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.1))
+                        )
+                        .padding(.horizontal)
                     }
 
-                    NavigationLink {
-                        MachineInputSettingsView(machine: machine)
-                    } label: {
-                        Label("Input Configuration", systemImage: "keyboard")
+                    // Settings
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Settings")
+                            .font(.headline)
+                            .padding(.horizontal)
+
+                        VStack(spacing: 0) {
+                            NavigationLink {
+                                MachineDisplaySettingsView(machine: machine)
+                            } label: {
+                                HStack {
+                                    Label("Display Settings", systemImage: "display")
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .padding()
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+
+                            Divider()
+                                .padding(.leading)
+
+                            NavigationLink {
+                                MachineInputSettingsView(machine: machine)
+                            } label: {
+                                HStack {
+                                    Label("Input Configuration", systemImage: "keyboard")
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .padding()
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .background(
+                            Color(nsColor: .controlBackgroundColor),
+                            in: RoundedRectangle(cornerRadius: 12)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.1))
+                        )
+                        .padding(.horizontal)
                     }
                 }
             }
-            .formStyle(.grouped)
+            .padding(.vertical)
         }
+        .background(Color(nsColor: .windowBackgroundColor))
         .navigationTitle(machine.name)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

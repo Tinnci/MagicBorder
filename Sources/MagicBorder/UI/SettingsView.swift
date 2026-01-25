@@ -46,16 +46,18 @@ private struct GeneralSettingsTab: View {
                 Toggle("Transfer Files", isOn: $networkManager.compatibilitySettings.transferFiles)
             }
 
-            Section("Cursor control") {
+            Section("Cursor Control") {
                 Toggle("Capture Local Input", isOn: $captureInput)
                     .disabled(!accessibilityService.isTrusted)
 
                 if !accessibilityService.isTrusted {
-                    Label(
-                        "Accessibility permission required", systemImage: "exclamationmark.triangle"
-                    )
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text("Accessibility permission required")
+                            .foregroundStyle(.secondary)
+                    }
                     .font(.caption)
-                    .foregroundStyle(.orange)
                 }
 
                 Toggle(
@@ -71,11 +73,12 @@ private struct GeneralSettingsTab: View {
                     isOn: $networkManager.compatibilitySettings.moveMouseRelatively)
             }
 
-            Section("Matrix Logic") {
-                Toggle("Matrix One Row", isOn: $networkManager.compatibilitySettings.matrixOneRow)
+            Section("Matrix Configuration") {
                 Toggle(
-                    "Matrix Circle (Swap)", isOn: $networkManager.compatibilitySettings.matrixCircle
-                )
+                    "Single Row Matrix", isOn: $networkManager.compatibilitySettings.matrixOneRow)
+                Toggle(
+                    "Cycle Through Screens",
+                    isOn: $networkManager.compatibilitySettings.matrixCircle)
             }
         }
         .formStyle(.grouped)
@@ -90,12 +93,18 @@ private struct NetworkSettingsTab: View {
 
         Form {
             Section("Security") {
-                SecureField("Security Key", text: $networkManager.compatibilitySettings.securityKey)
+                VStack(alignment: .leading) {
+                    SecureField(
+                        "Security Key", text: $networkManager.compatibilitySettings.securityKey
+                    )
+                    .textContentType(.password)
+                    .frame(maxWidth: 300)
 
-                if let message = networkManager.compatibilitySettings.validationMessage {
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if let message = networkManager.compatibilitySettings.validationMessage {
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(message.contains("Success") ? .green : .red)
+                    }
                 }
 
                 Button("Validate Key") {
@@ -104,12 +113,24 @@ private struct NetworkSettingsTab: View {
             }
 
             Section("Ports") {
-                TextField(
-                    "Message Port", value: $networkManager.compatibilitySettings.messagePort,
-                    formatter: NumberFormatter())
-                TextField(
-                    "Clipboard Port", value: $networkManager.compatibilitySettings.clipboardPort,
-                    formatter: NumberFormatter())
+                HStack {
+                    TextField(
+                        "Message Port", value: $networkManager.compatibilitySettings.messagePort,
+                        formatter: NumberFormatter()
+                    )
+                    .monospacedDigit()
+                    Text("Default: 20000").font(.caption).foregroundStyle(.secondary)
+                }
+
+                HStack {
+                    TextField(
+                        "Clipboard Port",
+                        value: $networkManager.compatibilitySettings.clipboardPort,
+                        formatter: NumberFormatter()
+                    )
+                    .monospacedDigit()
+                    Text("Default: 20001").font(.caption).foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)
