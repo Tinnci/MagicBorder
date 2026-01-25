@@ -651,7 +651,7 @@ private final class MWBSession {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let content {
-                    onLog?("Received \(content.count) encrypted bytes")
+                    self.onLog?("Received \(content.count) encrypted bytes")
                     self.encryptedBuffer.append(content)
                     self.decryptAvailable()
                     self.parsePackets()
