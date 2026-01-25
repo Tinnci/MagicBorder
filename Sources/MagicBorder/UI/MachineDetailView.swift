@@ -12,18 +12,20 @@ struct MachineDetailView: View {
     @State private var isRefreshing = false
 
     var body: some View {
-        Form {
-            Section {
+        ScrollView {
+            VStack(spacing: 24) {
+                // Header
                 HStack(spacing: 16) {
                     Image(systemName: "desktopcomputer")
-                        .font(.system(size: 48))
+                        .font(.system(size: 64))
                         .foregroundStyle(.blue)
                         .symbolRenderingMode(.hierarchical)
+                        .shadow(color: .blue.opacity(0.3), radius: 8, y: 4)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(machine.name)
-                            .font(.title2)
-                            .fontWeight(.medium)
+                            .font(.title)
+                            .fontWeight(.semibold)
                         HStack(spacing: 6) {
                             StatusDot(active: machine.isOnline)
                             Text(machine.isOnline ? "Online" : "Offline")
@@ -31,31 +33,60 @@ struct MachineDetailView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    Spacer()
                 }
-                .padding(.vertical, 8)
-            }
-            .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets())
+                .padding()
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal)
 
-            Section("Pinned Programs") {
-                LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(0..<8) { i in
-                        ProgramIconButton(name: "App \(i+1)", icon: "app.dashed")
+                // Pinned Programs
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Pinned Programs")
+                        .font(.headline)
+                        .padding(.horizontal)
+
+                    LazyVGrid(columns: columns, spacing: 16) {
+                        ForEach(0..<8) { i in
+                            ProgramIconButton(name: "App \(i+1)", icon: "app.dashed")
+                        }
                     }
+                    .padding(.horizontal)
                 }
-                .padding(.vertical, 8)
-            }
 
-            Section("Configuration") {
-                NavigationLink(destination: Text("Display Settings Content")) {
-                    Label("Display Settings", systemImage: "display")
-                }
-                NavigationLink(destination: Text("Input Configuration Content")) {
-                    Label("Input Configuration", systemImage: "keyboard")
+                // Configuration Groups
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Configuration")
+                        .font(.headline)
+                        .padding(.horizontal)
+
+                    GroupBox {
+                        VStack(spacing: 0) {
+                            NavigationLink(destination: Text("Display Settings Content")) {
+                                LabeledContent {
+                                    Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                                } label: {
+                                    Label("Display Settings", systemImage: "display")
+                                }
+                            }
+                            .padding(.vertical, 8)
+                            
+                            Divider()
+
+                            NavigationLink(destination: Text("Input Configuration Content")) {
+                                LabeledContent {
+                                    Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                                } label: {
+                                    Label("Input Configuration", systemImage: "keyboard")
+                                }
+                            }
+                            .padding(.vertical, 8)
+                        }
+                    }
+                    .padding(.horizontal)
                 }
             }
+            .padding(.vertical)
         }
-        .formStyle(.grouped)
         .navigationTitle(machine.name)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -94,7 +125,6 @@ struct MachineDetailView: View {
             }
         }
     }
-
 }
 
 struct ProgramIconButton: View {
@@ -107,31 +137,18 @@ struct ProgramIconButton: View {
         }) {
             VStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 32))
+                    .font(.system(size: 28))
                     .foregroundStyle(.blue)
-                    .frame(width: 48, height: 48)
+                    .frame(width: 44, height: 44)
+                    .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
 
                 Text(name)
                     .font(.caption)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
             }
+            .padding(8)
         }
-        .buttonStyle(ProgramIconButtonStyle())
-    }
-}
-
-struct ProgramIconButtonStyle: ButtonStyle {
-    @State private var isHovering = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background {
-                if isHovering || configuration.isPressed {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.secondary.opacity(0.1))
-                }
-            }
-            .onHover { isHovering = $0 }
+        .buttonStyle(.plain)
     }
 }

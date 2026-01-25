@@ -50,7 +50,7 @@ struct MachineCard: View {
             VStack(spacing: 8) {
                 Image(systemName: "desktopcomputer")
                     .font(.system(size: 24))
-                    .foregroundStyle(isOnline ? .primary : .secondary)
+                    .foregroundStyle(isOnline ? Color.accentColor : Color.secondary)
 
                 VStack(spacing: 2) {
                     Text(name)
@@ -79,16 +79,13 @@ struct MachineCardButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(
-                        isHovering || configuration.isPressed
-                            ? Color.secondary.opacity(0.1) : Color.clear)
-            }
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.separator.opacity(0.4), lineWidth: 1)
+                    .stroke(.separator.opacity(isHovering || configuration.isPressed ? 1.0 : 0.2), lineWidth: 1)
             }
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.snappy(duration: 0.1), value: configuration.isPressed)
             .onHover { isHovering = $0 }
             .contentShape(Rectangle())
     }

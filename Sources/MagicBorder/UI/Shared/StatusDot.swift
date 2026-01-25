@@ -1,11 +1,13 @@
 import SwiftUI
 
 struct StatusDot: View {
-    var active: Bool
+    let active: Bool
 
     var body: some View {
-        Circle()
-            .fill(active ? AnyShapeStyle(Color.green) : AnyShapeStyle(Color.secondary.opacity(0.5)))
-            .frame(width: 8, height: 8)
+        Image(systemName: "circle.fill")
+            .imageScale(.small)
+            .foregroundStyle(active ? .green : .secondary)
+            .opacity(active ? 1.0 : 0.4)
+            .help(active ? "Online" : "Offline")
     }
 }
