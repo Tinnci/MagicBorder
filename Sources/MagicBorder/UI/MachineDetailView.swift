@@ -12,57 +12,60 @@ struct MachineDetailView: View {
     ]
 
     var body: some View {
-        Form {
-            Section {
-                HStack(alignment: .top, spacing: 16) {
-                    Image(systemName: "desktopcomputer")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 48, height: 48)
-                        .foregroundStyle(.blue)
-                        .symbolRenderingMode(.hierarchical)
+        VStack(spacing: 0) {
+            // Header
+            HStack(spacing: 16) {
+                Image(systemName: "desktopcomputer")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 48, height: 48)
+                    .foregroundStyle(.blue)
+                    .symbolRenderingMode(.hierarchical)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(machine.name)
-                            .font(.title2)
-                            .fontWeight(.medium)
-                        HStack(spacing: 6) {
-                            StatusDot(active: machine.isOnline)
-                            Text(machine.isOnline ? "Online" : "Offline")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(machine.name)
+                        .font(.title2)
+                        .fontWeight(.medium)
+                    HStack(spacing: 6) {
+                        StatusDot(active: machine.isOnline)
+                        Text(machine.isOnline ? "Online" : "Offline")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+            }
+            .padding(20)
+            .background(Color(nsColor: .controlBackgroundColor))
+
+            Divider()
+
+            Form {
+                Section("Pinned Programs") {
+                    LazyVGrid(columns: columns, spacing: 16) {
+                        ForEach(0..<8) { i in
+                            ProgramIconButton(name: "App \(i+1)", icon: "app.dashed")
                         }
                     }
+                    .padding(.vertical, 8)
                 }
-                .padding(.vertical, 8)
-            }
-            .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets())
 
-            Section("Pinned Programs") {
-                LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(0..<8) { i in
-                        ProgramIconButton(name: "App \(i+1)", icon: "app.dashed")
+                Section("Configuration") {
+                    NavigationLink {
+                        MachineDisplaySettingsView(machine: machine)
+                    } label: {
+                        Label("Display Settings", systemImage: "display")
+                    }
+
+                    NavigationLink {
+                        MachineInputSettingsView(machine: machine)
+                    } label: {
+                        Label("Input Configuration", systemImage: "keyboard")
                     }
                 }
-                .padding(.vertical, 8)
             }
-
-            Section("Configuration") {
-                NavigationLink {
-                    MachineDisplaySettingsView(machine: machine)
-                } label: {
-                    Label("Display Settings", systemImage: "display")
-                }
-
-                NavigationLink {
-                    MachineInputSettingsView(machine: machine)
-                } label: {
-                    Label("Input Configuration", systemImage: "keyboard")
-                }
-            }
+            .formStyle(.grouped)
         }
-        .formStyle(.grouped)
         .navigationTitle(machine.name)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -199,8 +202,6 @@ struct ProgramIconButton: View {
     let name: String
     let icon: String
 
-    @State private var isHovering = false
-
     var body: some View {
         Button(action: {
             // Mock launch
@@ -218,21 +219,6 @@ struct ProgramIconButton: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(ProgramIconButtonStyle())
-    }
-}
-
-struct ProgramIconButtonStyle: ButtonStyle {
-    @State private var isHovering = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(4)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isHovering ? Color.secondary.opacity(0.1) : Color.clear)
-            )
-            .opacity(configuration.isPressed ? 0.7 : 1.0)
-            .onHover { isHovering = $0 }
+        .buttonStyle(.borderless)
     }
 }

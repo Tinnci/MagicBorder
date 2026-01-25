@@ -46,54 +46,30 @@ struct MachineCard: View {
     let isOnline: Bool
 
     var body: some View {
-        Button(action: {}) {
-            VStack(spacing: 8) {
+        GroupBox {
+            VStack(spacing: 12) {
                 Image(systemName: "desktopcomputer")
-                    .font(.system(size: 24))
+                    .font(.system(size: 32))
                     .foregroundStyle(isOnline ? Color.accentColor : Color.secondary)
 
-                VStack(spacing: 2) {
+                VStack(spacing: 4) {
                     Text(name)
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
+                        .font(.headline)
                         .lineLimit(1)
+                        .multilineTextAlignment(.center)
 
                     HStack(spacing: 4) {
                         StatusDot(active: isOnline)
                         Text(isOnline ? "Online" : "Offline")
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 100)
-            .padding()
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
         }
-        .buttonStyle(MachineCardButtonStyle())
-    }
-}
-
-struct MachineCardButtonStyle: ButtonStyle {
-    @State private var isHovering = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(
-                .regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-            )
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(configuration.isPressed ? Color.primary.opacity(0.05) : Color.clear)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(
-                        .separator.opacity(isHovering || configuration.isPressed ? 1.0 : 0.2),
-                        lineWidth: 1)
-            }
-            .onHover { isHovering = $0 }
-            .contentShape(Rectangle())
+        .contentShape(Rectangle())
     }
 }
 

@@ -137,9 +137,13 @@ private struct OverlaySettingsTab: View {
                     Toggle("Show Device Name", isOn: $dragDropOverlayShowDevice)
                     Toggle("Show Progress", isOn: $dragDropOverlayShowProgress)
 
-                    VStack(alignment: .leading) {
-                        Text("Size: \(Int(dragDropOverlayScale * 100))%")
-                        Slider(value: $dragDropOverlayScale, in: 0.85...1.3, step: 0.05)
+                    LabeledContent("Size") {
+                        HStack {
+                            Slider(value: $dragDropOverlayScale, in: 0.85...1.3, step: 0.05)
+                            Text("\(Int(dragDropOverlayScale * 100))%")
+                                .monospacedDigit()
+                                .frame(width: 40, alignment: .trailing)
+                        }
                     }
 
                     Picker("Position", selection: $dragDropOverlayPosition) {
@@ -167,8 +171,14 @@ private struct OverlaySettingsTab: View {
                     if overlayPreferences.hasOverride(for: selectedDevice) {
                         Toggle("Show Device Name", isOn: showDeviceBinding)
                         Toggle("Show Progress", isOn: showProgressBinding)
-                        Slider(value: scaleBinding, in: 0.85...1.3, step: 0.05) {
-                            Text("Size")
+
+                        LabeledContent("Size") {
+                            HStack {
+                                Slider(value: scaleBinding, in: 0.85...1.3, step: 0.05)
+                                Text("\(Int(scaleBinding.wrappedValue * 100))%")
+                                    .monospacedDigit()
+                                    .frame(width: 40, alignment: .trailing)
+                            }
                         }
                     }
                 }
