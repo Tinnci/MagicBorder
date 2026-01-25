@@ -143,13 +143,26 @@ public final class MWBCompatibilityService: ObservableObject {
 
     public func sendMachineMatrix(_ machines: [String], twoRow: Bool = false, swap: Bool = false) {
         guard !messageSessions.isEmpty else { return }
-        var packet = MWBPacket()
+
+        // C# MWB expects 4 packets, one for each slot (Src 1...4)
+        // Src = Index (1-based)
+        // MachineName = Name of machine at that index
+        // Flags (TwoRow/Swap) only checked on the 4th packet (Src=4)
+
+        let paddedMachines = machines + Array(repeating: "", count: max(0, 4 - machines.count))
         let flags: UInt8 = (swap ? 0x02 : 0x00) | (twoRow ? 0x04 : 0x00)
-        packet.rawType = MWBPacketType.matrix.rawValue | flags
-        packet.src = localId
-        packet.des = Int32(255)
-        packet.machineName = machines.joined(separator: ",")
-        broadcast(packet, to: messageSessions)
+
+        for (index, name) in paddedMachines.prefix(4).enumerated() {
+            var packet = MWBPacket()
+            packet.rawType = MWBPacketType.matrix.rawValue | flags
+            packet.src = Int32(index + 1)
+            packet.des = Int32(255)
+            packet.machineName = name
+
+            // C# logic: MachineStuff.UpdateMachineMatrix ignores packets with Src > 4
+            // and only updates settings when Src == 4.
+            broadcast(packet, to: messageSessions)
+        }
     }
 
     public func sendNextMachine(targetId: Int32?) {
@@ -734,7 +747,8 @@ private final class MWBSession {
         // 只输出关键包类型的日志
         let shouldLog = [.handshake, .handshakeAck, .heartbeat, .matrix].contains(packetToSend.type)
         if shouldLog {
-            onLog?("TX Packet: type=\(packetToSend.type) src=\(packetToSend.src) des=\(packetToSend.des)")
+            onLog?(
+                "TX Packet: type=\(packetToSend.type) src=\(packetToSend.src) des=\(packetToSend.des)")
         }
         connection.send(content: encrypted, completion: .contentProcessed { _ in })
     }
@@ -953,7 +967,8 @@ private final class MWBSession {
             var packet = MWBPacket(data: packetData)
 
             guard packet.data.count >= 4 else {
-                onLog?("Packet too short for header: \(packet.data.count) bytes, rawType=\(rawType)")
+                onLog?(
+                    "Packet too short for header: \(packet.data.count) bytes, rawType=\(rawType)")
                 continue
             }
 
@@ -976,8 +991,12 @@ private final class MWBSession {
             packet.data[3] = 0
 
             // 只输出重要的包类型日志
-            let shouldLog = [.handshake, .handshakeAck, .heartbeat, .machineSwitched, .matrix, .captureScreenCommand].contains(packet.type)
-            let suppressHandshakeLog = isHandshakeVerified && (packet.type == .handshake || packet.type == .handshakeAck)
+            let shouldLog = [
+                .handshake, .handshakeAck, .heartbeat, .machineSwitched, .matrix,
+                .captureScreenCommand,
+            ].contains(packet.type)
+            let suppressHandshakeLog =
+                isHandshakeVerified && (packet.type == .handshake || packet.type == .handshakeAck)
             if shouldLog, !suppressHandshakeLog {
                 onLog?("RX Packet: type=\(packet.type) src=\(packet.src) des=\(packet.des)")
             }
