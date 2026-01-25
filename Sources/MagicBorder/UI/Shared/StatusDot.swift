@@ -9,5 +9,6 @@ struct StatusDot: View {
             .foregroundStyle(active ? .green : .secondary)
             .opacity(active ? 1.0 : 0.4)
             .help(active ? "Online" : "Offline")
+            .accessibilityLabel(active ? "Online" : "Offline")
     }
 }

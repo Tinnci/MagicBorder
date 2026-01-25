@@ -266,13 +266,6 @@ struct ArrangementDetailView: View {
                                 .padding(.top)
                         }
 
-                        Text("Arrangement")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal)
-
                         MachineMatrixView(
                             machines: $machines,
                             columns: matrixTwoRowBinding.wrappedValue ? 2 : max(1, machines.count)
@@ -411,6 +404,7 @@ struct ArrangementInspector: View {
                                 networkManager.requestSwitch(to: machine.id)
                             }
                             .controlSize(.mini)
+                            .buttonStyle(.borderless)
                         }
                     }
                 }
@@ -443,34 +437,19 @@ struct DiscoveredMachinesListView: View {
                 Button("Connect") {
                     networkManager.connect(to: peer.endpoint)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderless)
+                .controlSize(.small)
             }
             .padding(.vertical, 4)
         }
         .navigationTitle("Discovered Machines")
         .overlay {
             if networkManager.discoveredPeers.isEmpty {
-                ContentUnderlineView(
-                    title: "Scanning for machines...",
+                ContentUnavailableView(
+                    "Scanning for machines...",
                     systemImage: "antenna.radiowaves.left.and.right"
                 )
             }
-        }
-    }
-}
-
-struct ContentUnderlineView: View {
-    let title: String
-    let systemImage: String
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.system(size: 40))
-                .foregroundStyle(.secondary)
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(.secondary)
         }
     }
 }
