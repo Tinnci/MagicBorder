@@ -35,6 +35,8 @@ struct MagicBorderApp: App {
                 .environment(networkManager)
                 .environment(overlayPreferences)
                 .onAppear {
+                    NSApp.setActivationPolicy(.regular)
+                    NSApp.activate(ignoringOtherApps: true)
                     accessibilityService.startPolling()
                     syncInputCapture()
                 }

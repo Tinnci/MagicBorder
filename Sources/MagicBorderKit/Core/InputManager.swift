@@ -17,9 +17,15 @@ public class MBInputManager: Observation.Observable {
     // Thread-safe storage for the current remote machine ID
     // Accessed by both MainActor and the non-isolated C callback
     private let _remoteID = OSAllocatedUnfairLock<UUID?>(initialState: nil)
+    private let _isAppActive = OSAllocatedUnfairLock<Bool>(initialState: true)
 
     public var currentRemoteID: UUID? {
         _remoteID.withLock { $0 }
+    }
+
+    public init() {
+        _isAppActive.withLock { $0 = NSRunningApplication.current.isActive }
+        setupAppStateObservers()
     }
 
     public func toggleInterception(_ enable: Bool) {
@@ -97,6 +103,10 @@ public class MBInputManager: Observation.Observable {
     nonisolated func handle(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<
         CGEvent
     >? {
+        if shouldAllowLocalInteraction(type: type) {
+            return Unmanaged.passUnretained(event)
+        }
+
         // Create snapshot synchronously (safe)
         let snapshot = EventSnapshot(from: event, type: type)
 
@@ -123,6 +133,37 @@ public class MBInputManager: Observation.Observable {
         }
 
         return nil
+    }
+
+    private nonisolated func shouldAllowLocalInteraction(type: CGEventType) -> Bool {
+        if _isAppActive.withLock({ $0 }) {
+            return true
+        }
+
+        switch type {
+        case .leftMouseDown, .rightMouseDown, .leftMouseUp, .rightMouseUp:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func setupAppStateObservers() {
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?._isAppActive.withLock { $0 = true }
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?._isAppActive.withLock { $0 = false }
+        }
     }
 
     nonisolated func convertToRemoteEvent(_ event: CGEvent, type: CGEventType)
