@@ -12,29 +12,30 @@ struct MachineDetailView: View {
     @State private var isRefreshing = false
 
     var body: some View {
-        VStack(spacing: 0) {
+
+        ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // Standard Header
+                // Compact Header
                 HStack(spacing: 16) {
                     Image(systemName: "desktopcomputer")
-                        .font(.largeTitle)
+                        .font(.system(size: 48))
                         .foregroundStyle(.blue)
+                        .symbolRenderingMode(.hierarchical)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(machine.name)
                             .font(.title2)
-                            .fontWeight(.bold)
+                            .fontWeight(.medium)
                         HStack(spacing: 6) {
                             StatusDot(active: machine.isOnline)
                             Text(machine.isOnline ? "Online" : "Offline")
-                                .font(.caption)
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
                     }
                     Spacer()
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
+                .padding()
 
                 Divider()
 
@@ -50,121 +51,102 @@ struct MachineDetailView: View {
                         }
                     }
                 }
-                .padding()
+                .padding(.horizontal)
 
                 // Quick Links / Configuration
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
                     Text("Configuration")
                         .font(.headline)
                         .foregroundStyle(.secondary)
 
-                    GroupBox {
-                        VStack(spacing: 0) {
+                    Form {
+                        Section {
                             NavigationLink(destination: Text("Display Settings Content")) {
-                                LinkRow(title: "Display Settings", icon: "display")
+                                Label("Display Settings", systemImage: "display")
                             }
-                            Divider()
                             NavigationLink(destination: Text("Input Configuration Content")) {
-                                LinkRow(title: "Input Configuration", icon: "keyboard")
+                                Label("Input Configuration", systemImage: "keyboard")
                             }
                         }
                     }
+                    .formStyle(.grouped)
+                    .frame(height: 160)  // Limit height for embedded form feeling
+                    .scrollDisabled(true)
                 }
-                .padding()
+                .padding(.horizontal)
             }
-            Spacer()
-
-            // Bottom Toolbar Divider
-            Divider()
-
-            HStack {
-                Button(action: {
-                    networkManager.reconnect(machineId: machine.id)
-                }) {
-                    Label("Restart", systemImage: "restart")
-                }
-                .buttonStyle(.plain)
-                .help("Restart connection")
-
-                Button(action: {
-                    networkManager.disconnect(machineId: machine.id)
-                }) {
-                    Label("Disconnect", systemImage: "xmark.circle")
-                }
-                .buttonStyle(.plain)
-                .help("Disconnect machine")
-
-                Spacer()
-
+            .padding(.bottom, 20)
+        }
+        .navigationTitle(machine.name)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
                 Button(action: {
                     isRefreshing = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                         isRefreshing = false
                     }
                 }) {
-                    Image(systemName: "arrow.clockwise")
+                    Label("Refresh", systemImage: "arrow.clockwise")
                         .rotationEffect(.degrees(isRefreshing ? 360 : 0))
                         .animation(
                             isRefreshing
                                 ? .linear(duration: 1).repeatForever(autoreverses: false)
                                 : .default, value: isRefreshing)
                 }
-                .buttonStyle(.plain)
                 .help("Refresh Status")
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Material.bar)
+
+            ToolbarItem(placement: .status) {
+                Button(action: {
+                    networkManager.reconnect(machineId: machine.id)
+                }) {
+                    Label("Restart Connection", systemImage: "restart")
+                }
+                .help("Restart Connection")
+            }
+
+            ToolbarItem(placement: .destructiveAction) {
+                Button(action: {
+                    networkManager.disconnect(machineId: machine.id)
+                }) {
+                    Label("Disconnect", systemImage: "xmark.circle")
+                }
+                .help("Disconnect Machine")
+            }
         }
-        .navigationTitle(machine.name)
     }
+
 }
 
 struct ProgramIconButton: View {
     let name: String
     let icon: String
+
     @State private var isHovering = false
 
     var body: some View {
-        VStack {
-            ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(isHovering ? Color.primary.opacity(0.1) : Color.primary.opacity(0.05))
-                    .frame(width: 60, height: 60)
-
+        Button(action: {
+            // Mock launch
+        }) {
+            VStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.title)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 32))
+                    .foregroundStyle(.blue)
+                    .frame(width: 48, height: 48)
+                    .background {
+                        if isHovering {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.secondary.opacity(0.1))
+                        }
+                    }
+
+                Text(name)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
             }
-            Text(name)
-                .font(.caption2)
-                .foregroundStyle(.primary)
-                .lineLimit(1)
         }
+        .buttonStyle(.plain)
         .onHover { isHovering = $0 }
-        .onTapGesture {
-            // Mock animation for app launch
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
-
-            }
-        }
-    }
-}
-
-struct LinkRow: View {
-    let title: String
-    let icon: String
-
-    var body: some View {
-        HStack {
-            Label(title, systemImage: icon)
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 4)
-        .contentShape(Rectangle())
     }
 }

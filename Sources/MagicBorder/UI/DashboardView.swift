@@ -41,7 +41,6 @@ struct DashboardView: View {
 
     @State private var machines: [Machine] = []
 
-
     var filteredMachines: [Machine] {
         if searchText.isEmpty {
             return machines
@@ -161,8 +160,8 @@ struct DashboardView: View {
     }
 }
 
-private extension MBOverlayPosition {
-    var alignment: Alignment {
+extension MBOverlayPosition {
+    fileprivate var alignment: Alignment {
         switch self {
         case .top: return .top
         case .topLeading: return .topLeading
@@ -173,7 +172,7 @@ private extension MBOverlayPosition {
         }
     }
 
-    var padding: EdgeInsets {
+    fileprivate var padding: EdgeInsets {
         switch self {
         case .bottom, .bottomLeading, .bottomTrailing:
             return EdgeInsets(top: 0, leading: 16, bottom: 16, trailing: 16)
@@ -246,6 +245,8 @@ struct ArrangementDetailView: View {
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager:
         MagicBorderKit.MBNetworkManager
 
+    @State private var isInspectorPresented = true
+
     private var matrixTwoRowBinding: Binding<Bool> {
         Binding(
             get: { !networkManager.compatibilitySettings.matrixOneRow },
@@ -261,105 +262,70 @@ struct ArrangementDetailView: View {
 
     var body: some View {
         @Bindable var networkManager = networkManager
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack(spacing: 12) {
-                    StatusDot(active: accessibilityService.isTrusted)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(accessibilityService.isTrusted ? "System Services Ready" : "Accessibility Needed")
-                            .font(.headline)
-                        Text("Enable Accessibility for global input capture.")
-                            .font(.caption)
+
+        VStack(spacing: 0) {
+            // Hero Canvas Area
+            ZStack {
+                Color(nsColor: .windowBackgroundColor)
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: 24) {
+                        if !accessibilityService.isTrusted {
+                            AccessibilityWarningBanner(service: accessibilityService)
+                                .padding(.top)
+                        }
+
+                        Text("Arrangement")
+                            .font(.title2)
+                            .fontWeight(.semibold)
                             .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal)
+
+                        MachineMatrixView(
+                            machines: $machines,
+                            columns: matrixTwoRowBinding.wrappedValue ? 2 : max(1, machines.count)
+                        )
+                        .padding(.horizontal)
+
+                        Spacer()
                     }
-                    Spacer()
-                    if !accessibilityService.isTrusted {
-                        Button("Grant Access") {
-                            accessibilityService.promptForPermission()
-                        }
-                        .controlSize(.small)
-                    }
+                    .padding(.vertical)
                 }
-                .padding(.horizontal)
-
-                GroupBox("Arrangement") {
-                    MachineMatrixView(
-                        machines: $machines,
-                        columns: matrixTwoRowBinding.wrappedValue ? 2 : max(1, machines.count)
-                    )
-                    .frame(minHeight: 240)
-                    .padding(8)
-                }
-                .padding(.horizontal)
-
-                HStack(alignment: .top, spacing: 16) {
-                    GroupBox("Pairing") {
-                        PairingFlowView(securityKey: $networkManager.compatibilitySettings.securityKey)
-                            .padding(4)
-                    }
-
-                    GroupBox("Devices") {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Active")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    Text(networkManager.activeMachineName)
-                                        .font(.headline)
-                                }
-                                Spacer()
-                                Text(networkManager.switchState.rawValue.capitalized)
-                                    .font(.caption)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(.thinMaterial, in: Capsule())
-                            }
-
-                            List {
-                                ForEach(machines) { machine in
-                                    HStack {
-                                        Text(machine.name)
-                                        Spacer()
-                                        Button("Switch") {
-                                            networkManager.requestSwitch(to: machine.id)
-                                        }
-                                        .buttonStyle(.bordered)
-                                        .controlSize(.small)
-                                    }
-                                }
-                            }
-                            .frame(minHeight: 200)
-                            .listStyle(.inset)
-                        }
-                        .padding(4)
-                    }
-                }
-                .padding(.horizontal)
-
-                GroupBox("Matrix Options") {
-                    Toggle("Two Row Matrix", isOn: matrixTwoRowBinding)
-                    Toggle("Swap Matrix Order", isOn: matrixSwapBinding)
-                }
-                .padding(.horizontal)
-
-                HStack {
-                    Spacer()
-                    Button("Send Files (MWB DragDrop)") {
-                        let panel = NSOpenPanel()
-                        panel.canChooseFiles = true
-                        panel.canChooseDirectories = true
-                        panel.allowsMultipleSelection = true
-                        if panel.runModal() == .OK {
-                            networkManager.sendFileDrop(panel.urls)
-                        }
-                    }
-                }
-                .padding(.horizontal)
             }
-            .padding(.vertical, 16)
         }
         .navigationTitle("Arrangement")
+        .inspector(isPresented: $isInspectorPresented) {
+            ArrangementInspector(
+                networkManager: networkManager,
+                machines: machines,
+                matrixTwoRowBinding: matrixTwoRowBinding,
+                matrixSwapBinding: matrixSwapBinding
+            )
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: { isInspectorPresented.toggle() }) {
+                    Label("Inspector", systemImage: "sidebar.right")
+                }
+            }
+
+            ToolbarItem {
+                Button(action: {
+                    let panel = NSOpenPanel()
+                    panel.canChooseFiles = true
+                    panel.canChooseDirectories = true
+                    panel.allowsMultipleSelection = true
+                    if panel.runModal() == .OK {
+                        networkManager.sendFileDrop(panel.urls)
+                    }
+                }) {
+                    Label("Send Files", systemImage: "square.and.arrow.up")
+                }
+                .help("Send Files via MWB")
+            }
+        }
         .onChange(of: machines) { _, newValue in
             networkManager.updateLocalMatrix(names: newValue.map { $0.name })
             networkManager.sendMachineMatrix(
@@ -369,21 +335,98 @@ struct ArrangementDetailView: View {
             )
         }
         .onChange(of: networkManager.compatibilitySettings.matrixOneRow) { _, _ in
-            networkManager.updateLocalMatrix(names: machines.map { $0.name })
-            networkManager.sendMachineMatrix(
-                names: machines.map { $0.name },
-                twoRow: matrixTwoRowBinding.wrappedValue,
-                swap: matrixSwapBinding.wrappedValue
-            )
+            syncMatrix()
         }
         .onChange(of: networkManager.compatibilitySettings.matrixCircle) { _, _ in
-            networkManager.updateLocalMatrix(names: machines.map { $0.name })
-            networkManager.sendMachineMatrix(
-                names: machines.map { $0.name },
-                twoRow: matrixTwoRowBinding.wrappedValue,
-                swap: matrixSwapBinding.wrappedValue
-            )
+            syncMatrix()
         }
+    }
+
+    private func syncMatrix() {
+        networkManager.updateLocalMatrix(names: machines.map { $0.name })
+        networkManager.sendMachineMatrix(
+            names: machines.map { $0.name },
+            twoRow: matrixTwoRowBinding.wrappedValue,
+            swap: matrixSwapBinding.wrappedValue
+        )
+    }
+}
+
+// MARK: - Subviews
+
+struct AccessibilityWarningBanner: View {
+    let service: MBAccessibilityService
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .font(.title3)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Accessibility Permissions Required")
+                    .font(.headline)
+                Text("MagicBorder needs control to share input.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button("Open Settings") {
+                service.promptForPermission()
+            }
+            .controlSize(.small)
+        }
+        .padding()
+        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.3), lineWidth: 1))
+        .padding(.horizontal)
+    }
+}
+
+struct ArrangementInspector: View {
+    @Bindable var networkManager: MagicBorderKit.MBNetworkManager
+    var machines: [Machine]
+    var matrixTwoRowBinding: Binding<Bool>
+    var matrixSwapBinding: Binding<Bool>
+
+    var body: some View {
+        Form {
+            Section("Status") {
+                LabeledContent("Active Machine", value: networkManager.activeMachineName)
+                LabeledContent("State", value: networkManager.switchState.rawValue.capitalized)
+            }
+
+            Section("Layout Options") {
+                Toggle("Two Row Matrix", isOn: matrixTwoRowBinding)
+                Toggle("Swap Order", isOn: matrixSwapBinding)
+            }
+
+            Section("Pairing") {
+                PairingFlowView(securityKey: $networkManager.compatibilitySettings.securityKey)
+            }
+
+            Section("Connected Devices") {
+                if networkManager.connectedMachines.isEmpty {
+                    Text("No devices connected")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                } else {
+                    ForEach(networkManager.connectedMachines) { machine in
+                        HStack {
+                            Text(machine.name)
+                            Spacer()
+                            Button("Switch") {
+                                networkManager.requestSwitch(to: machine.id)
+                            }
+                            .controlSize(.mini)
+                        }
+                    }
+                }
+            }
+        }
+        .inspectorColumnWidth(min: 300, ideal: 350, max: 450)
     }
 }
 

@@ -1,8 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-
-
 struct MachineMatrixView: View {
     @Binding var machines: [Machine]
     var columns: Int = 2
@@ -50,30 +48,38 @@ struct MachineCard: View {
     @State private var isHovering = false
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(Color(nsColor: .controlBackgroundColor))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.primary.opacity(isHovering ? 0.18 : 0.08), lineWidth: 1)
-            )
-            .overlay {
-                VStack(spacing: 6) {
-                    Image(systemName: "desktopcomputer")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
+        VStack(spacing: 8) {
+            Image(systemName: "desktopcomputer")
+                .font(.system(size: 24))
+                .foregroundStyle(isOnline ? .primary : .secondary)
 
-                    HStack(spacing: 6) {
-                        StatusDot(active: isOnline)
-                        Text(name)
-                            .font(.caption)
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                    }
+            VStack(spacing: 2) {
+                Text(name)
+                    .font(.body)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                HStack(spacing: 4) {
+                    StatusDot(active: isOnline)
+                    Text(isOnline ? "Online" : "Offline")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 8)
             }
-            .onHover { isHovering = $0 }
-            .opacity(isOnline ? 1 : 0.6)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, minHeight: 100)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isHovering ? Color.secondary.opacity(0.1) : Color.clear)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(.separator.opacity(0.4), lineWidth: 1)
+        }
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
     }
 }
 
