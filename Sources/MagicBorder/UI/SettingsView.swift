@@ -47,10 +47,10 @@ private struct GeneralSettingsTab: View {
             }
 
             Section("Cursor Control") {
-                Toggle("Capture Local Input", isOn: $captureInput)
-                    .disabled(!accessibilityService.isTrusted)
+                Toggle("Capture Local Input", isOn: self.$captureInput)
+                    .disabled(!self.accessibilityService.isTrusted)
 
-                if !accessibilityService.isTrusted {
+                if !self.accessibilityService.isTrusted {
                     HStack {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
@@ -66,8 +66,8 @@ private struct GeneralSettingsTab: View {
                 Toggle(
                     "Block Corner Switching",
                     isOn: $networkManager.compatibilitySettings.blockCorners)
-                Toggle("Wrap Mouse at Screen Edge", isOn: $wrapMouse)
-                Toggle("Hide Mouse at Edge", isOn: $hideMouse)
+                Toggle("Wrap Mouse at Screen Edge", isOn: self.$wrapMouse)
+                Toggle("Hide Mouse at Edge", isOn: self.$hideMouse)
                 Toggle(
                     "Relative Mouse Movement",
                     isOn: $networkManager.compatibilitySettings.moveMouseRelatively)
@@ -149,22 +149,22 @@ private struct OverlaySettingsTab: View {
     var body: some View {
         Form {
             Section("Global Defaults") {
-                Toggle("Show Overlay", isOn: $dragDropOverlayEnabled)
+                Toggle("Show Overlay", isOn: self.$dragDropOverlayEnabled)
 
                 Group {
-                    Toggle("Show Device Name", isOn: $dragDropOverlayShowDevice)
-                    Toggle("Show Progress", isOn: $dragDropOverlayShowProgress)
+                    Toggle("Show Device Name", isOn: self.$dragDropOverlayShowDevice)
+                    Toggle("Show Progress", isOn: self.$dragDropOverlayShowProgress)
 
                     LabeledContent("Size") {
                         HStack {
-                            Slider(value: $dragDropOverlayScale, in: 0.85 ... 1.3, step: 0.05)
-                            Text("\(Int(dragDropOverlayScale * 100))%")
+                            Slider(value: self.$dragDropOverlayScale, in: 0.85 ... 1.3, step: 0.05)
+                            Text("\(Int(self.dragDropOverlayScale * 100))%")
                                 .monospacedDigit()
                                 .frame(width: 40, alignment: .trailing)
                         }
                     }
 
-                    Picker("Position", selection: $dragDropOverlayPosition) {
+                    Picker("Position", selection: self.$dragDropOverlayPosition) {
                         Text("Top").tag("top")
                         Text("Bottom").tag("bottom")
                         Text("Top Left").tag("topLeading")
@@ -173,27 +173,27 @@ private struct OverlaySettingsTab: View {
                         Text("Bottom Right").tag("bottomTrailing")
                     }
                 }
-                .disabled(!dragDropOverlayEnabled)
+                .disabled(!self.dragDropOverlayEnabled)
             }
 
             Section("Per-Device Override") {
-                Picker("Target Device", selection: $selectedDevice) {
-                    ForEach(deviceOptions, id: \.self) { device in
+                Picker("Target Device", selection: self.$selectedDevice) {
+                    ForEach(self.deviceOptions, id: \.self) { device in
                         Text(device).tag(device)
                     }
                 }
 
-                if !selectedDevice.isEmpty {
-                    Toggle("Override Global Settings", isOn: useOverrideBinding)
+                if !self.selectedDevice.isEmpty {
+                    Toggle("Override Global Settings", isOn: self.useOverrideBinding)
 
-                    if overlayPreferences.hasOverride(for: selectedDevice) {
-                        Toggle("Show Device Name", isOn: showDeviceBinding)
-                        Toggle("Show Progress", isOn: showProgressBinding)
+                    if self.overlayPreferences.hasOverride(for: self.selectedDevice) {
+                        Toggle("Show Device Name", isOn: self.showDeviceBinding)
+                        Toggle("Show Progress", isOn: self.showProgressBinding)
 
                         LabeledContent("Size") {
                             HStack {
-                                Slider(value: scaleBinding, in: 0.85 ... 1.3, step: 0.05)
-                                Text("\(Int(scaleBinding.wrappedValue * 100))%")
+                                Slider(value: self.scaleBinding, in: 0.85 ... 1.3, step: 0.05)
+                                Text("\(Int(self.scaleBinding.wrappedValue * 100))%")
                                     .monospacedDigit()
                                     .frame(width: 40, alignment: .trailing)
                             }
@@ -204,8 +204,8 @@ private struct OverlaySettingsTab: View {
         }
         .formStyle(.grouped)
         .onAppear {
-            if selectedDevice.isEmpty {
-                selectedDevice = networkManager.localDisplayName
+            if self.selectedDevice.isEmpty {
+                self.selectedDevice = self.networkManager.localDisplayName
             }
         }
     }
@@ -213,8 +213,8 @@ private struct OverlaySettingsTab: View {
     // MARK: - Helpers
 
     private var deviceOptions: [String] {
-        let connected = networkManager.connectedMachines.map(\.name)
-        let stored = overlayPreferences.allDeviceNames()
+        let connected = self.networkManager.connectedMachines.map(\.name)
+        let stored = self.overlayPreferences.allDeviceNames()
         let base = [networkManager.localDisplayName] + connected
         return Array(Set(base + stored)).sorted()
     }
@@ -222,50 +222,50 @@ private struct OverlaySettingsTab: View {
     private var defaultOverlayPreferences: MBOverlayPreferences {
         let position = MBOverlayPosition(rawValue: dragDropOverlayPosition) ?? .top
         return MBOverlayPreferences(
-            showDevice: dragDropOverlayShowDevice,
-            showProgress: dragDropOverlayShowProgress,
-            scale: dragDropOverlayScale,
+            showDevice: self.dragDropOverlayShowDevice,
+            showProgress: self.dragDropOverlayShowProgress,
+            scale: self.dragDropOverlayScale,
             position: position)
     }
 
     private var currentDevicePreferences: MBOverlayPreferences {
-        overlayPreferences.preferences(for: selectedDevice, default: defaultOverlayPreferences)
+        self.overlayPreferences.preferences(for: self.selectedDevice, default: self.defaultOverlayPreferences)
     }
 
     private var useOverrideBinding: Binding<Bool> {
         Binding(
-            get: { overlayPreferences.hasOverride(for: selectedDevice) },
+            get: { self.overlayPreferences.hasOverride(for: self.selectedDevice) },
             set: { enabled in
                 if enabled {
-                    overlayPreferences.setOverride(currentDevicePreferences, for: selectedDevice)
+                    self.overlayPreferences.setOverride(self.currentDevicePreferences, for: self.selectedDevice)
                 } else {
-                    overlayPreferences.clearOverride(for: selectedDevice)
+                    self.overlayPreferences.clearOverride(for: self.selectedDevice)
                 }
             })
     }
 
     private var showDeviceBinding: Binding<Bool> {
         Binding(
-            get: { currentDevicePreferences.showDevice },
-            set: { val in updateDevicePreferences { $0.showDevice = val } })
+            get: { self.currentDevicePreferences.showDevice },
+            set: { val in self.updateDevicePreferences { $0.showDevice = val } })
     }
 
     private var showProgressBinding: Binding<Bool> {
         Binding(
-            get: { currentDevicePreferences.showProgress },
-            set: { val in updateDevicePreferences { $0.showProgress = val } })
+            get: { self.currentDevicePreferences.showProgress },
+            set: { val in self.updateDevicePreferences { $0.showProgress = val } })
     }
 
     private var scaleBinding: Binding<Double> {
         Binding(
-            get: { currentDevicePreferences.scale },
-            set: { val in updateDevicePreferences { $0.scale = val } })
+            get: { self.currentDevicePreferences.scale },
+            set: { val in self.updateDevicePreferences { $0.scale = val } })
     }
 
     private func updateDevicePreferences(_ update: (inout MBOverlayPreferences) -> Void) {
-        var prefs = currentDevicePreferences
+        var prefs = self.currentDevicePreferences
         update(&prefs)
-        overlayPreferences.setOverride(prefs, for: selectedDevice)
+        self.overlayPreferences.setOverride(prefs, for: self.selectedDevice)
     }
 }
 

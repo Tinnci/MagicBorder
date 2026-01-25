@@ -20,75 +20,75 @@ public final class MBCompatibilitySettings {
     private let defaults = UserDefaults.standard
 
     public var shareClipboard: Bool {
-        didSet { defaults.set(shareClipboard, forKey: Keys.shareClipboard) }
+        didSet { self.defaults.set(self.shareClipboard, forKey: Keys.shareClipboard) }
     }
 
     public var transferFiles: Bool {
-        didSet { defaults.set(transferFiles, forKey: Keys.transferFiles) }
+        didSet { self.defaults.set(self.transferFiles, forKey: Keys.transferFiles) }
     }
 
     public var switchByMouse: Bool {
-        didSet { defaults.set(switchByMouse, forKey: Keys.switchByMouse) }
+        didSet { self.defaults.set(self.switchByMouse, forKey: Keys.switchByMouse) }
     }
 
     public var blockCorners: Bool {
-        didSet { defaults.set(blockCorners, forKey: Keys.blockCorners) }
+        didSet { self.defaults.set(self.blockCorners, forKey: Keys.blockCorners) }
     }
 
     public var moveMouseRelatively: Bool {
-        didSet { defaults.set(moveMouseRelatively, forKey: Keys.moveMouseRelatively) }
+        didSet { self.defaults.set(self.moveMouseRelatively, forKey: Keys.moveMouseRelatively) }
     }
 
     public var matrixOneRow: Bool {
-        didSet { defaults.set(matrixOneRow, forKey: Keys.matrixOneRow) }
+        didSet { self.defaults.set(self.matrixOneRow, forKey: Keys.matrixOneRow) }
     }
 
     public var matrixCircle: Bool {
-        didSet { defaults.set(matrixCircle, forKey: Keys.matrixCircle) }
+        didSet { self.defaults.set(self.matrixCircle, forKey: Keys.matrixCircle) }
     }
 
     public var messagePort: UInt16 {
-        didSet { defaults.set(Int(messagePort), forKey: Keys.messagePort) }
+        didSet { self.defaults.set(Int(self.messagePort), forKey: Keys.messagePort) }
     }
 
     public var clipboardPort: UInt16 {
-        didSet { defaults.set(Int(clipboardPort), forKey: Keys.clipboardPort) }
+        didSet { self.defaults.set(Int(self.clipboardPort), forKey: Keys.clipboardPort) }
     }
 
     public var securityKey: String {
-        didSet { defaults.set(securityKey, forKey: Keys.securityKey) }
+        didSet { self.defaults.set(self.securityKey, forKey: Keys.securityKey) }
     }
 
     public var validationMessage: String?
 
     public init() {
-        shareClipboard = defaults.object(forKey: Keys.shareClipboard) as? Bool ?? true
-        transferFiles = defaults.object(forKey: Keys.transferFiles) as? Bool ?? false
-        switchByMouse = defaults.object(forKey: Keys.switchByMouse) as? Bool ?? true
-        blockCorners = defaults.object(forKey: Keys.blockCorners) as? Bool ?? false
-        moveMouseRelatively = defaults.object(forKey: Keys.moveMouseRelatively) as? Bool ?? false
-        matrixOneRow = defaults.object(forKey: Keys.matrixOneRow) as? Bool ?? true
-        matrixCircle = defaults.object(forKey: Keys.matrixCircle) as? Bool ?? false
-        if defaults.object(forKey: Keys.messagePort) != nil {
-            messagePort = UInt16(defaults.integer(forKey: Keys.messagePort))
+        self.shareClipboard = self.defaults.object(forKey: Keys.shareClipboard) as? Bool ?? true
+        self.transferFiles = self.defaults.object(forKey: Keys.transferFiles) as? Bool ?? false
+        self.switchByMouse = self.defaults.object(forKey: Keys.switchByMouse) as? Bool ?? true
+        self.blockCorners = self.defaults.object(forKey: Keys.blockCorners) as? Bool ?? false
+        self.moveMouseRelatively = self.defaults.object(forKey: Keys.moveMouseRelatively) as? Bool ?? false
+        self.matrixOneRow = self.defaults.object(forKey: Keys.matrixOneRow) as? Bool ?? true
+        self.matrixCircle = self.defaults.object(forKey: Keys.matrixCircle) as? Bool ?? false
+        if self.defaults.object(forKey: Keys.messagePort) != nil {
+            self.messagePort = UInt16(self.defaults.integer(forKey: Keys.messagePort))
         } else {
-            messagePort = 15101
+            self.messagePort = 15101
         }
-        if defaults.object(forKey: Keys.clipboardPort) != nil {
-            clipboardPort = UInt16(defaults.integer(forKey: Keys.clipboardPort))
+        if self.defaults.object(forKey: Keys.clipboardPort) != nil {
+            self.clipboardPort = UInt16(self.defaults.integer(forKey: Keys.clipboardPort))
         } else {
-            clipboardPort = 15100
+            self.clipboardPort = 15100
         }
-        securityKey = defaults.string(forKey: Keys.securityKey) ?? ""
+        self.securityKey = self.defaults.string(forKey: Keys.securityKey) ?? ""
     }
 
     public func validateSecurityKey() -> Bool {
-        let trimmed = securityKey.replacingOccurrences(of: " ", with: "")
+        let trimmed = self.securityKey.replacingOccurrences(of: " ", with: "")
         if trimmed.count < 16 {
-            validationMessage = "Security Key 至少 16 位"
+            self.validationMessage = "Security Key 至少 16 位"
             return false
         }
-        validationMessage = nil
+        self.validationMessage = nil
         return true
     }
 }

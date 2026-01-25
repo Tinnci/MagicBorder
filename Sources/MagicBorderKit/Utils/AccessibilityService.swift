@@ -8,13 +8,13 @@ public class MBAccessibilityService: Observation.Observable {
     public var isTrusted: Bool = false
 
     public init() {
-        checkStatus()
+        self.checkStatus()
     }
 
     public func checkStatus() {
         let options =
             [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: false] as CFDictionary
-        isTrusted = AXIsProcessTrustedWithOptions(options)
+        self.isTrusted = AXIsProcessTrustedWithOptions(options)
     }
 
     /// Prompts the user with system alert if permission is missing (2026 best practice)
@@ -22,7 +22,7 @@ public class MBAccessibilityService: Observation.Observable {
         let options =
             [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         let granted = AXIsProcessTrustedWithOptions(options)
-        isTrusted = granted
+        self.isTrusted = granted
     }
 
     /// Opens System Settings directly to Accessibility privacy pane (2026 UX best practice)

@@ -7,7 +7,7 @@ struct PairingCardView: View {
     @State private var copyMessage: String?
 
     var maskedKey: String {
-        String(repeating: "•", count: securityKey.count)
+        String(repeating: "•", count: self.securityKey.count)
     }
 
     var body: some View {
@@ -16,18 +16,18 @@ struct PairingCardView: View {
                 Label("Security Key", systemImage: "key.fill")
                     .font(.headline)
                 Spacer()
-                Button(action: { isVisible.toggle() }) {
-                    Image(systemName: isVisible ? "eye.slash" : "eye")
+                Button(action: { self.isVisible.toggle() }) {
+                    Image(systemName: self.isVisible ? "eye.slash" : "eye")
                 }
                 .buttonStyle(.borderless)
-                .help(isVisible ? "Hide" : "Show")
+                .help(self.isVisible ? "Hide" : "Show")
             }
 
             Group {
-                if isVisible {
-                    TextField("Security Key", text: $securityKey)
+                if self.isVisible {
+                    TextField("Security Key", text: self.$securityKey)
                 } else {
-                    SecureField("Security Key", text: $securityKey)
+                    SecureField("Security Key", text: self.$securityKey)
                 }
             }
             .textFieldStyle(.roundedBorder)
@@ -37,14 +37,14 @@ struct PairingCardView: View {
                 Button("Copy") {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
-                    pasteboard.setString(securityKey, forType: .string)
-                    showCopyMessage("Copied")
+                    pasteboard.setString(self.securityKey, forType: .string)
+                    self.showCopyMessage("Copied")
                 }
                 .buttonStyle(.bordered)
 
                 Button("Regenerate") {
-                    securityKey = String(UUID().uuidString.prefix(16))
-                    showCopyMessage("New key generated")
+                    self.securityKey = String(UUID().uuidString.prefix(16))
+                    self.showCopyMessage("New key generated")
                 }
                 .buttonStyle(.bordered)
 
@@ -60,10 +60,10 @@ struct PairingCardView: View {
     }
 
     private func showCopyMessage(_ text: String) {
-        copyMessage = text
+        self.copyMessage = text
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            if copyMessage == text {
-                copyMessage = nil
+            if self.copyMessage == text {
+                self.copyMessage = nil
             }
         }
     }

@@ -22,13 +22,13 @@ struct MachineDetailView: View {
                         .shadow(radius: 2, y: 1)
 
                     VStack(spacing: 4) {
-                        Text(machine.name)
+                        Text(self.machine.name)
                             .font(.title2)
                             .fontWeight(.semibold)
 
                         HStack(spacing: 6) {
-                            StatusDot(active: machine.isOnline)
-                            Text(machine.isOnline ? "Online" : "Offline")
+                            StatusDot(active: self.machine.isOnline)
+                            Text(self.machine.isOnline ? "Online" : "Offline")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -47,7 +47,7 @@ struct MachineDetailView: View {
                             .font(.headline)
                             .padding(.horizontal)
 
-                        LazyVGrid(columns: columns, spacing: 16) {
+                        LazyVGrid(columns: self.columns, spacing: 16) {
                             ForEach(0 ..< 8) { i in
                                 ProgramIconButton(name: "App \(i + 1)", icon: "app.dashed")
                             }
@@ -69,7 +69,7 @@ struct MachineDetailView: View {
 
                         VStack(spacing: 0) {
                             NavigationLink {
-                                MachineDisplaySettingsView(machine: machine)
+                                MachineDisplaySettingsView(machine: self.machine)
                             } label: {
                                 HStack {
                                     Label("Display Settings", systemImage: "display")
@@ -88,7 +88,7 @@ struct MachineDetailView: View {
                                 .padding(.leading)
 
                             NavigationLink {
-                                MachineInputSettingsView(machine: machine)
+                                MachineInputSettingsView(machine: self.machine)
                             } label: {
                                 HStack {
                                     Label("Input Configuration", systemImage: "keyboard")
@@ -115,25 +115,25 @@ struct MachineDetailView: View {
             .padding(.vertical)
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .navigationTitle(machine.name)
+        .navigationTitle(self.machine.name)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: {
-                    isRefreshing = true
+                    self.isRefreshing = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                        isRefreshing = false
+                        self.isRefreshing = false
                     }
                 }) {
                     Label("Refresh", systemImage: "arrow.clockwise")
-                        .rotationEffect(.degrees(isRefreshing ? 360 : 0))
+                        .rotationEffect(.degrees(self.isRefreshing ? 360 : 0))
                 }
-                .disabled(isRefreshing)
+                .disabled(self.isRefreshing)
                 .help("Refresh Status")
             }
 
             ToolbarItem(placement: .status) {
                 Button(action: {
-                    networkManager.reconnect(machineId: machine.id)
+                    self.networkManager.reconnect(machineId: self.machine.id)
                 }) {
                     Label("Restart Connection", systemImage: "restart")
                 }
@@ -142,7 +142,7 @@ struct MachineDetailView: View {
 
             ToolbarItem(placement: .destructiveAction) {
                 Button(action: {
-                    networkManager.disconnect(machineId: machine.id)
+                    self.networkManager.disconnect(machineId: self.machine.id)
                 }) {
                     Label("Disconnect", systemImage: "xmark.circle")
                 }
@@ -166,34 +166,34 @@ private struct MachineDisplaySettingsView: View {
             Section("Display Info") {
                 LabeledContent("Name", value: "Built-in Retina Display")
                 LabeledContent(
-                    "Connection", value: machine.isOnline ? "Thunderbolt / IP" : "Offline")
+                    "Connection", value: self.machine.isOnline ? "Thunderbolt / IP" : "Offline")
             }
 
             Section("Settings") {
-                Picker("Resolution", selection: $resolution) {
+                Picker("Resolution", selection: self.$resolution) {
                     Text("1920 x 1080").tag("1920 x 1080")
                     Text("2560 x 1440").tag("2560 x 1440")
                     Text("3840 x 2160").tag("3840 x 2160")
                 }
 
-                Picker("Refresh Rate", selection: $refreshRate) {
+                Picker("Refresh Rate", selection: self.$refreshRate) {
                     Text("60 Hz").tag("60 Hz")
                     Text("120 Hz (ProMotion)").tag("120 Hz")
                 }
 
-                Toggle("Mirror Main Display", isOn: $isMirroring)
+                Toggle("Mirror Main Display", isOn: self.$isMirroring)
             }
 
             Section("Scaling") {
                 VStack(alignment: .leading) {
-                    Slider(value: $scale, in: 0.5 ... 2.0, step: 0.25) {
+                    Slider(value: self.$scale, in: 0.5 ... 2.0, step: 0.25) {
                         Text("Display Scale")
                     } minimumValueLabel: {
                         Image(systemName: "textformat.size.smaller")
                     } maximumValueLabel: {
                         Image(systemName: "textformat.size.larger")
                     }
-                    Text("Current Scale: \(Int(scale * 100))%")
+                    Text("Current Scale: \(Int(self.scale * 100))%")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -214,17 +214,17 @@ private struct MachineInputSettingsView: View {
     var body: some View {
         Form {
             Section("Input Devices") {
-                Toggle(isOn: $keyboardEnabled) {
+                Toggle(isOn: self.$keyboardEnabled) {
                     Label("Share Keyboard", systemImage: "keyboard")
                 }
-                Toggle(isOn: $mouseEnabled) {
+                Toggle(isOn: self.$mouseEnabled) {
                     Label("Share Mouse / Trackpad", systemImage: "mouse")
                 }
             }
 
             Section("Features") {
-                Toggle("Clipboard Synchronization", isOn: $clipboardSharing)
-                Toggle("Global Shortcuts", isOn: $shortcutsEnabled)
+                Toggle("Clipboard Synchronization", isOn: self.$clipboardSharing)
+                Toggle("Global Shortcuts", isOn: self.$shortcutsEnabled)
             }
 
             Section("Shortcut Mapping") {
@@ -256,12 +256,12 @@ struct ProgramIconButton: View {
             // Mock launch
         }) {
             VStack(spacing: 8) {
-                Image(systemName: icon)
+                Image(systemName: self.icon)
                     .font(.system(size: 32))
                     .foregroundStyle(.blue)
                     .frame(width: 50, height: 50)
 
-                Text(name)
+                Text(self.name)
                     .font(.caption)
                     .foregroundStyle(.primary)
                     .lineLimit(1)

@@ -24,8 +24,8 @@ public class MWBCrypto: @unchecked Sendable {
               // C# uses Common.GetBytesU (UTF-16LE) for the salt.
               let saltData = saltString.data(using: .utf16LittleEndian)
         else {
-            sessionKey = nil
-            magicNumber = 0
+            self.sessionKey = nil
+            self.magicNumber = 0
             return
         }
 
@@ -43,17 +43,17 @@ public class MWBCrypto: @unchecked Sendable {
                         saltBytes.baseAddress?.assumingMemoryBound(to: UInt8.self),
                         saltData.count,
                         CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA512),
-                        iterations,
+                        self.iterations,
                         derivedKeyBytes.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                        keyLength)
+                        self.keyLength)
                 }
             }
         }
 
         if result == kCCSuccess {
-            sessionKey = derivedKeyData
-            magicNumber = calculateMagicNumber(from: trimmedKey)
-            print("Keys derived successfully. Magic: \(magicNumber)")
+            self.sessionKey = derivedKeyData
+            self.magicNumber = self.calculateMagicNumber(from: trimmedKey)
+            print("Keys derived successfully. Magic: \(self.magicNumber)")
         } else {
             print("Failed to derive key: \(result)")
         }
@@ -108,7 +108,7 @@ public class MWBCrypto: @unchecked Sendable {
     // Using CommonCrypto for raw AES-CBC if CryptoKit.AES.GCM is not compatible (MWB uses CBC)
     public func encrypt(_ data: Data) -> Data? {
         guard let key = sessionKey else { return nil }
-        let iv = generateIV()
+        let iv = self.generateIV()
 
         var padded = data
         let remainder = padded.count % kCCBlockSizeAES128
@@ -146,7 +146,7 @@ public class MWBCrypto: @unchecked Sendable {
 
     public func decrypt(_ data: Data) -> Data? {
         guard let key = sessionKey else { return nil }
-        let iv = generateIV()
+        let iv = self.generateIV()
 
         guard data.count % kCCBlockSizeAES128 == 0 else { return nil }
 
@@ -180,7 +180,7 @@ public class MWBCrypto: @unchecked Sendable {
 
     public func encryptZeroPadded(_ data: Data) -> Data? {
         guard let key = sessionKey else { return nil }
-        let iv = generateIV()
+        let iv = self.generateIV()
 
         var padded = data
         let remainder = padded.count % kCCBlockSizeAES128
@@ -218,7 +218,7 @@ public class MWBCrypto: @unchecked Sendable {
 
     public func decryptZeroPadded(_ data: Data) -> Data? {
         guard let key = sessionKey else { return nil }
-        let iv = generateIV()
+        let iv = self.generateIV()
 
         let bufferSize = data.count + kCCBlockSizeAES128
         var buffer = Data(count: bufferSize)
@@ -273,8 +273,8 @@ public struct MWBStreamCipher {
             return nil
         }
 
-        cryptor = cryptorOut
-        isEncrypting = operation == CCOperation(kCCEncrypt)
+        self.cryptor = cryptorOut
+        self.isEncrypting = operation == CCOperation(kCCEncrypt)
     }
 
     public mutating func update(_ data: Data) -> Data? {
@@ -283,7 +283,7 @@ public struct MWBStreamCipher {
         let blockSize = kCCBlockSizeAES128
         var input = data
         let remainder = input.count % blockSize
-        if isEncrypting {
+        if self.isEncrypting {
             if remainder != 0 {
                 input.append(Data(count: blockSize - remainder))
             }
@@ -338,13 +338,13 @@ public struct MWBStreamCipher {
 extension MWBCrypto {
     public func makeEncryptor() -> MWBStreamCipher? {
         guard let key = sessionKey else { return nil }
-        let iv = generateIV()
+        let iv = self.generateIV()
         return MWBStreamCipher(operation: CCOperation(kCCEncrypt), key: key, iv: iv)
     }
 
     public func makeDecryptor() -> MWBStreamCipher? {
         guard let key = sessionKey else { return nil }
-        let iv = generateIV()
+        let iv = self.generateIV()
         return MWBStreamCipher(operation: CCOperation(kCCDecrypt), key: key, iv: iv)
     }
 }

@@ -21,29 +21,29 @@ public class MBInputManager: Observation.Observable {
     private let _lastLocalInteraction = OSAllocatedUnfairLock<TimeInterval>(initialState: 0)
 
     public var currentRemoteID: UUID? {
-        _remoteID.withLock { $0 }
+        self._remoteID.withLock { $0 }
     }
 
     public init() {
-        _isAppActive.withLock { $0 = NSRunningApplication.current.isActive }
-        setupAppStateObservers()
+        self._isAppActive.withLock { $0 = NSRunningApplication.current.isActive }
+        self.setupAppStateObservers()
     }
 
     public func toggleInterception(_ enable: Bool) {
         if enable {
-            startTap()
+            self.startTap()
         } else {
-            stopTap()
+            self.stopTap()
         }
     }
 
     public func setRemoteTarget(_ id: UUID?) {
-        _remoteID.withLock { $0 = id }
+        self._remoteID.withLock { $0 = id }
         MBLogger.input.info("Set remote target to: \(String(describing: id))")
     }
 
     private func startTap() {
-        guard eventTap == nil else { return }
+        guard self.eventTap == nil else { return }
 
         var mask: UInt64 = 0
         mask |= (1 << CGEventType.mouseMoved.rawValue)
@@ -74,16 +74,16 @@ public class MBInputManager: Observation.Observable {
             return
         }
 
-        eventTap = tap
+        self.eventTap = tap
 
         // Create a run loop source and add it to the current run loop
         // Use nil for kCFAllocatorDefault
         let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
-        runLoopSource = source
+        self.runLoopSource = source
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
 
-        isIntercepting = true
+        self.isIntercepting = true
         MBLogger.input.info("Input interception started.")
     }
 
@@ -93,17 +93,17 @@ public class MBInputManager: Observation.Observable {
         CGEvent.tapEnable(tap: tap, enable: false)
         CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
 
-        eventTap = nil
-        runLoopSource = nil
+        self.eventTap = nil
+        self.runLoopSource = nil
 
-        isIntercepting = false
+        self.isIntercepting = false
         MBLogger.input.info("Input interception stopped.")
     }
 
     nonisolated func handle(proxy _: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<
         CGEvent
     >? {
-        if shouldAllowLocalInteraction(type: type) {
+        if self.shouldAllowLocalInteraction(type: type) {
             return Unmanaged.passUnretained(event)
         }
 
@@ -111,7 +111,7 @@ public class MBInputManager: Observation.Observable {
         let snapshot = EventSnapshot(from: event, type: type)
 
         // Core Logic
-        guard _remoteID.withLock({ $0 }) != nil else {
+        guard self._remoteID.withLock({ $0 }) != nil else {
             if type == .mouseMoved || type == .leftMouseDragged || type == .rightMouseDragged {
                 Task { @MainActor in
                     MBNetworkManager.shared.handleLocalMouseEvent(snapshot: snapshot)
@@ -122,7 +122,7 @@ public class MBInputManager: Observation.Observable {
         }
 
         // Remote mode: intercept and send
-        guard convertToRemoteEvent(snapshot: snapshot) != nil else {
+        guard self.convertToRemoteEvent(snapshot: snapshot) != nil else {
             // If we can't convert it (e.g. some system event), maybe let it pass or just consume?
             // Safest is to consume if we are "in remote mode" to avoid local ghost clicks.
             return nil
@@ -136,16 +136,16 @@ public class MBInputManager: Observation.Observable {
     }
 
     private nonisolated func shouldAllowLocalInteraction(type: CGEventType) -> Bool {
-        if _isAppActive.withLock({ $0 }) {
+        if self._isAppActive.withLock({ $0 }) {
             return true
         }
 
         switch type {
         case .leftMouseDown, .rightMouseDown, .leftMouseUp, .rightMouseUp:
-            _lastLocalInteraction.withLock { $0 = CFAbsoluteTimeGetCurrent() }
+            self._lastLocalInteraction.withLock { $0 = CFAbsoluteTimeGetCurrent() }
             return true
         case .keyDown, .keyUp, .flagsChanged:
-            let last = _lastLocalInteraction.withLock { $0 }
+            let last = self._lastLocalInteraction.withLock { $0 }
             return CFAbsoluteTimeGetCurrent() - last < 2.0
         default:
             return false
@@ -174,7 +174,7 @@ public class MBInputManager: Observation.Observable {
         -> RemoteEvent?
     {
         let snapshot = EventSnapshot(from: event, type: type)
-        return convertToRemoteEvent(snapshot: snapshot)
+        return self.convertToRemoteEvent(snapshot: snapshot)
     }
 
     nonisolated func convertToRemoteEvent(snapshot: EventSnapshot) -> RemoteEvent? {

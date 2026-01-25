@@ -17,7 +17,7 @@ public final class MBPasteboardMonitor {
 
     public init(pasteboard: NSPasteboard = .general) {
         self.pasteboard = pasteboard
-        lastChangeCount = pasteboard.changeCount
+        self.lastChangeCount = pasteboard.changeCount
     }
 
     public func startPolling(interval: UInt64 = 500000000) {
@@ -30,26 +30,26 @@ public final class MBPasteboardMonitor {
     }
 
     public func ignoreNextChange() {
-        ignoredChangeCount = pasteboard.changeCount + 1
+        self.ignoredChangeCount = self.pasteboard.changeCount + 1
     }
 
     private func checkForChanges() {
-        let count = pasteboard.changeCount
-        guard count != lastChangeCount else { return }
-        lastChangeCount = count
+        let count = self.pasteboard.changeCount
+        guard count != self.lastChangeCount else { return }
+        self.lastChangeCount = count
 
         if let ignored = ignoredChangeCount, ignored == count {
-            ignoredChangeCount = nil
+            self.ignoredChangeCount = nil
             return
         }
 
         if let items = pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL], !items.isEmpty {
-            onChange?(.files(items))
+            self.onChange?(.files(items))
             return
         }
 
         if let string = pasteboard.string(forType: .string), !string.isEmpty {
-            onChange?(.text(string))
+            self.onChange?(.text(string))
             return
         }
 
@@ -58,7 +58,7 @@ public final class MBPasteboardMonitor {
            let bitmap = NSBitmapImageRep(data: tiff),
            let png = bitmap.representation(using: .png, properties: [:])
         {
-            onChange?(.image(png))
+            self.onChange?(.image(png))
         }
     }
 }

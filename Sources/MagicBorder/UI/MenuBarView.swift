@@ -13,12 +13,12 @@ struct MenuBarView: View {
         @Bindable var networkManager = networkManager
 
         Button("Open MagicBorder") {
-            openWindow(id: "main")
+            self.openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)
         }
 
         Button("Machine Arrangement...") {
-            openWindow(id: "main")
+            self.openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)
         }
 
@@ -38,8 +38,8 @@ struct MenuBarView: View {
             }
         }
 
-        Toggle("Capture Input", isOn: $captureInput)
-            .disabled(!accessibilityService.isTrusted)
+        Toggle("Capture Input", isOn: self.$captureInput)
+            .disabled(!self.accessibilityService.isTrusted)
 
         Toggle("Share Clipboard", isOn: $networkManager.compatibilitySettings.shareClipboard)
         Toggle("Transfer Files", isOn: $networkManager.compatibilitySettings.transferFiles)

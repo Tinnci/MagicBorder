@@ -16,11 +16,11 @@ struct PairingFlowView: View {
     @State private var showDebugLog = false
 
     private var trimmedKey: String {
-        securityKey.replacingOccurrences(of: " ", with: "")
+        self.securityKey.replacingOccurrences(of: " ", with: "")
     }
 
     private var isKeyValid: Bool {
-        trimmedKey.count >= 16
+        self.trimmedKey.count >= 16
     }
 
     var body: some View {
@@ -29,10 +29,10 @@ struct PairingFlowView: View {
                 Label("Windows Pairing", systemImage: "windowslogo")
                     .font(.headline)
                 Spacer()
-                if isConnecting {
+                if self.isConnecting {
                     ConnectionStatusBadge(title: "连接中")
                 }
-                Button(action: { showGuide = true }) {
+                Button(action: { self.showGuide = true }) {
                     Image(systemName: "questionmark.circle")
                         .foregroundStyle(.secondary)
                 }
@@ -40,7 +40,7 @@ struct PairingFlowView: View {
                 .help("Pairing Guide")
             }
 
-            DisclosureGroup("Pairing checklist", isExpanded: $showChecklist) {
+            DisclosureGroup("Pairing checklist", isExpanded: self.$showChecklist) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("1. Install Mouse Without Borders on Windows")
                     Text("2. Use the same Security Key on both devices")
@@ -52,29 +52,29 @@ struct PairingFlowView: View {
                 .padding(.top, 4)
             }
 
-            PairingCardView(securityKey: $securityKey)
+            PairingCardView(securityKey: self.$securityKey)
 
             Label(
-                isKeyValid ? "Key Ready" : "At least 16 characters",
-                systemImage: isKeyValid ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                self.isKeyValid ? "Key Ready" : "At least 16 characters",
+                systemImage: self.isKeyValid ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                 .font(.caption)
-                .foregroundStyle(isKeyValid ? .green : .orange)
+                .foregroundStyle(self.isKeyValid ? .green : .orange)
 
             if let message = statusMessage {
-                Label(message, systemImage: statusStyle.iconName)
+                Label(message, systemImage: self.statusStyle.iconName)
                     .font(.caption)
-                    .foregroundStyle(statusStyle.color)
+                    .foregroundStyle(self.statusStyle.color)
             }
 
-            DisclosureGroup("Debug log", isExpanded: $showDebugLog) {
-                if networkManager.pairingDebugLog.isEmpty {
+            DisclosureGroup("Debug log", isExpanded: self.$showDebugLog) {
+                if self.networkManager.pairingDebugLog.isEmpty {
                     Text("No logs yet")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 6) {
-                            ForEach(Array(networkManager.pairingDebugLog.suffix(12)).reversed(), id: \.self) { line in
+                            ForEach(Array(self.networkManager.pairingDebugLog.suffix(12)).reversed(), id: \.self) { line in
                                 Text(line)
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
@@ -89,7 +89,7 @@ struct PairingFlowView: View {
                         Button("Copy Log") {
                             let pasteboard = NSPasteboard.general
                             pasteboard.clearContents()
-                            pasteboard.setString(networkManager.pairingDebugLog.joined(separator: "\n"), forType: .string)
+                            pasteboard.setString(self.networkManager.pairingDebugLog.joined(separator: "\n"), forType: .string)
                         }
                         .buttonStyle(.bordered)
                         Spacer()
@@ -100,62 +100,62 @@ struct PairingFlowView: View {
             HStack {
                 Text("Windows IP")
                 Spacer()
-                TextField("192.168.1.5", text: $ipAddress)
+                TextField("192.168.1.5", text: self.$ipAddress)
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
                     .frame(width: 200)
             }
 
             Button("Connect") {
-                startConnecting()
+                self.startConnecting()
             }
-            .disabled(ipAddress.isEmpty || !isKeyValid)
+            .disabled(self.ipAddress.isEmpty || !self.isKeyValid)
         }
-        .sheet(isPresented: $showGuide) {
-            WindowsPairingGuideView(securityKey: securityKey, isKeyValid: isKeyValid)
+        .sheet(isPresented: self.$showGuide) {
+            WindowsPairingGuideView(securityKey: self.securityKey, isKeyValid: self.isKeyValid)
         }
-        .onChange(of: networkManager.connectedMachines) { _, newValue in
+        .onChange(of: self.networkManager.connectedMachines) { _, newValue in
             if newValue.isEmpty {
-                showStatus(text: "连接已断开", style: .warning)
+                self.showStatus(text: "连接已断开", style: .warning)
             } else {
-                showStatus(text: "连接成功", style: .success)
+                self.showStatus(text: "连接成功", style: .success)
             }
         }
         .alert(
             "Pairing Error",
             isPresented: Binding(
-                get: { networkManager.pairingError != nil },
-                set: { if !$0 { networkManager.pairingError = nil } }))
+                get: { self.networkManager.pairingError != nil },
+                set: { if !$0 { self.networkManager.pairingError = nil } }))
         {
             Button("Copy Details") {
                 let pasteboard = NSPasteboard.general
                 pasteboard.clearContents()
-                pasteboard.setString(networkManager.pairingError ?? "", forType: .string)
+                pasteboard.setString(self.networkManager.pairingError ?? "", forType: .string)
             }
             Button("OK", role: .cancel) {}
         } message: {
-            Text(networkManager.pairingError ?? "")
+            Text(self.networkManager.pairingError ?? "")
         }
     }
 
     private func startConnecting() {
-        guard !ipAddress.isEmpty, isKeyValid else { return }
-        networkManager.clearPairingDiagnostics()
-        networkManager.appendPairingLog("User initiated connect")
-        isConnecting = true
-        networkManager.connectToHost(ip: ipAddress)
-        showStatus(text: "已发送连接请求", style: .neutral)
+        guard !self.ipAddress.isEmpty, self.isKeyValid else { return }
+        self.networkManager.clearPairingDiagnostics()
+        self.networkManager.appendPairingLog("User initiated connect")
+        self.isConnecting = true
+        self.networkManager.connectToHost(ip: self.ipAddress)
+        self.showStatus(text: "已发送连接请求", style: .neutral)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            isConnecting = false
+            self.isConnecting = false
         }
     }
 
     private func showStatus(text: String, style: StatusStyle) {
-        statusMessage = text
-        statusStyle = style
+        self.statusMessage = text
+        self.statusStyle = style
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-            if statusMessage == text {
-                statusMessage = nil
+            if self.statusMessage == text {
+                self.statusMessage = nil
             }
         }
     }
@@ -187,14 +187,14 @@ private struct WindowsPairingGuideView: View {
                             .foregroundStyle(.secondary)
 
                         HStack {
-                            Text(securityKey)
+                            Text(self.securityKey)
                                 .font(.system(.body, design: .monospaced))
                                 .padding(6)
                                 .background(Color.primary.opacity(0.05))
                                 .cornerRadius(4)
                                 .textSelection(.enabled)
 
-                            if isKeyValid {
+                            if self.isKeyValid {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(.green)
                                     .font(.caption)
@@ -224,7 +224,7 @@ private struct WindowsPairingGuideView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        dismiss()
+                        self.dismiss()
                     }
                 }
             }
@@ -240,7 +240,7 @@ private struct ConnectionStatusBadge: View {
         HStack(spacing: 6) {
             ProgressView()
                 .scaleEffect(0.6)
-            Text(title)
+            Text(self.title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

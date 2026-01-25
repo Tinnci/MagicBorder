@@ -42,16 +42,16 @@ struct DashboardView: View {
     @State private var machines: [Machine] = []
 
     var filteredMachines: [Machine] {
-        if searchText.isEmpty {
-            machines
+        if self.searchText.isEmpty {
+            self.machines
         } else {
-            machines.filter { $0.name.localizedStandardContains(searchText) }
+            self.machines.filter { $0.name.localizedStandardContains(self.searchText) }
         }
     }
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
+            List(selection: self.$selection) {
                 Section {
                     ForEach(SidebarItem.allCases) { item in
                         NavigationLink(value: item) {
@@ -61,11 +61,11 @@ struct DashboardView: View {
                 }
 
                 Section("Machines") {
-                    if filteredMachines.isEmpty {
-                        ContentUnavailableView.search(text: searchText)
+                    if self.filteredMachines.isEmpty {
+                        ContentUnavailableView.search(text: self.searchText)
                             .listRowSeparator(.hidden)
                     } else {
-                        ForEach(filteredMachines) { machine in
+                        ForEach(self.filteredMachines) { machine in
                             NavigationLink(destination: MachineDetailView(machine: machine)) {
                                 HStack {
                                     Image(systemName: "desktopcomputer")
@@ -80,10 +80,10 @@ struct DashboardView: View {
             }
             .listStyle(.sidebar)
             .navigationTitle("MagicBorder")
-            .searchable(text: $searchText, placement: .sidebar, prompt: "Search machines")
+            .searchable(text: self.$searchText, placement: .sidebar, prompt: "Search machines")
             .toolbar {
                 ToolbarItem {
-                    Button(action: { selection = .machines }) {
+                    Button(action: { self.selection = .machines }) {
                         Image(systemName: "plus")
                     }
                     .help("Add Machine")
@@ -93,44 +93,44 @@ struct DashboardView: View {
             if let selection {
                 switch selection {
                 case .arrangement:
-                    ArrangementDetailView(machines: $machines)
+                    ArrangementDetailView(machines: self.$machines)
                 case .machines:
-                    DiscoveredMachinesListView(networkManager: networkManager)
+                    DiscoveredMachinesListView(networkManager: self.networkManager)
                 }
             } else {
                 Text("Select an item from the sidebar")
                     .foregroundStyle(.secondary)
             }
         }
-        .overlay(alignment: effectiveOverlayPreferences.position.alignment) {
-            if dragDropOverlayEnabled, let state = networkManager.dragDropState {
+        .overlay(alignment: self.effectiveOverlayPreferences.position.alignment) {
+            if self.dragDropOverlayEnabled, let state = networkManager.dragDropState {
                 DragDropOverlayView(
                     state: state,
-                    sourceName: networkManager.dragDropSourceName,
-                    fileSummary: networkManager.dragDropFileSummary,
-                    progress: networkManager.dragDropProgress,
-                    showDevice: effectiveOverlayPreferences.showDevice,
-                    showProgress: effectiveOverlayPreferences.showProgress)
-                    .scaleEffect(effectiveOverlayPreferences.scale)
-                    .padding(effectiveOverlayPreferences.position.padding)
+                    sourceName: self.networkManager.dragDropSourceName,
+                    fileSummary: self.networkManager.dragDropFileSummary,
+                    progress: self.networkManager.dragDropProgress,
+                    showDevice: self.effectiveOverlayPreferences.showDevice,
+                    showProgress: self.effectiveOverlayPreferences.showProgress)
+                    .scaleEffect(self.effectiveOverlayPreferences.scale)
+                    .padding(self.effectiveOverlayPreferences.position.padding)
             }
         }
         .frame(minWidth: 800, minHeight: 600)
         .onAppear {
-            networkManager.applyCompatibilitySettings()
+            self.networkManager.applyCompatibilitySettings()
 
             // Ensure local machine has stable ID on start
-            machines = [
+            self.machines = [
                 Machine(
-                    id: localMachineId, name: Host.current().localizedName ?? "Local Mac",
+                    id: self.localMachineId, name: Host.current().localizedName ?? "Local Mac",
                     isOnline: true),
             ]
         }
-        .onChange(of: networkManager.compatibilitySettings.securityKey) { _, _ in
-            networkManager.applyCompatibilitySettings()
+        .onChange(of: self.networkManager.compatibilitySettings.securityKey) { _, _ in
+            self.networkManager.applyCompatibilitySettings()
         }
-        .onChange(of: networkManager.connectedMachines, initial: true) { _, connected in
-            updateMachines(from: connected)
+        .onChange(of: self.networkManager.connectedMachines, initial: true) { _, connected in
+            self.updateMachines(from: connected)
         }
     }
 
@@ -145,21 +145,21 @@ struct DashboardView: View {
             newMachines.append(Machine(id: peer.id, name: peer.name, isOnline: true))
         }
 
-        machines = newMachines
+        self.machines = newMachines
     }
 
     private var defaultOverlayPreferences: MBOverlayPreferences {
         let position = MBOverlayPosition(rawValue: dragDropOverlayPosition) ?? .top
         return MBOverlayPreferences(
-            showDevice: dragDropOverlayShowDevice,
-            showProgress: dragDropOverlayShowProgress,
-            scale: dragDropOverlayScale,
+            showDevice: self.dragDropOverlayShowDevice,
+            showProgress: self.dragDropOverlayShowProgress,
+            scale: self.dragDropOverlayScale,
             position: position)
     }
 
     private var effectiveOverlayPreferences: MBOverlayPreferences {
-        let deviceName = networkManager.dragDropSourceName ?? networkManager.localDisplayName
-        return overlayPreferences.preferences(for: deviceName, default: defaultOverlayPreferences)
+        let deviceName = self.networkManager.dragDropSourceName ?? self.networkManager.localDisplayName
+        return self.overlayPreferences.preferences(for: deviceName, default: self.defaultOverlayPreferences)
     }
 }
 
@@ -196,12 +196,12 @@ private struct DragDropOverlayView: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack(spacing: 12) {
-                Image(systemName: state == .dropping ? "tray.and.arrow.down" : "hand.draw")
+                Image(systemName: self.state == .dropping ? "tray.and.arrow.down" : "hand.draw")
                     .font(.title3)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(state == .dropping ? "松开以投递" : "正在拖拽文件")
+                    Text(self.state == .dropping ? "松开以投递" : "正在拖拽文件")
                         .font(.headline)
-                    if showDevice, let sourceName, !sourceName.isEmpty {
+                    if self.showDevice, let sourceName, !sourceName.isEmpty {
                         Text(sourceName)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -216,7 +216,7 @@ private struct DragDropOverlayView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if showProgress {
+            if self.showProgress {
                 if let progress {
                     ProgressView(value: progress)
                         .progressViewStyle(.linear)
@@ -245,14 +245,14 @@ struct ArrangementDetailView: View {
 
     private var matrixTwoRowBinding: Binding<Bool> {
         Binding(
-            get: { !networkManager.compatibilitySettings.matrixOneRow },
-            set: { networkManager.compatibilitySettings.matrixOneRow = !$0 })
+            get: { !self.networkManager.compatibilitySettings.matrixOneRow },
+            set: { self.networkManager.compatibilitySettings.matrixOneRow = !$0 })
     }
 
     private var matrixSwapBinding: Binding<Bool> {
         Binding(
-            get: { networkManager.compatibilitySettings.matrixCircle },
-            set: { networkManager.compatibilitySettings.matrixCircle = $0 })
+            get: { self.networkManager.compatibilitySettings.matrixCircle },
+            set: { self.networkManager.compatibilitySettings.matrixCircle = $0 })
     }
 
     var body: some View {
@@ -263,14 +263,14 @@ struct ArrangementDetailView: View {
             ZStack {
                 ScrollView {
                     VStack(spacing: 24) {
-                        if !accessibilityService.isTrusted {
-                            AccessibilityWarningBanner(service: accessibilityService)
+                        if !self.accessibilityService.isTrusted {
+                            AccessibilityWarningBanner(service: self.accessibilityService)
                                 .padding(.top)
                         }
 
                         MachineMatrixView(
-                            machines: $machines,
-                            columns: matrixTwoRowBinding.wrappedValue ? 2 : max(1, machines.count))
+                            machines: self.$machines,
+                            columns: self.matrixTwoRowBinding.wrappedValue ? 2 : max(1, self.machines.count))
                             .padding(.horizontal)
 
                         Spacer()
@@ -280,16 +280,16 @@ struct ArrangementDetailView: View {
             }
         }
         .navigationTitle("Arrangement")
-        .inspector(isPresented: $isInspectorPresented) {
+        .inspector(isPresented: self.$isInspectorPresented) {
             ArrangementInspector(
                 networkManager: networkManager,
-                machines: machines,
-                matrixTwoRowBinding: matrixTwoRowBinding,
-                matrixSwapBinding: matrixSwapBinding)
+                machines: self.machines,
+                matrixTwoRowBinding: self.matrixTwoRowBinding,
+                matrixSwapBinding: self.matrixSwapBinding)
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button(action: { isInspectorPresented.toggle() }) {
+                Button(action: { self.isInspectorPresented.toggle() }) {
                     Label("Inspector", systemImage: "sidebar.right")
                 }
             }
@@ -309,27 +309,27 @@ struct ArrangementDetailView: View {
                 .help("Send Files via MWB")
             }
         }
-        .onChange(of: machines) { _, newValue in
+        .onChange(of: self.machines) { _, newValue in
             networkManager.updateLocalMatrix(names: newValue.map(\.name))
             networkManager.sendMachineMatrix(
                 names: newValue.map(\.name),
-                twoRow: matrixTwoRowBinding.wrappedValue,
-                swap: matrixSwapBinding.wrappedValue)
+                twoRow: self.matrixTwoRowBinding.wrappedValue,
+                swap: self.matrixSwapBinding.wrappedValue)
         }
         .onChange(of: networkManager.compatibilitySettings.matrixOneRow) { _, _ in
-            syncMatrix()
+            self.syncMatrix()
         }
         .onChange(of: networkManager.compatibilitySettings.matrixCircle) { _, _ in
-            syncMatrix()
+            self.syncMatrix()
         }
     }
 
     private func syncMatrix() {
-        networkManager.updateLocalMatrix(names: machines.map(\.name))
-        networkManager.sendMachineMatrix(
-            names: machines.map(\.name),
-            twoRow: matrixTwoRowBinding.wrappedValue,
-            swap: matrixSwapBinding.wrappedValue)
+        self.networkManager.updateLocalMatrix(names: self.machines.map(\.name))
+        self.networkManager.sendMachineMatrix(
+            names: self.machines.map(\.name),
+            twoRow: self.matrixTwoRowBinding.wrappedValue,
+            swap: self.matrixSwapBinding.wrappedValue)
     }
 }
 
@@ -356,7 +356,7 @@ struct AccessibilityWarningBanner: View {
                 Spacer()
 
                 Button("Open System Settings") {
-                    service.openSystemSettings()
+                    self.service.openSystemSettings()
                 }
                 .controlSize(.small)
             }
@@ -375,31 +375,31 @@ struct ArrangementInspector: View {
     var body: some View {
         Form {
             Section("Status") {
-                LabeledContent("Active Machine", value: networkManager.activeMachineName)
-                LabeledContent("State", value: networkManager.switchState.rawValue.capitalized)
+                LabeledContent("Active Machine", value: self.networkManager.activeMachineName)
+                LabeledContent("State", value: self.networkManager.switchState.rawValue.capitalized)
             }
 
             Section("Layout Options") {
-                Toggle("Two Row Matrix", isOn: matrixTwoRowBinding)
-                Toggle("Swap Order", isOn: matrixSwapBinding)
+                Toggle("Two Row Matrix", isOn: self.matrixTwoRowBinding)
+                Toggle("Swap Order", isOn: self.matrixSwapBinding)
             }
 
             Section("Pairing") {
-                PairingFlowView(securityKey: $networkManager.compatibilitySettings.securityKey)
+                PairingFlowView(securityKey: self.$networkManager.compatibilitySettings.securityKey)
             }
 
             Section("Connected Devices") {
-                if networkManager.connectedMachines.isEmpty {
+                if self.networkManager.connectedMachines.isEmpty {
                     Text("No devices connected")
                         .foregroundStyle(.secondary)
                         .font(.caption)
                 } else {
-                    ForEach(networkManager.connectedMachines) { machine in
+                    ForEach(self.networkManager.connectedMachines) { machine in
                         HStack {
                             Text(machine.name)
                             Spacer()
                             Button("Switch") {
-                                networkManager.requestSwitch(to: machine.id)
+                                self.networkManager.requestSwitch(to: machine.id)
                             }
                             .controlSize(.mini)
                             .buttonStyle(.borderless)
@@ -416,7 +416,7 @@ struct DiscoveredMachinesListView: View {
     var networkManager: MBNetworkManager
 
     var body: some View {
-        List(networkManager.discoveredPeers) { peer in
+        List(self.networkManager.discoveredPeers) { peer in
             HStack {
                 Image(systemName: peer.type == .scanned ? "pc" : "laptopcomputer")
                     .font(.title2)
@@ -433,7 +433,7 @@ struct DiscoveredMachinesListView: View {
                 Spacer()
 
                 Button("Connect") {
-                    networkManager.connect(to: peer.endpoint)
+                    self.networkManager.connect(to: peer.endpoint)
                 }
                 .buttonStyle(.borderless)
                 .controlSize(.small)
@@ -442,7 +442,7 @@ struct DiscoveredMachinesListView: View {
         }
         .navigationTitle("Discovered Machines")
         .overlay {
-            if networkManager.discoveredPeers.isEmpty {
+            if self.networkManager.discoveredPeers.isEmpty {
                 ContentUnavailableView(
                     "Scanning for machines...",
                     systemImage: "antenna.radiowaves.left.and.right")

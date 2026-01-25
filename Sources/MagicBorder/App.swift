@@ -30,21 +30,21 @@ struct MagicBorderApp: App {
     var body: some Scene {
         WindowGroup(id: "main") {
             DashboardView()
-                .environment(accessibilityService)
-                .environment(inputManager)
-                .environment(networkManager)
-                .environment(overlayPreferences)
+                .environment(self.accessibilityService)
+                .environment(self.inputManager)
+                .environment(self.networkManager)
+                .environment(self.overlayPreferences)
                 .onAppear {
                     NSApp.setActivationPolicy(.regular)
                     NSApp.activate(ignoringOtherApps: true)
-                    accessibilityService.startPolling()
-                    syncInputCapture()
+                    self.accessibilityService.startPolling()
+                    self.syncInputCapture()
                 }
-                .onChange(of: accessibilityService.isTrusted) { _, _ in
-                    syncInputCapture()
+                .onChange(of: self.accessibilityService.isTrusted) { _, _ in
+                    self.syncInputCapture()
                 }
-                .onChange(of: captureInput) { _, _ in
-                    syncInputCapture()
+                .onChange(of: self.captureInput) { _, _ in
+                    self.syncInputCapture()
                 }
         }
         .commands {
@@ -53,21 +53,21 @@ struct MagicBorderApp: App {
 
         Settings {
             SettingsView()
-                .environment(accessibilityService)
-                .environment(networkManager)
-                .environment(overlayPreferences)
+                .environment(self.accessibilityService)
+                .environment(self.networkManager)
+                .environment(self.overlayPreferences)
         }
 
         MenuBarExtra("MagicBorder", systemImage: "rectangle.and.cursor.arrow") {
             MenuBarView()
-                .environment(accessibilityService)
-                .environment(networkManager)
-                .environment(overlayPreferences)
+                .environment(self.accessibilityService)
+                .environment(self.networkManager)
+                .environment(self.overlayPreferences)
         }
     }
 
     private func syncInputCapture() {
-        let shouldCapture = captureInput && accessibilityService.isTrusted
-        inputManager.toggleInterception(shouldCapture)
+        let shouldCapture = self.captureInput && self.accessibilityService.isTrusted
+        self.inputManager.toggleInterception(shouldCapture)
     }
 }

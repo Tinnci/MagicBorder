@@ -35,40 +35,40 @@ public final class MBOverlayPreferencesStore {
     public private(set) var overrides: [String: MBOverlayPreferences] = [:]
 
     public init() {
-        load()
+        self.load()
     }
 
     public func preferences(for deviceName: String, default defaultPreferences: MBOverlayPreferences) -> MBOverlayPreferences {
-        overrides[deviceName] ?? defaultPreferences
+        self.overrides[deviceName] ?? defaultPreferences
     }
 
     public func setOverride(_ preferences: MBOverlayPreferences, for deviceName: String) {
-        overrides[deviceName] = preferences
-        save()
+        self.overrides[deviceName] = preferences
+        self.save()
     }
 
     public func clearOverride(for deviceName: String) {
-        overrides.removeValue(forKey: deviceName)
-        save()
+        self.overrides.removeValue(forKey: deviceName)
+        self.save()
     }
 
     public func hasOverride(for deviceName: String) -> Bool {
-        overrides[deviceName] != nil
+        self.overrides[deviceName] != nil
     }
 
     public func allDeviceNames() -> [String] {
-        overrides.keys.sorted()
+        self.overrides.keys.sorted()
     }
 
     private func load() {
         guard let data = defaults.data(forKey: Keys.overrides) else { return }
         if let decoded = try? JSONDecoder().decode([String: MBOverlayPreferences].self, from: data) {
-            overrides = decoded
+            self.overrides = decoded
         }
     }
 
     private func save() {
         guard let data = try? JSONEncoder().encode(overrides) else { return }
-        defaults.set(data, forKey: Keys.overrides)
+        self.defaults.set(data, forKey: Keys.overrides)
     }
 }

@@ -38,12 +38,12 @@ public final class MBDragDropIndicator {
             self.panel = panel
         }
 
-        positionPanel()
-        panel?.orderFrontRegardless()
+        self.positionPanel()
+        self.panel?.orderFrontRegardless()
     }
 
     public func hide() {
-        panel?.orderOut(nil)
+        self.panel?.orderOut(nil)
     }
 
     private func positionPanel() {
@@ -62,11 +62,11 @@ private struct MBDragDropIndicatorView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: state == .dropping ? "tray.and.arrow.down" : "hand.draw")
+            Image(systemName: self.state == .dropping ? "tray.and.arrow.down" : "hand.draw")
                 .font(.title2)
                 .foregroundStyle(.primary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(state == .dropping ? "Release to drop" : "Dragging file")
+                Text(self.state == .dropping ? "Release to drop" : "Dragging file")
                     .font(.headline)
                 if let sourceName, !sourceName.isEmpty {
                     Text(sourceName)

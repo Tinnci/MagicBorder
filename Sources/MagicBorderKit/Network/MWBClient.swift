@@ -21,39 +21,39 @@ public class MWBClient {
     var secretKey: String = ""
 
     public func connect(ip: String, key: String) {
-        targetIP = ip
-        secretKey = key
-        status = "Deriving Keys..."
+        self.targetIP = ip
+        self.secretKey = key
+        self.status = "Deriving Keys..."
 
         // 1. Derive Keys
-        crypto.deriveKey(from: key)
+        self.crypto.deriveKey(from: key)
 
-        guard crypto.sessionKey != nil else {
-            status = "Key Derivation Failed"
+        guard self.crypto.sessionKey != nil else {
+            self.status = "Key Derivation Failed"
             return
         }
 
         // 2. Connect TCP (Port 15101 for Data/Handshake)
-        status = "Connecting to \(ip):15101..."
+        self.status = "Connecting to \(ip):15101..."
         let host = NWEndpoint.Host(ip)
         let port = NWEndpoint.Port(integerLiteral: 15101)
 
         let conn = NWConnection(to: .hostPort(host: host, port: port), using: .tcp)
-        connection = conn
+        self.connection = conn
 
         conn.stateUpdateHandler = { [weak self] state in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 switch state {
                 case .ready:
-                    status = "Connected. Starting Handshake..."
+                    self.status = "Connected. Starting Handshake..."
                     print("TCP Ready. Starting Handshake Flow.")
-                    startHandshakeFlow()
+                    self.startHandshakeFlow()
                 case .failed(let error):
-                    status = "Connection Failed: \(error)"
-                    isConnected = false
+                    self.status = "Connection Failed: \(error)"
+                    self.isConnected = false
                 case .waiting(let error):
-                    status = "Waiting: \(error)"
+                    self.status = "Waiting: \(error)"
                 default:
                     break
                 }
@@ -73,26 +73,26 @@ public class MWBClient {
         // Actually MWB protocol usually starts with `Handshake` packets directly after the crypto stream init.
         // Let's try sending the Handshake packets immediately, but Encrypted.
 
-        sendHandshakePackets()
+        self.sendHandshakePackets()
     }
 
     private func sendHandshakePackets() {
         // Construct Handshake Packet
         var packet = MWBPacket()
         packet.type = .handshake
-        packet.src = machineID
+        packet.src = self.machineID
         packet.des = 0 // Broadcast/Unknown
-        packet.machineName = machineName // Need to implement string setting
+        packet.machineName = self.machineName // Need to implement string setting
 
         // Send 10 times as per protocol spec
         print("Sending 10 Handshake packets...")
         for _ in 0 ..< 10 {
-            packet.finalizeForSend(magicNumber: crypto.magicNumber)
-            send(packet: packet)
+            packet.finalizeForSend(magicNumber: self.crypto.magicNumber)
+            self.send(packet: packet)
         }
 
         // Start Reading for Ask
-        readLoop()
+        self.readLoop()
     }
 
     private func readLoop() {
@@ -109,20 +109,20 @@ public class MWBClient {
                 guard let self else { return }
 
                 if let data = content {
-                    handleRawData(data)
+                    self.handleRawData(data)
                 }
 
                 if isComplete {
-                    status = "Disconnected (EOF)"
-                    isConnected = false
+                    self.status = "Disconnected (EOF)"
+                    self.isConnected = false
                     return
                 }
 
                 if error == nil {
                     // Continue reading
-                    readLoop()
+                    self.readLoop()
                 } else {
-                    status = "Read Error: \(error!)"
+                    self.status = "Read Error: \(error!)"
                 }
             }
         }
@@ -143,17 +143,17 @@ public class MWBClient {
             let packet = MWBPacket(data: decrypted.prefix(32))
 
             // Check Magic
-            if packet.magicHigh16 != (crypto.magicNumber >> 16) & 0xFFFF {
+            if packet.magicHigh16 != (self.crypto.magicNumber >> 16) & 0xFFFF {
                 print(
-                    "Invalid Magic Number received: \(packet.magicHigh16) vs expected \((crypto.magicNumber >> 16) & 0xFFFF)")
+                    "Invalid Magic Number received: \(packet.magicHigh16) vs expected \((self.crypto.magicNumber >> 16) & 0xFFFF)")
                 // return // Continue for now to see what happens
             }
 
             print("Received Packet Type: \(packet.type)")
 
             if packet.type == .handshakeAck {
-                status = "Handshake Authenticated! Connected."
-                isConnected = true
+                self.status = "Handshake Authenticated! Connected."
+                self.isConnected = true
                 print("SUCCESS: Handshake ACK received from Machine ID \(packet.src).")
             }
         }
@@ -166,7 +166,7 @@ public class MWBClient {
             return
         }
 
-        connection?.send(
+        self.connection?.send(
             content: encrypted,
             completion: .contentProcessed { error in
                 if let error {

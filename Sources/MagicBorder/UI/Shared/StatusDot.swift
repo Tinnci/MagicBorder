@@ -5,10 +5,10 @@ struct StatusDot: View {
 
     var body: some View {
         Circle()
-            .fill(active ? Color.green : Color.secondary)
+            .fill(self.active ? Color.green : Color.secondary)
             .frame(width: 8, height: 8)
-            .opacity(active ? 1.0 : 0.4)
-            .help(active ? "Online" : "Offline")
-            .accessibilityLabel(active ? "Online" : "Offline")
+            .opacity(self.active ? 1.0 : 0.4)
+            .help(self.active ? "Online" : "Offline")
+            .accessibilityLabel(self.active ? "Online" : "Offline")
     }
 }

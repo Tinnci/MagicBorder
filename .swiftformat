@@ -21,7 +21,7 @@
 --organizetypes true
 --patternlet inline
 --ranges spaced
---self remove
+--self insert
 --semicolons never
 --stripunusedargs always
 --tabwidth 4

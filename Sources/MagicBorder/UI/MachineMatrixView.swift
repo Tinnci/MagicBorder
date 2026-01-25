@@ -8,27 +8,27 @@ struct MachineMatrixView: View {
 
     var body: some View {
         Grid(horizontalSpacing: 16, verticalSpacing: 16) {
-            let rows = machines.chunked(into: max(1, columns))
+            let rows = self.machines.chunked(into: max(1, self.columns))
             ForEach(0 ..< rows.count, id: \.self) { rowIndex in
                 GridRow {
                     ForEach(rows[rowIndex]) { machine in
                         MachineCard(name: machine.name, isOnline: machine.isOnline)
                             .frame(minWidth: 140, maxWidth: .infinity, minHeight: 72)
                             .onDrag {
-                                draggingMachine = machine
+                                self.draggingMachine = machine
                                 return NSItemProvider(object: machine.id.uuidString as NSString)
                             }
                             .onDrop(
                                 of: [UTType.text],
                                 delegate: MachineDropDelegate(
-                                    item: machine, machines: $machines,
-                                    draggingItem: $draggingMachine))
+                                    item: machine, machines: self.$machines,
+                                    draggingItem: self.$draggingMachine))
                     }
                 }
             }
         }
         .padding(8)
-        .animation(.default, value: machines)
+        .animation(.default, value: self.machines)
     }
 }
 
@@ -50,17 +50,17 @@ struct MachineCard: View {
             VStack(spacing: 12) {
                 Image(systemName: "desktopcomputer")
                     .font(.system(size: 32))
-                    .foregroundStyle(isOnline ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(self.isOnline ? Color.accentColor : Color.secondary)
 
                 VStack(spacing: 4) {
-                    Text(name)
+                    Text(self.name)
                         .font(.headline)
                         .lineLimit(1)
                         .multilineTextAlignment(.center)
 
                     HStack(spacing: 4) {
-                        StatusDot(active: isOnline)
-                        Text(isOnline ? "Online" : "Offline")
+                        StatusDot(active: self.isOnline)
+                        Text(self.isOnline ? "Online" : "Offline")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -81,12 +81,12 @@ struct MachineDropDelegate: DropDelegate {
     func dropEntered(info _: DropInfo) {
         guard let draggingItem else { return }
 
-        if item != draggingItem {
+        if self.item != draggingItem {
             if let from = machines.firstIndex(of: draggingItem),
                let to = machines.firstIndex(of: item)
             {
                 withAnimation {
-                    machines.move(
+                    self.machines.move(
                         fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
                 }
             }
@@ -94,7 +94,7 @@ struct MachineDropDelegate: DropDelegate {
     }
 
     func performDrop(info _: DropInfo) -> Bool {
-        draggingItem = nil
+        self.draggingItem = nil
         return true
     }
 }

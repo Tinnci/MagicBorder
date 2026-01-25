@@ -94,11 +94,11 @@ public struct EventSnapshot: Sendable {
     public let flags: CGEventFlags
 
     public init(from event: CGEvent, type: CGEventType) {
-        location = event.location
+        self.location = event.location
         self.type = type
-        keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        scrollDeltaY = event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
-        scrollDeltaX = event.getIntegerValueField(.scrollWheelEventDeltaAxis2)
-        flags = event.flags
+        self.keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+        self.scrollDeltaY = event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
+        self.scrollDeltaX = event.getIntegerValueField(.scrollWheelEventDeltaAxis2)
+        self.flags = event.flags
     }
 }
