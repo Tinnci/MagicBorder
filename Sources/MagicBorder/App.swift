@@ -24,6 +24,7 @@ struct MagicBorderApp: App {
     @State private var accessibilityService = MBAccessibilityService()
     @State private var inputManager = MBInputManager.shared
     @State private var networkManager = MBNetworkManager.shared
+    @State private var overlayPreferences = MBOverlayPreferencesStore()
     @AppStorage("captureInput") private var captureInput = true
 
     var body: some Scene {
@@ -32,6 +33,7 @@ struct MagicBorderApp: App {
                 .environment(accessibilityService)
                 .environment(inputManager)
                 .environment(networkManager)
+                .environment(overlayPreferences)
                 .onAppear {
                     accessibilityService.startPolling()
                     syncInputCapture()
@@ -47,6 +49,7 @@ struct MagicBorderApp: App {
             MenuBarView()
                 .environment(accessibilityService)
                 .environment(networkManager)
+                .environment(overlayPreferences)
         }
     }
 

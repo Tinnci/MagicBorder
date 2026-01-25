@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
     @Environment(MBAccessibilityService.self) private var accessibilityService
+    @Environment(MBOverlayPreferencesStore.self) private var overlayPreferences
     @AppStorage("wrapMouse") private var wrapMouse = false
     @AppStorage("hideMouse") private var hideMouse = true
     @AppStorage("captureInput") private var captureInput = true
@@ -12,6 +13,7 @@ struct SettingsView: View {
     @AppStorage("dragDropOverlayShowProgress") private var dragDropOverlayShowProgress = true
     @AppStorage("dragDropOverlayScale") private var dragDropOverlayScale = 1.0
     @AppStorage("dragDropOverlayPosition") private var dragDropOverlayPosition = "top"
+    @State private var selectedDevice: String = ""
 
     var body: some View {
         @Bindable var networkManager = networkManager
@@ -92,9 +94,49 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
                 .disabled(!dragDropOverlayEnabled)
             }
+
+            Section(header: Label("Drag & Drop Overlay (Per Device)", systemImage: "display")) {
+                Picker("Device", selection: $selectedDevice) {
+                    ForEach(deviceOptions, id: \.self) { device in
+                        Text(device).tag(device)
+                    }
+                }
+
+                Toggle("Use Custom Settings", isOn: useOverrideBinding)
+                    .disabled(selectedDevice.isEmpty)
+
+                Toggle("Show Device Name", isOn: showDeviceBinding)
+                    .disabled(!overlayPreferences.hasOverride(for: selectedDevice))
+                Toggle("Show Progress", isOn: showProgressBinding)
+                    .disabled(!overlayPreferences.hasOverride(for: selectedDevice))
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Overlay Size")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Slider(value: scaleBinding, in: 0.85...1.3, step: 0.05)
+                        .disabled(!overlayPreferences.hasOverride(for: selectedDevice))
+                }
+
+                Picker("Position", selection: positionBinding) {
+                    Text("Top").tag(MBOverlayPosition.top)
+                    Text("Top Left").tag(MBOverlayPosition.topLeading)
+                    Text("Top Right").tag(MBOverlayPosition.topTrailing)
+                    Text("Bottom").tag(MBOverlayPosition.bottom)
+                    Text("Bottom Left").tag(MBOverlayPosition.bottomLeading)
+                    Text("Bottom Right").tag(MBOverlayPosition.bottomTrailing)
+                }
+                .pickerStyle(.segmented)
+                .disabled(!overlayPreferences.hasOverride(for: selectedDevice))
+            }
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")
+        .onAppear {
+            if selectedDevice.isEmpty {
+                selectedDevice = networkManager.localDisplayName
+            }
+        }
         .onChange(of: networkManager.compatibilitySettings.securityKey) { _, _ in
             networkManager.applyCompatibilitySettings()
         }
@@ -104,6 +146,82 @@ struct SettingsView: View {
         .onChange(of: networkManager.compatibilitySettings.clipboardPort) { _, _ in
             networkManager.applyCompatibilitySettings()
         }
+    }
+
+    private var deviceOptions: [String] {
+        let connected = networkManager.connectedMachines.map { $0.name }
+        let stored = overlayPreferences.allDeviceNames()
+        let base = [networkManager.localDisplayName] + connected
+        return Array(Set(base + stored)).sorted()
+    }
+
+    private var defaultOverlayPreferences: MBOverlayPreferences {
+        let position = MBOverlayPosition(rawValue: dragDropOverlayPosition) ?? .top
+        return MBOverlayPreferences(
+            showDevice: dragDropOverlayShowDevice,
+            showProgress: dragDropOverlayShowProgress,
+            scale: dragDropOverlayScale,
+            position: position
+        )
+    }
+
+    private var currentDevicePreferences: MBOverlayPreferences {
+        overlayPreferences.preferences(for: selectedDevice, default: defaultOverlayPreferences)
+    }
+
+    private var useOverrideBinding: Binding<Bool> {
+        Binding(
+            get: { overlayPreferences.hasOverride(for: selectedDevice) },
+            set: { enabled in
+                if enabled {
+                    overlayPreferences.setOverride(currentDevicePreferences, for: selectedDevice)
+                } else {
+                    overlayPreferences.clearOverride(for: selectedDevice)
+                }
+            }
+        )
+    }
+
+    private var showDeviceBinding: Binding<Bool> {
+        Binding(
+            get: { currentDevicePreferences.showDevice },
+            set: { newValue in
+                updateDevicePreferences { $0.showDevice = newValue }
+            }
+        )
+    }
+
+    private var showProgressBinding: Binding<Bool> {
+        Binding(
+            get: { currentDevicePreferences.showProgress },
+            set: { newValue in
+                updateDevicePreferences { $0.showProgress = newValue }
+            }
+        )
+    }
+
+    private var scaleBinding: Binding<Double> {
+        Binding(
+            get: { currentDevicePreferences.scale },
+            set: { newValue in
+                updateDevicePreferences { $0.scale = newValue }
+            }
+        )
+    }
+
+    private var positionBinding: Binding<MBOverlayPosition> {
+        Binding(
+            get: { currentDevicePreferences.position },
+            set: { newValue in
+                updateDevicePreferences { $0.position = newValue }
+            }
+        )
+    }
+
+    private func updateDevicePreferences(_ update: (inout MBOverlayPreferences) -> Void) {
+        var prefs = currentDevicePreferences
+        update(&prefs)
+        overlayPreferences.setOverride(prefs, for: selectedDevice)
     }
 }
 

@@ -27,6 +27,7 @@ struct DashboardView: View {
         MagicBorderKit.MBNetworkManager
     @Environment(MBAccessibilityService.self) private var accessibilityService:
         MBAccessibilityService
+    @Environment(MBOverlayPreferencesStore.self) private var overlayPreferences
     @State private var selection: SidebarItem? = .arrangement
     @State private var searchText = ""
     @State private var isRefreshing = false
@@ -53,7 +54,7 @@ struct DashboardView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
-                Section("Main") {
+                Section {
                     ForEach(SidebarItem.allCases) { item in
                         NavigationLink(value: item) {
                             Label(item.title, systemImage: item.icon)
@@ -111,18 +112,18 @@ struct DashboardView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .overlay(alignment: overlayAlignment) {
+        .overlay(alignment: effectiveOverlayPreferences.position.alignment) {
             if dragDropOverlayEnabled, let state = networkManager.dragDropState {
                 DragDropOverlayView(
                     state: state,
                     sourceName: networkManager.dragDropSourceName,
                     fileSummary: networkManager.dragDropFileSummary,
                     progress: networkManager.dragDropProgress,
-                    showDevice: dragDropOverlayShowDevice,
-                    showProgress: dragDropOverlayShowProgress
+                    showDevice: effectiveOverlayPreferences.showDevice,
+                    showProgress: effectiveOverlayPreferences.showProgress
                 )
-                .scaleEffect(dragDropOverlayScale)
-                .padding(overlayPadding)
+                .scaleEffect(effectiveOverlayPreferences.scale)
+                .padding(effectiveOverlayPreferences.position.padding)
             }
         }
         .frame(minWidth: 800, minHeight: 600)
@@ -166,20 +167,37 @@ struct DashboardView: View {
         self.machines = newMachines
     }
 
-    private var overlayAlignment: Alignment {
-        switch dragDropOverlayPosition {
-        case "topLeading": return .topLeading
-        case "topTrailing": return .topTrailing
-        case "bottom": return .bottom
-        case "bottomLeading": return .bottomLeading
-        case "bottomTrailing": return .bottomTrailing
-        default: return .top
+    private var defaultOverlayPreferences: MBOverlayPreferences {
+        let position = MBOverlayPosition(rawValue: dragDropOverlayPosition) ?? .top
+        return MBOverlayPreferences(
+            showDevice: dragDropOverlayShowDevice,
+            showProgress: dragDropOverlayShowProgress,
+            scale: dragDropOverlayScale,
+            position: position
+        )
+    }
+
+    private var effectiveOverlayPreferences: MBOverlayPreferences {
+        let deviceName = networkManager.dragDropSourceName ?? networkManager.localDisplayName
+        return overlayPreferences.preferences(for: deviceName, default: defaultOverlayPreferences)
+    }
+}
+
+private extension MBOverlayPosition {
+    var alignment: Alignment {
+        switch self {
+        case .top: return .top
+        case .topLeading: return .topLeading
+        case .topTrailing: return .topTrailing
+        case .bottom: return .bottom
+        case .bottomLeading: return .bottomLeading
+        case .bottomTrailing: return .bottomTrailing
         }
     }
 
-    private var overlayPadding: EdgeInsets {
-        switch dragDropOverlayPosition {
-        case "bottom", "bottomLeading", "bottomTrailing":
+    var padding: EdgeInsets {
+        switch self {
+        case .bottom, .bottomLeading, .bottomTrailing:
             return EdgeInsets(top: 0, leading: 16, bottom: 16, trailing: 16)
         default:
             return EdgeInsets(top: 16, leading: 16, bottom: 0, trailing: 16)
@@ -265,97 +283,82 @@ struct ArrangementDetailView: View {
 
     var body: some View {
         @Bindable var networkManager = networkManager
-        ScrollView {
-            VStack(spacing: 24) {
-                // Header status
-                HStack {
+        Form {
+            Section("System") {
+                HStack(spacing: 12) {
                     StatusDot(active: accessibilityService.isTrusted)
-                    Text(
-                        accessibilityService.isTrusted
-                            ? "System Services Ready" : "Accessibility Permission Needed"
-                    )
-                    .font(.subheadline)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(accessibilityService.isTrusted ? "System Services Ready" : "Accessibility Needed")
+                            .font(.headline)
+                        Text("Enable Accessibility for global input capture.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     Spacer()
                     if !accessibilityService.isTrusted {
                         Button("Grant Access") {
                             accessibilityService.promptForPermission()
                         }
-                        .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                     }
                 }
-                .padding()
-                .background(Material.thin)
-                .cornerRadius(10)
-                .padding([.horizontal, .top])
+            }
 
+            Section("Pairing") {
                 PairingFlowView(securityKey: $networkManager.compatibilitySettings.securityKey)
-                    .padding(.horizontal)
+            }
 
-                VStack(alignment: .leading) {
-                    Text("Machine Arrangement")
-                        .font(.headline)
-                        .padding(.leading)
+            Section("Machine Arrangement") {
+                MachineMatrixView(
+                    machines: $machines,
+                    columns: matrixTwoRowBinding.wrappedValue ? 2 : max(1, machines.count)
+                )
+                .frame(height: 200)
+            }
 
-                    MachineMatrixView(
-                        machines: $machines,
-                        columns: matrixTwoRowBinding.wrappedValue ? 2 : max(1, machines.count)
-                    )
-                    .frame(height: 200)
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Switching")
-                        .font(.headline)
-                        .padding(.leading)
-
-                    HStack(spacing: 12) {
-                        Text("Active: \(networkManager.activeMachineName)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-
-                        Spacer()
-
-                        Text(networkManager.switchState.rawValue.capitalized)
+            Section("Switching") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Active")
                             .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Material.thin)
-                            .cornerRadius(8)
+                            .foregroundStyle(.secondary)
+                        Text(networkManager.activeMachineName)
+                            .font(.headline)
                     }
-                    .padding(.horizontal)
+                    Spacer()
+                    Text(networkManager.switchState.rawValue.capitalized)
+                        .font(.caption)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.thinMaterial, in: Capsule())
+                }
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(machines) { machine in
-                                Button(action: {
-                                    networkManager.requestSwitch(to: machine.id)
-                                }) {
-                                    Label(machine.name, systemImage: "arrow.right.circle")
-                                        .font(.caption)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 6)
-                                }
-                                .buttonStyle(.bordered)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(machines) { machine in
+                            Button(action: {
+                                networkManager.requestSwitch(to: machine.id)
+                            }) {
+                                Label(machine.name, systemImage: "arrow.right.circle")
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
                             }
+                            .buttonStyle(.bordered)
                         }
-                        .padding(.horizontal)
                     }
-                    .scrollIndicators(.hidden)
+                    .padding(.vertical, 4)
                 }
+                .scrollIndicators(.hidden)
+            }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Matrix Options")
-                        .font(.headline)
-                        .padding(.leading)
+            Section("Matrix Options") {
+                Toggle("Two Row Matrix", isOn: matrixTwoRowBinding)
+                Toggle("Swap Matrix Order", isOn: matrixSwapBinding)
+            }
 
-                    Toggle("Two Row Matrix", isOn: matrixTwoRowBinding)
-                        .padding(.horizontal)
-                    Toggle("Swap Matrix Order", isOn: matrixSwapBinding)
-                        .padding(.horizontal)
-                }
-
-                Button(action: {
+            Section("Actions") {
+                Button("Send Files (MWB DragDrop)") {
                     let panel = NSOpenPanel()
                     panel.canChooseFiles = true
                     panel.canChooseDirectories = true
@@ -363,15 +366,11 @@ struct ArrangementDetailView: View {
                     if panel.runModal() == .OK {
                         networkManager.sendFileDrop(panel.urls)
                     }
-                }) {
-                    Label("Send Files (MWB DragDrop)", systemImage: "tray.and.arrow.up")
-                        .padding(.horizontal)
                 }
-                .buttonStyle(.bordered)
-
-                Spacer()
             }
         }
+        .formStyle(.grouped)
+        .padding(.vertical, 8)
         .navigationTitle("Arrangement")
         .onChange(of: machines) { _, newValue in
             networkManager.updateLocalMatrix(names: newValue.map { $0.name })

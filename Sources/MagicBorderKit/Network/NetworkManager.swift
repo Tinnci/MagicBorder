@@ -70,6 +70,7 @@ public class MBNetworkManager: Observation.Observable {
     let localID = UUID()
     let localName = Host.current().localizedName ?? "Unknown Mac"
     let localNumericID: Int32 = Int32.random(in: 1000...999999)
+    public var localDisplayName: String { localName }
 
     public var switchState: SwitchState = .idle
     public var activeMachineId: UUID? {
