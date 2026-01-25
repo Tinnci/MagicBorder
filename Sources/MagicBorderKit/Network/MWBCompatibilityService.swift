@@ -363,6 +363,7 @@ public final class MWBCompatibilityService: ObservableObject {
             if session.kind == .clipboard {
                 session.peer = MWBPeer(id: packet.src, name: packet.machineName)
                 if let peer = session.peer {
+                    onLog?("Clipboard handshake received from '\(peer.name)' (ID=\(peer.id))")
                     onConnected?(peer)
                 }
                 session.sendClipboardHandshake(push: packet.type == .clipboardPush)
@@ -558,6 +559,9 @@ private final class MWBSession {
                     if self.kind == .message {
                         self.onLog?("Sending handshake burst (10 packets)")
                         self.sendHandshakeBurst()
+                    } else if self.kind == .clipboard {
+                        self.onLog?("Sending clipboard handshake")
+                        self.sendClipboardHandshake(push: false)
                     }
                     self.receiveLoop()
                 case .waiting(let error):
