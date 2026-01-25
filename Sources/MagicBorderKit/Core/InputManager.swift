@@ -18,6 +18,7 @@ public class MBInputManager: Observation.Observable {
     // Accessed by both MainActor and the non-isolated C callback
     private let _remoteID = OSAllocatedUnfairLock<UUID?>(initialState: nil)
     private let _isAppActive = OSAllocatedUnfairLock<Bool>(initialState: true)
+    private let _lastLocalInteraction = OSAllocatedUnfairLock<TimeInterval>(initialState: 0)
 
     public var currentRemoteID: UUID? {
         _remoteID.withLock { $0 }
@@ -142,7 +143,11 @@ public class MBInputManager: Observation.Observable {
 
         switch type {
         case .leftMouseDown, .rightMouseDown, .leftMouseUp, .rightMouseUp:
+            _lastLocalInteraction.withLock { $0 = CFAbsoluteTimeGetCurrent() }
             return true
+        case .keyDown, .keyUp, .flagsChanged:
+            let last = _lastLocalInteraction.withLock { $0 }
+            return CFAbsoluteTimeGetCurrent() - last < 2.0
         default:
             return false
         }

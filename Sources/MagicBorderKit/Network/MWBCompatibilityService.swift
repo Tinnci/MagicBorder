@@ -609,7 +609,7 @@ private final class MWBSession {
 
     private func parsePackets() {
         while plainBuffer.count >= MWBPacket.baseSize {
-            let rawType = plainBuffer[0]
+            guard let rawType = plainBuffer.first else { break }
             let isBig = MWBPacket.isBigType(rawType: rawType)
             let needed = isBig ? MWBPacket.extendedSize : MWBPacket.baseSize
             if plainBuffer.count < needed { break }
