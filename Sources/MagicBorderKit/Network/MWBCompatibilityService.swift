@@ -341,12 +341,32 @@ public final class MWBCompatibilityService: ObservableObject {
                 onLog?("Handshake received from '\(peer.name)' (ID=\(peer.id))")
                 onConnected?(peer)
             }
-            session.sendHandshakeAck()
+            var ack = MWBPacket()
+            ack.type = .handshakeAck
+            ack.src = localId
+            ack.des = packet.src
+            ack.machineName = localName
+            ack.machine1 = ~packet.machine1
+            ack.machine2 = ~packet.machine2
+            ack.machine3 = ~packet.machine3
+            ack.machine4 = ~packet.machine4
+            session.send(ack)
         case .handshakeAck:
-            session.peer = MWBPeer(id: packet.src, name: packet.machineName)
-            if let peer = session.peer {
-                onLog?("HandshakeAck received from '\(peer.name)' (ID=\(peer.id))")
-                onConnected?(peer)
+            if let (m1, m2, m3, m4) = session.handshakeChallenge,
+                packet.machine1 == m1,
+                packet.machine2 == m2,
+                packet.machine3 == m3,
+                packet.machine4 == m4
+            {
+                session.peer = MWBPeer(id: packet.src, name: packet.machineName)
+                if let peer = session.peer {
+                    onLog?("HandshakeAck VERIFIED from '\(peer.name)' (ID=\(peer.id))")
+                    onConnected?(peer)
+                    session.handshakeChallenge = nil
+                    session.startHeartbeat()
+                }
+            } else {
+                onLog?("HandshakeAck FAILED verification: challenge mismatch")
             }
         case .hello, .hi, .awake, .heartbeat, .heartbeatEx, .heartbeatExL2, .heartbeatExL3:
             if session.peer == nil {
@@ -531,9 +551,12 @@ private final class MWBSession {
     private var plainBuffer = Data()
     private var initialBlockDiscarded = false
 
+    private var handshakeChallenge: (Int32, Int32, Int32, Int32)?
+
     private var clipboardAccumulator = Data()
     private var clipboardIsImage = false
     private var dragDropAccumulator = Data()
+    private var heartbeatTimer: Task<Void, Never>?
 
     init(
         connection: NWConnection, kind: MWBSessionKind, crypto: MWBCrypto, localName: String,
@@ -589,15 +612,6 @@ private final class MWBSession {
         connection.send(content: encrypted, completion: .contentProcessed { _ in })
     }
 
-    func sendHandshakeAck() {
-        var packet = MWBPacket()
-        packet.type = .handshakeAck
-        packet.src = localId
-        packet.des = peer?.id ?? 0
-        packet.machineName = localName
-        send(packet)
-    }
-
     func sendClipboardHandshake(push: Bool) {
         var packet = MWBPacket()
         packet.type = push ? .clipboardPush : .clipboard
@@ -631,12 +645,22 @@ private final class MWBSession {
     }
 
     private func sendHandshakeBurst() {
+        let m1 = Int32.random(in: Int32.min...Int32.max)
+        let m2 = Int32.random(in: Int32.min...Int32.max)
+        let m3 = Int32.random(in: Int32.min...Int32.max)
+        let m4 = Int32.random(in: Int32.min...Int32.max)
+        handshakeChallenge = (m1, m2, m3, m4)
+
         for _ in 0..<10 {
             var packet = MWBPacket()
             packet.type = .handshake
             packet.src = localId
             packet.des = 0
             packet.machineName = localName
+            packet.machine1 = m1
+            packet.machine2 = m2
+            packet.machine3 = m3
+            packet.machine4 = m4
             send(packet)
         }
     }
@@ -646,6 +670,22 @@ private final class MWBSession {
         if let encrypted = encrypt(random) {
             onLog?("Sending initial IV block (16 random bytes encrypted)")
             connection.send(content: encrypted, completion: .contentProcessed { _ in })
+        }
+    }
+
+    func startHeartbeat() {
+        heartbeatTimer?.cancel()
+        heartbeatTimer = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard let self, !Task.isCancelled else { return }
+                var packet = MWBPacket()
+                packet.type = .heartbeat
+                packet.src = self.localId
+                packet.des = self.peer?.id ?? 0
+                packet.machineName = self.localName
+                self.send(packet)
+            }
         }
     }
 
