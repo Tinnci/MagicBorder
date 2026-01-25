@@ -95,10 +95,9 @@ private struct NetworkSettingsTab: View {
             Section("Security") {
                 VStack(alignment: .leading) {
                     SecureField(
-                        "Security Key", text: $networkManager.compatibilitySettings.securityKey
-                    )
-                    .textContentType(.password)
-                    .frame(maxWidth: 300)
+                        "Security Key", text: $networkManager.compatibilitySettings.securityKey)
+                        .textContentType(.password)
+                        .frame(maxWidth: 300)
 
                     if let message = networkManager.compatibilitySettings.validationMessage {
                         Text(message)
@@ -116,9 +115,8 @@ private struct NetworkSettingsTab: View {
                 HStack {
                     TextField(
                         "Message Port", value: $networkManager.compatibilitySettings.messagePort,
-                        formatter: NumberFormatter()
-                    )
-                    .monospacedDigit()
+                        formatter: NumberFormatter())
+                        .monospacedDigit()
                     Text("Default: 20000").font(.caption).foregroundStyle(.secondary)
                 }
 
@@ -126,9 +124,8 @@ private struct NetworkSettingsTab: View {
                     TextField(
                         "Clipboard Port",
                         value: $networkManager.compatibilitySettings.clipboardPort,
-                        formatter: NumberFormatter()
-                    )
-                    .monospacedDigit()
+                        formatter: NumberFormatter())
+                        .monospacedDigit()
                     Text("Default: 20001").font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -160,7 +157,7 @@ private struct OverlaySettingsTab: View {
 
                     LabeledContent("Size") {
                         HStack {
-                            Slider(value: $dragDropOverlayScale, in: 0.85...1.3, step: 0.05)
+                            Slider(value: $dragDropOverlayScale, in: 0.85 ... 1.3, step: 0.05)
                             Text("\(Int(dragDropOverlayScale * 100))%")
                                 .monospacedDigit()
                                 .frame(width: 40, alignment: .trailing)
@@ -195,7 +192,7 @@ private struct OverlaySettingsTab: View {
 
                         LabeledContent("Size") {
                             HStack {
-                                Slider(value: scaleBinding, in: 0.85...1.3, step: 0.05)
+                                Slider(value: scaleBinding, in: 0.85 ... 1.3, step: 0.05)
                                 Text("\(Int(scaleBinding.wrappedValue * 100))%")
                                     .monospacedDigit()
                                     .frame(width: 40, alignment: .trailing)
@@ -214,8 +211,9 @@ private struct OverlaySettingsTab: View {
     }
 
     // MARK: - Helpers
+
     private var deviceOptions: [String] {
-        let connected = networkManager.connectedMachines.map { $0.name }
+        let connected = networkManager.connectedMachines.map(\.name)
         let stored = overlayPreferences.allDeviceNames()
         let base = [networkManager.localDisplayName] + connected
         return Array(Set(base + stored)).sorted()
@@ -227,8 +225,7 @@ private struct OverlaySettingsTab: View {
             showDevice: dragDropOverlayShowDevice,
             showProgress: dragDropOverlayShowProgress,
             scale: dragDropOverlayScale,
-            position: position
-        )
+            position: position)
     }
 
     private var currentDevicePreferences: MBOverlayPreferences {
@@ -244,29 +241,25 @@ private struct OverlaySettingsTab: View {
                 } else {
                     overlayPreferences.clearOverride(for: selectedDevice)
                 }
-            }
-        )
+            })
     }
 
     private var showDeviceBinding: Binding<Bool> {
         Binding(
             get: { currentDevicePreferences.showDevice },
-            set: { val in updateDevicePreferences { $0.showDevice = val } }
-        )
+            set: { val in updateDevicePreferences { $0.showDevice = val } })
     }
 
     private var showProgressBinding: Binding<Bool> {
         Binding(
             get: { currentDevicePreferences.showProgress },
-            set: { val in updateDevicePreferences { $0.showProgress = val } }
-        )
+            set: { val in updateDevicePreferences { $0.showProgress = val } })
     }
 
     private var scaleBinding: Binding<Double> {
         Binding(
             get: { currentDevicePreferences.scale },
-            set: { val in updateDevicePreferences { $0.scale = val } }
-        )
+            set: { val in updateDevicePreferences { $0.scale = val } })
     }
 
     private func updateDevicePreferences(_ update: (inout MBOverlayPreferences) -> Void) {

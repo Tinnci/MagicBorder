@@ -9,13 +9,13 @@ struct MachineMatrixView: View {
     var body: some View {
         Grid(horizontalSpacing: 16, verticalSpacing: 16) {
             let rows = machines.chunked(into: max(1, columns))
-            ForEach(0..<rows.count, id: \.self) { rowIndex in
+            ForEach(0 ..< rows.count, id: \.self) { rowIndex in
                 GridRow {
                     ForEach(rows[rowIndex]) { machine in
                         MachineCard(name: machine.name, isOnline: machine.isOnline)
                             .frame(minWidth: 140, maxWidth: .infinity, minHeight: 72)
                             .onDrag {
-                                self.draggingMachine = machine
+                                draggingMachine = machine
                                 return NSItemProvider(object: machine.id.uuidString as NSString)
                             }
                             .onDrop(
@@ -36,7 +36,7 @@ struct MachineMatrixView: View {
 extension Array {
     func chunked(into size: Int) -> [[Element]] {
         stride(from: 0, to: count, by: size).map {
-            Array(self[$0..<Swift.min($0 + size, count)])
+            Array(self[$0 ..< Swift.min($0 + size, count)])
         }
     }
 }
@@ -78,12 +78,12 @@ struct MachineDropDelegate: DropDelegate {
     @Binding var machines: [Machine]
     @Binding var draggingItem: Machine?
 
-    func dropEntered(info: DropInfo) {
-        guard let draggingItem = draggingItem else { return }
+    func dropEntered(info _: DropInfo) {
+        guard let draggingItem else { return }
 
         if item != draggingItem {
             if let from = machines.firstIndex(of: draggingItem),
-                let to = machines.firstIndex(of: item)
+               let to = machines.firstIndex(of: item)
             {
                 withAnimation {
                     machines.move(
@@ -93,8 +93,8 @@ struct MachineDropDelegate: DropDelegate {
         }
     }
 
-    func performDrop(info: DropInfo) -> Bool {
-        self.draggingItem = nil
+    func performDrop(info _: DropInfo) -> Bool {
+        draggingItem = nil
         return true
     }
 }

@@ -8,7 +8,7 @@ struct MachineDetailView: View {
     @State private var isRefreshing = false
 
     private let columns = [
-        GridItem(.adaptive(minimum: 80, maximum: 100), spacing: 16)
+        GridItem(.adaptive(minimum: 80, maximum: 100), spacing: 16),
     ]
 
     var body: some View {
@@ -48,18 +48,16 @@ struct MachineDetailView: View {
                             .padding(.horizontal)
 
                         LazyVGrid(columns: columns, spacing: 16) {
-                            ForEach(0..<8) { i in
-                                ProgramIconButton(name: "App \(i+1)", icon: "app.dashed")
+                            ForEach(0 ..< 8) { i in
+                                ProgramIconButton(name: "App \(i + 1)", icon: "app.dashed")
                             }
                         }
                         .padding(16)
                         .background(
                             Color(nsColor: .controlBackgroundColor),
-                            in: RoundedRectangle(cornerRadius: 12)
-                        )
+                            in: RoundedRectangle(cornerRadius: 12))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.1))
-                        )
+                            RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.1)))
                         .padding(.horizontal)
                     }
 
@@ -107,11 +105,9 @@ struct MachineDetailView: View {
                         }
                         .background(
                             Color(nsColor: .controlBackgroundColor),
-                            in: RoundedRectangle(cornerRadius: 12)
-                        )
+                            in: RoundedRectangle(cornerRadius: 12))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.1))
-                        )
+                            RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.1)))
                         .padding(.horizontal)
                     }
                 }
@@ -190,7 +186,7 @@ private struct MachineDisplaySettingsView: View {
 
             Section("Scaling") {
                 VStack(alignment: .leading) {
-                    Slider(value: $scale, in: 0.5...2.0, step: 0.25) {
+                    Slider(value: $scale, in: 0.5 ... 2.0, step: 0.25) {
                         Text("Display Scale")
                     } minimumValueLabel: {
                         Image(systemName: "textformat.size.smaller")

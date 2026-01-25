@@ -1,6 +1,6 @@
 import OSLog
 
-public struct MBLogger {
+public enum MBLogger {
     private static let subsystem = "com.tinnci.MagicBorder"
 
     public static let method = Logger(subsystem: subsystem, category: "Method")

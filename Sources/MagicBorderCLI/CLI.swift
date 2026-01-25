@@ -24,7 +24,7 @@ struct CLI {
         // Keep running to listen
         while true {
             await Task.yield()
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            try? await Task.sleep(nanoseconds: 1000000000)
             if client.isConnected {
                 // print("Heartbeat...")
             }

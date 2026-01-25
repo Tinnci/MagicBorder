@@ -27,6 +27,10 @@ public final class MWBCompatibilityService: ObservableObject {
     private var messagePort: UInt16
     private var clipboardPort: UInt16
     private var currentSecurityKey: String = ""
+    private var lastConnectHost: String?
+    private var lastConnectMessagePort: UInt16?
+    private var lastConnectClipboardPort: UInt16?
+    private var reconnectTask: Task<Void, Never>?
 
     public var onConnected: ((MWBPeer) -> Void)?
     public var onDisconnected: ((MWBPeer) -> Void)?
@@ -48,8 +52,8 @@ public final class MWBCompatibilityService: ObservableObject {
 
     public init(
         localName: String, localId: Int32, messagePort: UInt16 = 15101,
-        clipboardPort: UInt16 = 15100
-    ) {
+        clipboardPort: UInt16 = 15100)
+    {
         self.localName = localName
         self.localId = localId
         self.messagePort = messagePort
@@ -70,6 +74,11 @@ public final class MWBCompatibilityService: ObservableObject {
     }
 
     public func stop() {
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        lastConnectHost = nil
+        lastConnectMessagePort = nil
+        lastConnectClipboardPort = nil
         messageListener?.cancel()
         clipboardListener?.cancel()
         messageListener = nil
@@ -99,8 +108,7 @@ public final class MWBCompatibilityService: ObservableObject {
         }
     }
 
-    public func connectToHost(ip: String, messagePort: UInt16? = nil, clipboardPort: UInt16? = nil)
-    {
+    public func connectToHost(ip: String, messagePort: UInt16? = nil, clipboardPort: UInt16? = nil) {
         guard !ip.isEmpty else { return }
         let trimmedKey = currentSecurityKey.replacingOccurrences(of: " ", with: "")
         guard trimmedKey.count >= 16 else {
@@ -110,17 +118,20 @@ public final class MWBCompatibilityService: ObservableObject {
         let host = NWEndpoint.Host(ip)
 
         onLog?(
-            "Connecting to \(ip):\(messagePort ?? self.messagePort) and \(ip):\(clipboardPort ?? self.clipboardPort)"
-        )
+            "Connecting to \(ip):\(messagePort ?? self.messagePort) and \(ip):\(clipboardPort ?? self.clipboardPort)")
+
+        lastConnectHost = ip
+        lastConnectMessagePort = messagePort ?? self.messagePort
+        lastConnectClipboardPort = clipboardPort ?? self.clipboardPort
 
         if let port = NWEndpoint.Port(rawValue: messagePort ?? self.messagePort) {
             let connection = NWConnection(to: .hostPort(host: host, port: port), using: .tcp)
-            handleNewConnection(connection, kind: .message)
+            handleNewConnection(connection, kind: .message, isOutbound: true)
         }
 
         if let port = NWEndpoint.Port(rawValue: clipboardPort ?? self.clipboardPort) {
             let connection = NWConnection(to: .hostPort(host: host, port: port), using: .tcp)
-            handleNewConnection(connection, kind: .clipboard)
+            handleNewConnection(connection, kind: .clipboard, isOutbound: true)
         }
     }
 
@@ -208,7 +219,7 @@ public final class MWBCompatibilityService: ObservableObject {
     public func sendClipboardImage(_ data: Data, to peerId: Int32?) {
         guard
             let target = clipboardTargets().first(where: { $0.peer?.id == peerId })
-                ?? messageSessions.first(where: { $0.peer?.id == peerId })
+            ?? messageSessions.first(where: { $0.peer?.id == peerId })
         else { return }
         sendClipboardImage(data, via: target)
     }
@@ -221,9 +232,9 @@ public final class MWBCompatibilityService: ObservableObject {
         }
 
         if let image = NSImage(pasteboard: NSPasteboard.general),
-            let tiff = image.tiffRepresentation,
-            let bitmap = NSBitmapImageRep(data: tiff),
-            let png = bitmap.representation(using: .png, properties: [:])
+           let tiff = image.tiffRepresentation,
+           let bitmap = NSBitmapImageRep(data: tiff),
+           let png = bitmap.representation(using: .png, properties: [:])
         {
             sendClipboardImage(png, via: session)
         }
@@ -245,10 +256,10 @@ public final class MWBCompatibilityService: ObservableObject {
                 return
             }
             let listener = try NWListener(using: .tcp, on: port)
-            self.messageListener = listener
+            messageListener = listener
             listener.newConnectionHandler = { [weak self] connection in
                 Task { @MainActor [weak self] in
-                    self?.handleNewConnection(connection, kind: .message)
+                    self?.handleNewConnection(connection, kind: .message, isOutbound: false)
                 }
             }
             listener.start(queue: DispatchQueue.main)
@@ -268,10 +279,10 @@ public final class MWBCompatibilityService: ObservableObject {
                 return
             }
             let listener = try NWListener(using: .tcp, on: port)
-            self.clipboardListener = listener
+            clipboardListener = listener
             listener.newConnectionHandler = { [weak self] connection in
                 Task { @MainActor [weak self] in
-                    self?.handleNewConnection(connection, kind: .clipboard)
+                    self?.handleNewConnection(connection, kind: .clipboard, isOutbound: false)
                 }
             }
             listener.start(queue: DispatchQueue.main)
@@ -282,7 +293,11 @@ public final class MWBCompatibilityService: ObservableObject {
         }
     }
 
-    private func handleNewConnection(_ connection: NWConnection, kind: MWBSessionKind) {
+    private func handleNewConnection(
+        _ connection: NWConnection,
+        kind: MWBSessionKind,
+        isOutbound: Bool)
+    {
         guard crypto.sessionKey != nil else {
             connection.cancel()
             return
@@ -293,12 +308,12 @@ public final class MWBCompatibilityService: ObservableObject {
             kind: kind,
             crypto: crypto,
             localName: localName,
-            localId: localId
-        )
+            localId: localId,
+            isOutbound: isOutbound)
 
         session.onPacket = { [weak self, weak session] packet in
             guard let self, let session else { return }
-            self.handlePacket(packet, from: session)
+            handlePacket(packet, from: session)
         }
 
         session.onError = { [weak self] message in
@@ -312,7 +327,7 @@ public final class MWBCompatibilityService: ObservableObject {
 
         session.onDisconnected = { [weak self, weak session] in
             guard let self, let session else { return }
-            self.removeSession(session)
+            removeSession(session)
         }
 
         switch kind {
@@ -326,25 +341,79 @@ public final class MWBCompatibilityService: ObservableObject {
     }
 
     private func removeSession(_ session: MWBSession) {
+        // 取消心跳任务
+        session.cancelHeartbeat()
+        session.cancelClipboardBeat()
+
         messageSessions.removeAll { $0 === session }
         clipboardSessions.removeAll { $0 === session }
+
         if let peer = session.peer {
+            onLog?("⚠ Connection lost from '\(peer.name)' (ID=\(peer.id))")
             onDisconnected?(peer)
+        }
+
+        scheduleReconnectIfNeeded(for: session)
+    }
+
+    private func dedupeSessions(using session: MWBSession) {
+        guard let peer = session.peer else { return }
+        if session.kind == .message {
+            for other in messageSessions where other !== session {
+                if other.peer?.id == peer.id || other.peer?.name == peer.name {
+                    other.close()
+                }
+            }
+            messageSessions.removeAll {
+                $0 !== session && ($0.peer?.id == peer.id || $0.peer?.name == peer.name)
+            }
+        } else {
+            for other in clipboardSessions where other !== session {
+                if other.peer?.id == peer.id || other.peer?.name == peer.name {
+                    other.close()
+                }
+            }
+            clipboardSessions.removeAll {
+                $0 !== session && ($0.peer?.id == peer.id || $0.peer?.name == peer.name)
+            }
+        }
+    }
+
+    private func scheduleReconnectIfNeeded(for session: MWBSession) {
+        guard session.isOutbound, session.kind == .message else { return }
+        guard messageSessions.isEmpty else { return }
+        guard let host = lastConnectHost,
+              let msgPort = lastConnectMessagePort,
+              let clipPort = lastConnectClipboardPort
+        else { return }
+
+        if reconnectTask?.isCancelled == false { return }
+        reconnectTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.5))
+            await MainActor.run { [weak self] in
+                self?.onLog?("⟳ Reconnecting to \(host)...")
+                self?.connectToHost(ip: host, messagePort: msgPort, clipboardPort: clipPort)
+            }
         }
     }
 
     private func handlePacket(_ packet: MWBPacket, from session: MWBSession) {
+        if session.isHandshakeVerified,
+           packet.type == .handshake || packet.type == .handshakeAck
+        {
+            return
+        }
+
         switch packet.type {
         case .handshake:
-            session.peer = MWBPeer(id: packet.src, name: packet.machineName)
-            if let peer = session.peer {
-                onLog?("Handshake received from '\(peer.name)' (ID=\(peer.id))")
-                onConnected?(peer)
+            if session.pendingPeerName == nil {
+                session.pendingPeerName = packet.machineName
+                onLog?("Handshake received from '\(packet.machineName)' (pending)")
             }
-            var ack = MWBPacket()
+
+            var ack = packet
             ack.type = .handshakeAck
-            ack.src = localId
-            ack.des = packet.src
+            ack.src = 0
             ack.machineName = localName
             ack.machine1 = ~packet.machine1
             ack.machine2 = ~packet.machine2
@@ -352,29 +421,53 @@ public final class MWBCompatibilityService: ObservableObject {
             ack.machine4 = ~packet.machine4
             session.send(ack)
         case .handshakeAck:
+            guard !session.isHandshakeVerified else { break }
+
             if let (m1, m2, m3, m4) = session.handshakeChallenge,
-                packet.machine1 == m1,
-                packet.machine2 == m2,
-                packet.machine3 == m3,
-                packet.machine4 == m4
+               packet.machine1 == ~m1,
+               packet.machine2 == ~m2,
+               packet.machine3 == ~m3,
+               packet.machine4 == ~m4
             {
                 session.peer = MWBPeer(id: packet.src, name: packet.machineName)
+                session.isHandshakeVerified = true
+                session.handshakeChallenge = nil
+                session.handshakeAckFailures = 0
+
                 if let peer = session.peer {
-                    onLog?("HandshakeAck VERIFIED from '\(peer.name)' (ID=\(peer.id))")
+                    onLog?("✓ HandshakeAck VERIFIED from '\(peer.name)' (ID=\(peer.id))")
                     onConnected?(peer)
-                    session.handshakeChallenge = nil
-                    session.startHeartbeat()
+                    dedupeSessions(using: session)
+                    session.startHeartbeat(initial: true)
+                    if session.kind == .message {
+                        session.sendHelloBurst()
+                    }
                 }
-            } else {
-                onLog?("HandshakeAck FAILED verification: challenge mismatch")
+            } else if session.handshakeChallenge != nil {
+                session.handshakeAckFailures += 1
+                if session.handshakeAckFailures == 1 {
+                    onLog?("✗ HandshakeAck FAILED verification")
+                }
             }
-        case .hello, .hi, .awake, .heartbeat, .heartbeatEx, .heartbeatExL2, .heartbeatExL3:
+        case .hello:
             if session.peer == nil {
                 session.peer = MWBPeer(id: packet.src, name: packet.machineName)
             }
             if let peer = session.peer {
                 onConnected?(peer)
             }
+            session.sendHeartbeatAck()
+        case .hi, .awake, .heartbeat, .heartbeatEx:
+            if session.peer == nil {
+                session.peer = MWBPeer(id: packet.src, name: packet.machineName)
+            }
+            if let peer = session.peer {
+                onConnected?(peer)
+            }
+        case .heartbeatExL2:
+            session.sendHeartbeatExL3()
+        case .heartbeatExL3:
+            break
         case .byeBye:
             if let peer = session.peer {
                 onDisconnected?(peer)
@@ -387,6 +480,7 @@ public final class MWBCompatibilityService: ObservableObject {
                     onConnected?(peer)
                 }
                 session.sendClipboardHandshake(push: packet.type == .clipboardPush)
+                session.startClipboardBeat()
             }
         case .mouse:
             let event = MWBMouseEvent(
@@ -419,7 +513,7 @@ public final class MWBCompatibilityService: ObservableObject {
             onDragDropOperation?(session.peer?.name)
         case .clipboardDragDropEnd:
             if let payload = session.consumeDragDropPayload(),
-                let urls = decodeFileDrop(payload)
+               let urls = decodeFileDrop(payload)
             {
                 onClipboardFiles?(urls)
             }
@@ -451,7 +545,7 @@ public final class MWBCompatibilityService: ObservableObject {
 
     private func sendClipboardText(_ text: String, via session: MWBSession) {
         guard let textData = text.data(using: .utf16LittleEndian),
-            let compressed = MWBCompression.deflateCompress(textData)
+              let compressed = MWBCompression.deflateCompress(textData)
         else { return }
         sendClipboardData(compressed, isImage: false, via: session)
     }
@@ -476,7 +570,7 @@ public final class MWBCompatibilityService: ObservableObject {
         var index = 0
         while index < data.count {
             let end = min(index + chunkSize, data.count)
-            let chunk = data.subdata(in: index..<end)
+            let chunk = data.subdata(in: index ..< end)
             var packet = MWBPacket()
             packet.type = type
             packet.src = localId
@@ -494,7 +588,7 @@ public final class MWBCompatibilityService: ObservableObject {
     }
 
     private func encodeFileDrop(_ urls: [URL]) -> Data {
-        let paths = urls.map { $0.path }
+        let paths = urls.map(\.path)
         let joined = paths.joined(separator: "\0") + "\0\0"
         return joined.data(using: .utf16LittleEndian) ?? Data()
     }
@@ -536,6 +630,7 @@ private final class MWBSession {
     let crypto: MWBCrypto
     let localName: String
     let localId: Int32
+    let isOutbound: Bool
 
     var peer: MWBPeer?
 
@@ -552,23 +647,34 @@ private final class MWBSession {
     private var initialBlockDiscarded = false
 
     var handshakeChallenge: (Int32, Int32, Int32, Int32)?
+    var isHandshakeVerified = false
+    var handshakeAckFailures = 0
+    var pendingPeerName: String?
+    private var hasLoggedWaiting = false
 
     private var clipboardAccumulator = Data()
     private var clipboardIsImage = false
     private var dragDropAccumulator = Data()
     private var heartbeatTimer: Task<Void, Never>?
+    private var clipboardBeatTimer: Task<Void, Never>?
+    private var helloBurstTask: Task<Void, Never>?
 
     init(
-        connection: NWConnection, kind: MWBSessionKind, crypto: MWBCrypto, localName: String,
-        localId: Int32
-    ) {
+        connection: NWConnection,
+        kind: MWBSessionKind,
+        crypto: MWBCrypto,
+        localName: String,
+        localId: Int32,
+        isOutbound: Bool)
+    {
         self.connection = connection
         self.kind = kind
         self.crypto = crypto
         self.localName = localName
         self.localId = localId
-        self.encryptor = crypto.makeEncryptor()
-        self.decryptor = crypto.makeDecryptor()
+        self.isOutbound = isOutbound
+        encryptor = crypto.makeEncryptor()
+        decryptor = crypto.makeDecryptor()
     }
 
     func start() {
@@ -577,24 +683,26 @@ private final class MWBSession {
                 guard let self else { return }
                 switch state {
                 case .ready:
-                    self.onLog?("Session ready, kind=\(self.kind)")
-                    self.sendInitialIVBlock()
-                    if self.kind == .message {
-                        self.onLog?("Sending handshake burst (10 packets)")
-                        self.sendHandshakeBurst()
-                    } else if self.kind == .clipboard {
-                        self.onLog?("Sending clipboard handshake")
-                        self.sendClipboardHandshake(push: false)
+                    onLog?("✓ Session ready, kind=\(kind)")
+                    sendInitialIVBlock()
+                    if kind == .message {
+                        sendHandshakeBurst()
+                    } else if kind == .clipboard {
+                        sendClipboardHandshake(push: false)
                     }
-                    self.receiveLoop()
+                    receiveLoop()
                 case .waiting(let error):
-                    self.onLog?("Connection waiting: \(error.localizedDescription)")
+                    // 只输出一次waiting状态，避免日志刷屏
+                    if !hasLoggedWaiting {
+                        onLog?("⏳ Connection waiting: \(error.localizedDescription)")
+                        hasLoggedWaiting = true
+                    }
                 case .failed(let error):
-                    self.onLog?("Connection failed: \(error.localizedDescription)")
-                    self.onDisconnected?()
+                    onLog?("✗ Connection failed: \(error.localizedDescription)")
+                    onDisconnected?()
                 case .cancelled:
-                    self.onLog?("Connection cancelled")
-                    self.onDisconnected?()
+                    onLog?("Connection cancelled")
+                    onDisconnected?()
                 default:
                     break
                 }
@@ -605,10 +713,14 @@ private final class MWBSession {
 
     func send(_ packet: MWBPacket) {
         guard let packetToSend = finalize(packet),
-            let encrypted = encrypt(packetToSend.data)
+              let encrypted = encrypt(packetToSend.data)
         else { return }
 
-        onLog?("TX Packet: type=\(packetToSend.type) src=\(packetToSend.src) des=\(packetToSend.des)")
+        // 只输出关键包类型的日志
+        let shouldLog = [.handshake, .handshakeAck, .heartbeat, .matrix].contains(packetToSend.type)
+        if shouldLog {
+            onLog?("TX Packet: type=\(packetToSend.type) src=\(packetToSend.src) des=\(packetToSend.des)")
+        }
         connection.send(content: encrypted, completion: .contentProcessed { _ in })
     }
 
@@ -645,48 +757,128 @@ private final class MWBSession {
     }
 
     private func sendHandshakeBurst() {
-        let m1 = Int32.random(in: Int32.min...Int32.max)
-        let m2 = Int32.random(in: Int32.min...Int32.max)
-        let m3 = Int32.random(in: Int32.min...Int32.max)
-        let m4 = Int32.random(in: Int32.min...Int32.max)
-        handshakeChallenge = (m1, m2, m3, m4)
+        var randomData = Data(count: MWBPacket.extendedSize)
+        randomData.withUnsafeMutableBytes { buffer in
+            guard let base = buffer.baseAddress else { return }
+            for i in 0 ..< buffer.count {
+                base.storeBytes(of: UInt8.random(in: 0 ... 255), toByteOffset: i, as: UInt8.self)
+            }
+        }
 
-        for _ in 0..<10 {
-            var packet = MWBPacket()
-            packet.type = .handshake
-            packet.src = localId
-            packet.des = 0
-            packet.machineName = localName
-            packet.machine1 = m1
-            packet.machine2 = m2
-            packet.machine3 = m3
-            packet.machine4 = m4
+        var packet = MWBPacket(data: randomData)
+        packet.type = .handshake
+        packet.src = localId
+        packet.des = 0
+        packet.machineName = localName
+        handshakeChallenge = (packet.machine1, packet.machine2, packet.machine3, packet.machine4)
+        handshakeAckFailures = 0
+
+        onLog?("→ Sending handshake burst (10 packets)")
+        for _ in 0 ..< 10 {
             send(packet)
         }
     }
 
     private func sendInitialIVBlock() {
-        let random = Data((0..<16).map { _ in UInt8.random(in: 0...255) })
+        let random = Data((0 ..< 16).map { _ in UInt8.random(in: 0 ... 255) })
         if let encrypted = encrypt(random) {
-            onLog?("Sending initial IV block (16 random bytes encrypted)")
+            // 简化日志输出
             connection.send(content: encrypted, completion: .contentProcessed { _ in })
         }
     }
 
-    func startHeartbeat() {
+    func startHeartbeat(initial: Bool = false) {
         heartbeatTimer?.cancel()
+
+        if initial {
+            var initialPacket = MWBPacket()
+            initialPacket.type = .heartbeatEx
+            initialPacket.src = localId
+            initialPacket.des = Int32(255)
+            initialPacket.machineName = localName
+            send(initialPacket)
+        }
+
         heartbeatTimer = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
                 guard let self, !Task.isCancelled else { return }
                 var packet = MWBPacket()
                 packet.type = .heartbeat
-                packet.src = self.localId
-                packet.des = self.peer?.id ?? 0
-                packet.machineName = self.localName
-                self.send(packet)
+                packet.src = localId
+                packet.des = Int32(255)
+                packet.machineName = localName
+                send(packet)
             }
         }
+    }
+
+    func cancelHeartbeat() {
+        heartbeatTimer?.cancel()
+        heartbeatTimer = nil
+    }
+
+    func startClipboardBeat() {
+        clipboardBeatTimer?.cancel()
+        clipboardBeatTimer = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                guard let self, !Task.isCancelled else { return }
+                var packet = MWBPacket()
+                packet.type = .clipboard
+                packet.src = localId
+                packet.des = Int32(255)
+                packet.machineName = localName
+                send(packet)
+            }
+        }
+    }
+
+    func sendHeartbeatAck() {
+        var packet = MWBPacket()
+        packet.type = .heartbeat
+        packet.src = localId
+        packet.des = Int32(255)
+        packet.machineName = localName
+        send(packet)
+    }
+
+    func sendHeartbeatExL3() {
+        var packet = MWBPacket()
+        packet.type = .heartbeatExL3
+        packet.src = localId
+        packet.des = Int32(255)
+        packet.machineName = localName
+        send(packet)
+    }
+
+    func cancelClipboardBeat() {
+        clipboardBeatTimer?.cancel()
+        clipboardBeatTimer = nil
+    }
+
+    func sendHelloBurst() {
+        helloBurstTask?.cancel()
+        helloBurstTask = Task { [weak self] in
+            guard let self else { return }
+            for _ in 0 ..< 2 {
+                var packet = MWBPacket()
+                packet.type = .hello
+                packet.src = localId
+                packet.des = Int32(255)
+                packet.machineName = localName
+                send(packet)
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    func close() {
+        cancelHeartbeat()
+        cancelClipboardBeat()
+        helloBurstTask?.cancel()
+        helloBurstTask = nil
+        connection.cancel()
     }
 
     private func receiveLoop() {
@@ -695,15 +887,18 @@ private final class MWBSession {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let content {
-                    self.onLog?("Received \(content.count) encrypted bytes")
-                    self.encryptedBuffer.append(content)
-                    self.decryptAvailable()
-                    self.parsePackets()
+                    // 减少日志频率，只在大包时输出
+                    if content.count >= 256 {
+                        onLog?("Received \(content.count) encrypted bytes")
+                    }
+                    encryptedBuffer.append(content)
+                    decryptAvailable()
+                    parsePackets()
                 }
                 if !isComplete {
-                    self.receiveLoop()
+                    receiveLoop()
                 } else {
-                    self.onDisconnected?()
+                    onDisconnected?()
                 }
             }
         }
@@ -726,7 +921,6 @@ private final class MWBSession {
         }
 
         if !initialBlockDiscarded, plainBuffer.count >= 16 {
-            onLog?("Discarding initial IV block (16 bytes)")
             plainBuffer.removeFirst(16)
             initialBlockDiscarded = true
         }
@@ -755,10 +949,9 @@ private final class MWBSession {
                 MBLogger.network.debug("\(msg)")
                 // Only log frequency to avoid spamming UI?
                 // For diagnosis, let's log it once or periodically.
-                if packet.magicHigh16 != 0 {  // Don't log all zeros
+                if packet.magicHigh16 != 0 { // Don't log all zeros
                     onLog?(
-                        "Packet Reject: Magic \(String(format: "%04X", packet.magicHigh16)) != \(String(format: "%04X", expected))"
-                    )
+                        "Packet Reject: Magic \(String(format: "%04X", packet.magicHigh16)) != \(String(format: "%04X", expected))")
                 }
                 continue
             }
@@ -767,7 +960,12 @@ private final class MWBSession {
             packet.data[2] = 0
             packet.data[3] = 0
 
-            onLog?("RX Packet: type=\(packet.type) src=\(packet.src) des=\(packet.des) name='\(packet.machineName)'")
+            // 只输出重要的包类型日志
+            let shouldLog = [.handshake, .handshakeAck, .heartbeat, .machineSwitched, .matrix, .captureScreenCommand].contains(packet.type)
+            let suppressHandshakeLog = isHandshakeVerified && (packet.type == .handshake || packet.type == .handshakeAck)
+            if shouldLog, !suppressHandshakeLog {
+                onLog?("RX Packet: type=\(packet.type) src=\(packet.src) des=\(packet.des)")
+            }
             onPacket?(packet)
         }
     }

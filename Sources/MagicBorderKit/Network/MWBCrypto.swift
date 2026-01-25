@@ -12,7 +12,7 @@ public class MWBCrypto: @unchecked Sendable {
     // Constants from SocketStuff.cs
     private let saltString = "18446744073709551615"
     private let iterations: UInt32 = 50000
-    private let keyLength = 32  // 256 bits
+    private let keyLength = 32 // 256 bits
 
     public var sessionKey: Data?
     public var magicNumber: UInt32 = 0
@@ -20,9 +20,9 @@ public class MWBCrypto: @unchecked Sendable {
     public func deriveKey(from secretKey: String) {
         let trimmedKey = secretKey.replacingOccurrences(of: " ", with: "")
         guard !trimmedKey.isEmpty,
-            let passwordData = trimmedKey.data(using: .utf8),
-            // C# uses Common.GetBytesU (UTF-16LE) for the salt.
-            let saltData = saltString.data(using: .utf16LittleEndian)
+              let passwordData = trimmedKey.data(using: .utf8),
+              // C# uses Common.GetBytesU (UTF-16LE) for the salt.
+              let saltData = saltString.data(using: .utf16LittleEndian)
         else {
             sessionKey = nil
             magicNumber = 0
@@ -45,15 +45,14 @@ public class MWBCrypto: @unchecked Sendable {
                         CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA512),
                         iterations,
                         derivedKeyBytes.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                        keyLength
-                    )
+                        keyLength)
                 }
             }
         }
 
         if result == kCCSuccess {
-            self.sessionKey = derivedKeyData
-            self.magicNumber = calculateMagicNumber(from: trimmedKey)
+            sessionKey = derivedKeyData
+            magicNumber = calculateMagicNumber(from: trimmedKey)
             print("Keys derived successfully. Magic: \(magicNumber)")
         } else {
             print("Failed to derive key: \(result)")
@@ -68,13 +67,13 @@ public class MWBCrypto: @unchecked Sendable {
         // Pad or truncate to 32 bytes (PACKAGE_SIZE) - Encryption.cs logic
         var bytes = Data(count: 32)
         let copyCount = min(keyData.count, 32)
-        bytes.replaceSubrange(0..<copyCount, with: keyData)
+        bytes.replaceSubrange(0 ..< copyCount, with: keyData)
 
         // Double SHA512 loop
         let hash = SHA512.hash(data: bytes)
         var currentHashData = Data(hash)
 
-        for _ in 0..<50000 {
+        for _ in 0 ..< 50000 {
             let nextHash = SHA512.hash(data: currentHashData)
             currentHashData = Data(nextHash)
         }
@@ -119,7 +118,7 @@ public class MWBCrypto: @unchecked Sendable {
 
         let bufferSize = padded.count + kCCBlockSizeAES128
         var buffer = Data(count: bufferSize)
-        var numBytesEncrypted: Int = 0
+        var numBytesEncrypted = 0
 
         let cryptStatus = buffer.withUnsafeMutableBytes { bufferBytes in
             padded.withUnsafeBytes { dataBytes in
@@ -133,8 +132,7 @@ public class MWBCrypto: @unchecked Sendable {
                             ivBytes.baseAddress,
                             dataBytes.baseAddress, padded.count,
                             bufferBytes.baseAddress, bufferSize,
-                            &numBytesEncrypted
-                        )
+                            &numBytesEncrypted)
                     }
                 }
             }
@@ -154,7 +152,7 @@ public class MWBCrypto: @unchecked Sendable {
 
         let bufferSize = data.count + kCCBlockSizeAES128
         var buffer = Data(count: bufferSize)
-        var numBytesDecrypted: Int = 0
+        var numBytesDecrypted = 0
 
         let cryptStatus = buffer.withUnsafeMutableBytes { bufferBytes in
             data.withUnsafeBytes { dataBytes in
@@ -168,8 +166,7 @@ public class MWBCrypto: @unchecked Sendable {
                             ivBytes.baseAddress,
                             dataBytes.baseAddress, data.count,
                             bufferBytes.baseAddress, bufferSize,
-                            &numBytesDecrypted
-                        )
+                            &numBytesDecrypted)
                     }
                 }
             }
@@ -193,7 +190,7 @@ public class MWBCrypto: @unchecked Sendable {
 
         let bufferSize = padded.count + kCCBlockSizeAES128
         var buffer = Data(count: bufferSize)
-        var numBytesEncrypted: Int = 0
+        var numBytesEncrypted = 0
 
         let cryptStatus = buffer.withUnsafeMutableBytes { bufferBytes in
             padded.withUnsafeBytes { dataBytes in
@@ -207,8 +204,7 @@ public class MWBCrypto: @unchecked Sendable {
                             ivBytes.baseAddress,
                             dataBytes.baseAddress, padded.count,
                             bufferBytes.baseAddress, bufferSize,
-                            &numBytesEncrypted
-                        )
+                            &numBytesEncrypted)
                     }
                 }
             }
@@ -226,7 +222,7 @@ public class MWBCrypto: @unchecked Sendable {
 
         let bufferSize = data.count + kCCBlockSizeAES128
         var buffer = Data(count: bufferSize)
-        var numBytesDecrypted: Int = 0
+        var numBytesDecrypted = 0
 
         let cryptStatus = buffer.withUnsafeMutableBytes { bufferBytes in
             data.withUnsafeBytes { dataBytes in
@@ -240,8 +236,7 @@ public class MWBCrypto: @unchecked Sendable {
                             ivBytes.baseAddress,
                             dataBytes.baseAddress, data.count,
                             bufferBytes.baseAddress, bufferSize,
-                            &numBytesDecrypted
-                        )
+                            &numBytesDecrypted)
                     }
                 }
             }
@@ -270,8 +265,7 @@ public struct MWBStreamCipher {
                     CCOptions(0),
                     keyBytes.baseAddress, key.count,
                     ivBytes.baseAddress,
-                    &cryptorOut
-                )
+                    &cryptorOut)
             }
         }
 
@@ -279,8 +273,8 @@ public struct MWBStreamCipher {
             return nil
         }
 
-        self.cryptor = cryptorOut
-        self.isEncrypting = operation == CCOperation(kCCEncrypt)
+        cryptor = cryptorOut
+        isEncrypting = operation == CCOperation(kCCEncrypt)
     }
 
     public mutating func update(_ data: Data) -> Data? {
@@ -307,8 +301,7 @@ public struct MWBStreamCipher {
                     cryptor,
                     inBytes.baseAddress, input.count,
                     outBytes.baseAddress, outLength,
-                    &bytesOut
-                )
+                    &bytesOut)
             }
         }
 
@@ -327,8 +320,7 @@ public struct MWBStreamCipher {
             CCCryptorFinal(
                 cryptor,
                 outBytes.baseAddress, outLength,
-                &bytesOut
-            )
+                &bytesOut)
         }
 
         guard status == kCCSuccess else { return nil }

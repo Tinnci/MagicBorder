@@ -43,9 +43,9 @@ struct DashboardView: View {
 
     var filteredMachines: [Machine] {
         if searchText.isEmpty {
-            return machines
+            machines
         } else {
-            return machines.filter { $0.name.localizedStandardContains(searchText) }
+            machines.filter { $0.name.localizedStandardContains(searchText) }
         }
     }
 
@@ -90,7 +90,7 @@ struct DashboardView: View {
                 }
             }
         } detail: {
-            if let selection = selection {
+            if let selection {
                 switch selection {
                 case .arrangement:
                     ArrangementDetailView(machines: $machines)
@@ -110,10 +110,9 @@ struct DashboardView: View {
                     fileSummary: networkManager.dragDropFileSummary,
                     progress: networkManager.dragDropProgress,
                     showDevice: effectiveOverlayPreferences.showDevice,
-                    showProgress: effectiveOverlayPreferences.showProgress
-                )
-                .scaleEffect(effectiveOverlayPreferences.scale)
-                .padding(effectiveOverlayPreferences.position.padding)
+                    showProgress: effectiveOverlayPreferences.showProgress)
+                    .scaleEffect(effectiveOverlayPreferences.scale)
+                    .padding(effectiveOverlayPreferences.position.padding)
             }
         }
         .frame(minWidth: 800, minHeight: 600)
@@ -124,7 +123,7 @@ struct DashboardView: View {
             machines = [
                 Machine(
                     id: localMachineId, name: Host.current().localizedName ?? "Local Mac",
-                    isOnline: true)
+                    isOnline: true),
             ]
         }
         .onChange(of: networkManager.compatibilitySettings.securityKey) { _, _ in
@@ -139,14 +138,14 @@ struct DashboardView: View {
         var newMachines = [
             Machine(
                 id: localMachineId, name: Host.current().localizedName ?? "Local Mac",
-                isOnline: true)
+                isOnline: true),
         ]
 
         for peer in connected {
             newMachines.append(Machine(id: peer.id, name: peer.name, isOnline: true))
         }
 
-        self.machines = newMachines
+        machines = newMachines
     }
 
     private var defaultOverlayPreferences: MBOverlayPreferences {
@@ -155,8 +154,7 @@ struct DashboardView: View {
             showDevice: dragDropOverlayShowDevice,
             showProgress: dragDropOverlayShowProgress,
             scale: dragDropOverlayScale,
-            position: position
-        )
+            position: position)
     }
 
     private var effectiveOverlayPreferences: MBOverlayPreferences {
@@ -168,21 +166,21 @@ struct DashboardView: View {
 extension MBOverlayPosition {
     fileprivate var alignment: Alignment {
         switch self {
-        case .top: return .top
-        case .topLeading: return .topLeading
-        case .topTrailing: return .topTrailing
-        case .bottom: return .bottom
-        case .bottomLeading: return .bottomLeading
-        case .bottomTrailing: return .bottomTrailing
+        case .top: .top
+        case .topLeading: .topLeading
+        case .topTrailing: .topTrailing
+        case .bottom: .bottom
+        case .bottomLeading: .bottomLeading
+        case .bottomTrailing: .bottomTrailing
         }
     }
 
     fileprivate var padding: EdgeInsets {
         switch self {
         case .bottom, .bottomLeading, .bottomTrailing:
-            return EdgeInsets(top: 0, leading: 16, bottom: 16, trailing: 16)
+            EdgeInsets(top: 0, leading: 16, bottom: 16, trailing: 16)
         default:
-            return EdgeInsets(top: 16, leading: 16, bottom: 0, trailing: 16)
+            EdgeInsets(top: 16, leading: 16, bottom: 0, trailing: 16)
         }
     }
 }
@@ -248,14 +246,13 @@ struct ArrangementDetailView: View {
     private var matrixTwoRowBinding: Binding<Bool> {
         Binding(
             get: { !networkManager.compatibilitySettings.matrixOneRow },
-            set: { networkManager.compatibilitySettings.matrixOneRow = !$0 }
-        )
+            set: { networkManager.compatibilitySettings.matrixOneRow = !$0 })
     }
+
     private var matrixSwapBinding: Binding<Bool> {
         Binding(
             get: { networkManager.compatibilitySettings.matrixCircle },
-            set: { networkManager.compatibilitySettings.matrixCircle = $0 }
-        )
+            set: { networkManager.compatibilitySettings.matrixCircle = $0 })
     }
 
     var body: some View {
@@ -273,9 +270,8 @@ struct ArrangementDetailView: View {
 
                         MachineMatrixView(
                             machines: $machines,
-                            columns: matrixTwoRowBinding.wrappedValue ? 2 : max(1, machines.count)
-                        )
-                        .padding(.horizontal)
+                            columns: matrixTwoRowBinding.wrappedValue ? 2 : max(1, machines.count))
+                            .padding(.horizontal)
 
                         Spacer()
                     }
@@ -289,8 +285,7 @@ struct ArrangementDetailView: View {
                 networkManager: networkManager,
                 machines: machines,
                 matrixTwoRowBinding: matrixTwoRowBinding,
-                matrixSwapBinding: matrixSwapBinding
-            )
+                matrixSwapBinding: matrixSwapBinding)
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -315,12 +310,11 @@ struct ArrangementDetailView: View {
             }
         }
         .onChange(of: machines) { _, newValue in
-            networkManager.updateLocalMatrix(names: newValue.map { $0.name })
+            networkManager.updateLocalMatrix(names: newValue.map(\.name))
             networkManager.sendMachineMatrix(
-                names: newValue.map { $0.name },
+                names: newValue.map(\.name),
                 twoRow: matrixTwoRowBinding.wrappedValue,
-                swap: matrixSwapBinding.wrappedValue
-            )
+                swap: matrixSwapBinding.wrappedValue)
         }
         .onChange(of: networkManager.compatibilitySettings.matrixOneRow) { _, _ in
             syncMatrix()
@@ -331,12 +325,11 @@ struct ArrangementDetailView: View {
     }
 
     private func syncMatrix() {
-        networkManager.updateLocalMatrix(names: machines.map { $0.name })
+        networkManager.updateLocalMatrix(names: machines.map(\.name))
         networkManager.sendMachineMatrix(
-            names: machines.map { $0.name },
+            names: machines.map(\.name),
             twoRow: matrixTwoRowBinding.wrappedValue,
-            swap: matrixSwapBinding.wrappedValue
-        )
+            swap: matrixSwapBinding.wrappedValue)
     }
 }
 
@@ -452,8 +445,7 @@ struct DiscoveredMachinesListView: View {
             if networkManager.discoveredPeers.isEmpty {
                 ContentUnavailableView(
                     "Scanning for machines...",
-                    systemImage: "antenna.radiowaves.left.and.right"
-                )
+                    systemImage: "antenna.radiowaves.left.and.right")
             }
         }
     }

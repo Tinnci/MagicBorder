@@ -26,8 +26,7 @@ public final class MBDragDropIndicator {
                 contentRect: NSRect(x: 0, y: 0, width: 280, height: 64),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
-                defer: false
-            )
+                defer: false)
             panel.isFloatingPanel = true
             panel.level = .floating
             panel.backgroundColor = .clear
@@ -83,7 +82,6 @@ private struct MBDragDropIndicatorView: View {
         .clipShape(.rect(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-        )
+                .stroke(Color.primary.opacity(0.1), lineWidth: 1))
     }
 }

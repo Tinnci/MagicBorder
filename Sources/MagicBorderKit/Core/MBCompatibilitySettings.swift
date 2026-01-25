@@ -22,33 +22,43 @@ public final class MBCompatibilitySettings {
     public var shareClipboard: Bool {
         didSet { defaults.set(shareClipboard, forKey: Keys.shareClipboard) }
     }
+
     public var transferFiles: Bool {
         didSet { defaults.set(transferFiles, forKey: Keys.transferFiles) }
     }
+
     public var switchByMouse: Bool {
         didSet { defaults.set(switchByMouse, forKey: Keys.switchByMouse) }
     }
+
     public var blockCorners: Bool {
         didSet { defaults.set(blockCorners, forKey: Keys.blockCorners) }
     }
+
     public var moveMouseRelatively: Bool {
         didSet { defaults.set(moveMouseRelatively, forKey: Keys.moveMouseRelatively) }
     }
+
     public var matrixOneRow: Bool {
         didSet { defaults.set(matrixOneRow, forKey: Keys.matrixOneRow) }
     }
+
     public var matrixCircle: Bool {
         didSet { defaults.set(matrixCircle, forKey: Keys.matrixCircle) }
     }
+
     public var messagePort: UInt16 {
         didSet { defaults.set(Int(messagePort), forKey: Keys.messagePort) }
     }
+
     public var clipboardPort: UInt16 {
         didSet { defaults.set(Int(clipboardPort), forKey: Keys.clipboardPort) }
     }
+
     public var securityKey: String {
         didSet { defaults.set(securityKey, forKey: Keys.securityKey) }
     }
+
     public var validationMessage: String?
 
     public init() {

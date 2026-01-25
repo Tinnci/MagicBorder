@@ -2,8 +2,8 @@ import AppKit
 import CryptoKit
 import Foundation
 import Network
-import OSLog
 import Observation
+import OSLog
 
 @MainActor
 @Observable
@@ -33,9 +33,10 @@ public class MBNetworkManager: Observation.Observable {
         public let connection: NWConnection
 
         public static func == (lhs: ConnectedMachine, rhs: ConnectedMachine) -> Bool {
-            return lhs.id == rhs.id
+            lhs.id == rhs.id
         }
     }
+
     public var connectedMachines: [ConnectedMachine] = []
 
     public var availablePeers: [NWBrowser.Result] = []
@@ -55,7 +56,7 @@ public class MBNetworkManager: Observation.Observable {
 
         // Manual conformance if needed, but synthesis should work for simple types
         public static func == (lhs: DiscoveredPeer, rhs: DiscoveredPeer) -> Bool {
-            return lhs.name == rhs.name && lhs.endpoint == rhs.endpoint
+            lhs.name == rhs.name && lhs.endpoint == rhs.endpoint
         }
 
         public func hash(into hasher: inout Hasher) {
@@ -69,7 +70,7 @@ public class MBNetworkManager: Observation.Observable {
     // Identity
     let localID = UUID()
     let localName = Host.current().localizedName ?? "Unknown Mac"
-    let localNumericID: Int32 = Int32.random(in: 1000...999999)
+    let localNumericID: Int32 = .random(in: 1000 ... 999999)
     public var localDisplayName: String { localName }
 
     public var switchState: SwitchState = .idle
@@ -77,7 +78,7 @@ public class MBNetworkManager: Observation.Observable {
         didSet {
             MBInputManager.shared.setRemoteTarget(activeMachineId)
             if let id = activeMachineId,
-                let machine = connectedMachines.first(where: { $0.id == id })
+               let machine = connectedMachines.first(where: { $0.id == id })
             {
                 activeMachineName = machine.name
                 switchState = .active
@@ -87,6 +88,7 @@ public class MBNetworkManager: Observation.Observable {
             }
         }
     }
+
     public var activeMachineName: String = Host.current().localizedName ?? "Local Mac"
     public var lastSwitchTimestamp: Date?
 
@@ -149,8 +151,7 @@ public class MBNetworkManager: Observation.Observable {
             localName: localName,
             localId: localNumericID,
             messagePort: compatibilitySettings.messagePort,
-            clipboardPort: compatibilitySettings.clipboardPort
-        )
+            clipboardPort: compatibilitySettings.clipboardPort)
         service.onLog = { [weak self] message in
             self?.appendPairingLog(message)
         }
@@ -159,19 +160,19 @@ public class MBNetworkManager: Observation.Observable {
         }
         service.onConnected = { [weak self] peer in
             guard let self else { return }
-            let id = self.uuid(for: peer.id)
-            if !self.connectedMachines.contains(where: { $0.id == id }) {
+            let id = uuid(for: peer.id)
+            if !connectedMachines.contains(where: { $0.id == id }) {
                 let machine = ConnectedMachine(
                     id: id, name: peer.name,
                     connection: NWConnection(
                         to: .hostPort(host: .ipv4(.any), port: 15101), using: .tcp))
-                self.connectedMachines.append(machine)
+                connectedMachines.append(machine)
             }
         }
         service.onDisconnected = { [weak self] peer in
             guard let self else { return }
-            let id = self.uuid(for: peer.id)
-            self.connectedMachines.removeAll { $0.id == id }
+            let id = uuid(for: peer.id)
+            connectedMachines.removeAll { $0.id == id }
         }
         service.onRemoteMouse = { event in
             MBInputManager.shared.simulateMouseEvent(event)
@@ -184,8 +185,8 @@ public class MBNetworkManager: Observation.Observable {
         }
         service.onMatrixOptions = { [weak self] twoRow, swap in
             guard let self else { return }
-            self.compatibilitySettings.matrixOneRow = !twoRow
-            self.compatibilitySettings.matrixCircle = swap
+            compatibilitySettings.matrixOneRow = !twoRow
+            compatibilitySettings.matrixCircle = swap
         }
         service.onClipboardText = { text in
             self.pasteboardMonitor?.ignoreNextChange()
@@ -206,7 +207,7 @@ public class MBNetworkManager: Observation.Observable {
             self.dragDropFileSummary = self.makeFileSummary(urls)
             self.dragDropProgress = 1.0
             Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                try? await Task.sleep(nanoseconds: 1500000000)
                 self?.dragDropState = nil
                 self?.dragDropSourceName = nil
                 self?.dragDropFileSummary = nil
@@ -216,42 +217,42 @@ public class MBNetworkManager: Observation.Observable {
         service.onMachineSwitched = { [weak self] peer in
             guard let self else { return }
             if let peer {
-                self.activeMachineId = self.uuid(for: peer.id)
-                self.activeMachineName = peer.name
+                activeMachineId = uuid(for: peer.id)
+                activeMachineName = peer.name
             } else {
-                self.activeMachineId = nil
-                self.activeMachineName = self.localName
+                activeMachineId = nil
+                activeMachineName = localName
             }
-            self.switchState = .active
-            self.lastSwitchTimestamp = Date()
+            switchState = .active
+            lastSwitchTimestamp = Date()
         }
         service.onHideMouse = {
             NSCursor.hide()
         }
         service.onDragDropBegin = { [weak self] sourceName in
             guard let self else { return }
-            self.dragDropState = .dragging
-            self.dragDropSourceName = sourceName
-            self.dragDropFileSummary = nil
-            self.dragDropProgress = nil
+            dragDropState = .dragging
+            dragDropSourceName = sourceName
+            dragDropFileSummary = nil
+            dragDropProgress = nil
         }
         service.onDragDropOperation = { [weak self] sourceName in
             guard let self else { return }
-            self.dragDropState = .dropping
-            self.dragDropSourceName = sourceName
-            self.dragDropProgress = nil
+            dragDropState = .dropping
+            dragDropSourceName = sourceName
+            dragDropProgress = nil
         }
         service.onDragDropEnd = { [weak self] in
             guard let self else { return }
-            self.dragDropState = nil
-            self.dragDropSourceName = nil
-            self.dragDropFileSummary = nil
-            self.dragDropProgress = nil
+            dragDropState = nil
+            dragDropSourceName = nil
+            dragDropFileSummary = nil
+            dragDropProgress = nil
         }
         service.onCaptureScreen = { [weak self] sourceId in
             self?.sendScreenCapture(to: sourceId)
         }
-        self.compatibilityService = service
+        compatibilityService = service
 
         // Only start when the key is valid to avoid spamming remote hosts with bad magic numbers.
         if compatibilitySettings.validateSecurityKey() {
@@ -265,7 +266,7 @@ public class MBNetworkManager: Observation.Observable {
         let monitor = MBPasteboardMonitor()
         monitor.onChange = { [weak self] content in
             guard let self else { return }
-            self.handleLocalPasteboard(content)
+            handleLocalPasteboard(content)
         }
         pasteboardMonitor = monitor
         monitor.startPolling()
@@ -300,8 +301,8 @@ public class MBNetworkManager: Observation.Observable {
 
     private func captureMainScreenPNG() -> Data? {
         guard let screen = NSScreen.main,
-            let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
-                as? NSNumber
+              let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+              as? NSNumber
         else { return nil }
         let displayId = CGDirectDisplayID(truncating: screenNumber)
         guard let cgImage = CGDisplayCreateImage(displayId) else { return nil }
@@ -329,7 +330,7 @@ public class MBNetworkManager: Observation.Observable {
     public func requestSwitch(to machineId: UUID) {
         if protocolMode == .modern {
             // Native Switching
-            self.activeMachineId = machineId
+            activeMachineId = machineId
             return
         }
 
@@ -399,17 +400,16 @@ public class MBNetworkManager: Observation.Observable {
             if nearCorner { return }
         }
 
-        let direction: EdgeDirection?
-        if nearLeft {
-            direction = .left
+        let direction: EdgeDirection? = if nearLeft {
+            .left
         } else if nearRight {
-            direction = .right
+            .right
         } else if nearTop {
-            direction = .up
+            .up
         } else if nearBottom {
-            direction = .down
+            .down
         } else {
-            direction = nil
+            nil
         }
 
         guard let dir = direction, let target = nextMachineName(for: dir) else { return }
@@ -515,12 +515,12 @@ public class MBNetworkManager: Observation.Observable {
         let browser = NWBrowser(for: .bonjour(type: serviceType, domain: nil), using: .tcp)
         self.browser = browser
 
-        browser.browseResultsChangedHandler = { [weak self] results, changes in
+        browser.browseResultsChangedHandler = { [weak self] results, _ in
             Task { @MainActor [weak self] in
-                guard let self = self else { return }
+                guard let self else { return }
 
                 // Keep manual/scanned peers, replace bonjour ones
-                let otherPeers = self.discoveredPeers.filter { $0.type != .bonjour }
+                let otherPeers = discoveredPeers.filter { $0.type != .bonjour }
 
                 let bonjourPeers = results.compactMap { result -> DiscoveredPeer? in
                     if case .service(let name, _, _, _) = result.endpoint {
@@ -530,9 +530,9 @@ public class MBNetworkManager: Observation.Observable {
                     return nil
                 }
 
-                self.discoveredPeers = otherPeers + bonjourPeers
+                discoveredPeers = otherPeers + bonjourPeers
                 // Legacy support (optional)
-                self.availablePeers = Array(results)
+                availablePeers = Array(results)
             }
         }
 
@@ -555,8 +555,7 @@ public class MBNetworkManager: Observation.Observable {
             compatibilityService?.connectToHost(
                 ip: ip,
                 messagePort: compatibilitySettings.messagePort,
-                clipboardPort: compatibilitySettings.clipboardPort
-            )
+                clipboardPort: compatibilitySettings.clipboardPort)
             return
         }
 
@@ -577,8 +576,7 @@ public class MBNetworkManager: Observation.Observable {
 
         compatibilityService?.updatePorts(
             messagePort: compatibilitySettings.messagePort,
-            clipboardPort: compatibilitySettings.clipboardPort
-        )
+            clipboardPort: compatibilitySettings.clipboardPort)
     }
 
     // MARK: - Subnet Scanning
@@ -597,7 +595,7 @@ public class MBNetworkManager: Observation.Observable {
 
         for prefix in prefixes {
             print("Scanning subnet: \(prefix).1-254")
-            for i in 1...254 {
+            for i in 1 ... 254 {
                 let ip = "\(prefix).\(i)"
                 queue.async(group: group) {
                     self.probe(ip: ip)
@@ -617,12 +615,12 @@ public class MBNetworkManager: Observation.Observable {
             }
             return nil
         }
-        return Array(Set(prefixes))  // Unique
+        return Array(Set(prefixes)) // Unique
     }
 
-    nonisolated private func probe(ip: String) {
+    private nonisolated func probe(ip: String) {
         let host = NWEndpoint.Host(ip)
-        let port = NWEndpoint.Port(integerLiteral: 15101)  // MWB Data Port
+        let port = NWEndpoint.Port(integerLiteral: 15101) // MWB Data Port
 
         let connection = NWConnection(to: .hostPort(host: host, port: port), using: .tcp)
 
@@ -671,7 +669,7 @@ public class MBNetworkManager: Observation.Observable {
     // MARK: - Connection Handling
 
     private func handleNewConnection(_ connection: NWConnection) {
-        self.peers.append(connection)
+        peers.append(connection)
 
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
@@ -734,12 +732,11 @@ public class MBNetworkManager: Observation.Observable {
             name: localName,
             screenWidth: Double(NSScreen.main?.frame.width ?? 0),
             screenHeight: Double(NSScreen.main?.frame.height ?? 0),
-            signature: nil
-        )
+            signature: nil)
 
         // Compute Signature
-        if let keyData = self.securityKey.data(using: .utf8),
-            let idData = info.id.uuidString.data(using: .utf8)
+        if let keyData = securityKey.data(using: .utf8),
+           let idData = info.id.uuidString.data(using: .utf8)
         {
             let key = SymmetricKey(data: keyData)
             let signature = HMAC<SHA256>.authenticationCode(for: idData, using: key)
@@ -858,7 +855,7 @@ public class MBNetworkManager: Observation.Observable {
             connection.send(
                 content: lengthData + data,
                 completion: .contentProcessed { error in
-                    if let error = error {
+                    if let error {
                         print("Send error: \(error)")
                     }
                 })
@@ -904,9 +901,9 @@ public class MBNetworkManager: Observation.Observable {
         // Read Length (4 bytes)
         connection.receive(minimumIncompleteLength: 4, maximumLength: 4) {
             [weak self] content, _, isComplete, error in
-            guard let self = self else { return }
+            guard let self else { return }
 
-            if let error = error {
+            if let error {
                 print("Receive error: \(error)")
                 return
             }
@@ -916,8 +913,8 @@ public class MBNetworkManager: Observation.Observable {
                 return
             }
 
-            guard let content = content, content.count == 4 else {
-                return  // Wait for more
+            guard let content, content.count == 4 else {
+                return // Wait for more
             }
 
             let length = content.withUnsafeBytes { $0.load(as: UInt32.self) }
@@ -932,15 +929,15 @@ public class MBNetworkManager: Observation.Observable {
     private func receiveBody(connection: NWConnection, length: Int) {
         connection.receive(minimumIncompleteLength: length, maximumLength: length) {
             [weak self] content, _, isComplete, error in
-            guard let self = self else { return }
+            guard let self else { return }
 
-            if let content = content {
+            if let content {
                 Task {
                     await self.handlePacketData(content, from: connection)
                 }
             }
 
-            if !isComplete && error == nil {
+            if !isComplete, error == nil {
                 // Continue loop
                 Task {
                     await self.receiveLoop(connection: connection)
@@ -958,8 +955,8 @@ public class MBNetworkManager: Observation.Observable {
 
                 // Verify Signature
                 if let signature = info.signature,
-                    let keyData = self.securityKey.data(using: .utf8),
-                    let idData = info.id.uuidString.data(using: .utf8)
+                   let keyData = securityKey.data(using: .utf8),
+                   let idData = info.id.uuidString.data(using: .utf8)
                 {
                     let key = SymmetricKey(data: keyData)
                     let computed = HMAC<SHA256>.authenticationCode(for: idData, using: key)
@@ -1006,5 +1003,4 @@ public class MBNetworkManager: Observation.Observable {
             MBLogger.network.error("Decoding error: \(error.localizedDescription)")
         }
     }
-
 }

@@ -47,7 +47,7 @@ public struct MWBPacket {
     public var data: Data
 
     public init() {
-        self.data = Data(count: MWBPacket.extendedSize)
+        data = Data(count: MWBPacket.extendedSize)
     }
 
     public init(data: Data) {
@@ -166,20 +166,20 @@ public struct MWBPacket {
     }
 
     public var machine3: Int32 {
-        get { getInt32(at: 32) }
-        set { setInt32(newValue, at: 32) }
+        get { getInt32(at: 24) }
+        set { setInt32(newValue, at: 24) }
     }
 
     public var machine4: Int32 {
-        get { getInt32(at: 36) }
-        set { setInt32(newValue, at: 36) }
+        get { getInt32(at: 28) }
+        set { setInt32(newValue, at: 28) }
     }
 
     // Clipboard payload (last 48 bytes of extended packet)
     public var clipboardPayload: Data {
         get {
             let start = MWBPacket.extendedSize - 48
-            return data.subdata(in: start..<MWBPacket.extendedSize)
+            return data.subdata(in: start ..< MWBPacket.extendedSize)
         }
         set {
             let start = MWBPacket.extendedSize - 48
@@ -187,14 +187,14 @@ public struct MWBPacket {
             if payload.count < 48 {
                 payload.append(Data(count: 48 - payload.count))
             }
-            data.replaceSubrange(start..<MWBPacket.extendedSize, with: payload.prefix(48))
+            data.replaceSubrange(start ..< MWBPacket.extendedSize, with: payload.prefix(48))
         }
     }
 
     // Machine name is ASCII, 32 bytes at offset 32 (big packet only)
     public var machineName: String {
         get {
-            let nameData = data.subdata(in: 32..<64)
+            let nameData = data.subdata(in: 32 ..< 64)
             return String(bytes: nameData, encoding: .ascii)?.trimmingCharacters(
                 in: .whitespacesAndNewlines) ?? ""
         }
@@ -207,7 +207,7 @@ public struct MWBPacket {
             } else if bytes.count < 32 {
                 bytes.append(Data(count: 32 - bytes.count))
             }
-            data.replaceSubrange(32..<64, with: bytes)
+            data.replaceSubrange(32 ..< 64, with: bytes)
         }
     }
 
@@ -229,7 +229,7 @@ public struct MWBPacket {
         }
         var val = value
         let bytes = Data(bytes: &val, count: 4)
-        data.replaceSubrange(offset..<offset + 4, with: bytes)
+        data.replaceSubrange(offset ..< offset + 4, with: bytes)
     }
 
     private func getInt64(at offset: Int) -> Int64 {
@@ -246,7 +246,7 @@ public struct MWBPacket {
         }
         var val = value
         let bytes = Data(bytes: &val, count: 8)
-        data.replaceSubrange(offset..<offset + 8, with: bytes)
+        data.replaceSubrange(offset ..< offset + 8, with: bytes)
     }
 
     public var isMatrixPacket: Bool {
@@ -259,7 +259,7 @@ public struct MWBPacket {
         if isMatrixPacket { return true }
         switch type {
         case .hello, .awake, .heartbeat, .heartbeatEx, .handshake, .handshakeAck, .clipboardPush,
-            .clipboard, .clipboardAsk, .clipboardImage, .clipboardText, .clipboardDataEnd:
+             .clipboard, .clipboardAsk, .clipboardImage, .clipboardText, .clipboardDataEnd:
             return true
         default:
             return false
@@ -272,7 +272,7 @@ public struct MWBPacket {
         }
         switch MWBPacketType(rawValue: rawType) ?? .invalid {
         case .hello, .awake, .heartbeat, .heartbeatEx, .handshake, .handshakeAck, .clipboardPush,
-            .clipboard, .clipboardAsk, .clipboardImage, .clipboardText, .clipboardDataEnd:
+             .clipboard, .clipboardAsk, .clipboardImage, .clipboardText, .clipboardDataEnd:
             return true
         default:
             return false
@@ -291,7 +291,7 @@ public struct MWBPacket {
         // C# computes checksum only over the first 32 bytes even for big packets.
         let endIndex = MWBPacket.baseSize
         var sum: UInt8 = 0
-        for i in 2..<endIndex {
+        for i in 2 ..< endIndex {
             sum = sum &+ data[i]
         }
         data[1] = sum
@@ -320,7 +320,7 @@ public struct MWBPacket {
             guard let base = raw.baseAddress else { return false }
             let bytes = base.assumingMemoryBound(to: UInt8.self)
             var sum: UInt8 = 0
-            for i in 2..<endIndex {
+            for i in 2 ..< endIndex {
                 sum = sum &+ bytes[i]
             }
             return bytes[1] == sum

@@ -51,5 +51,4 @@ struct MenuBarView: View {
             NSApp.terminate(nil)
         }
     }
-
 }

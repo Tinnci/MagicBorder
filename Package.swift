@@ -7,7 +7,7 @@ let package = Package(
     name: "MagicBorder",
     defaultLocalization: "en",
     platforms: [
-        .macOS(.v14)
+        .macOS(.v14),
     ],
     products: [
         .library(name: "MagicBorderKit", targets: ["MagicBorderKit"]),
@@ -15,26 +15,22 @@ let package = Package(
         .executable(name: "MagicBorderCLI", targets: ["MagicBorderCLI"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0")
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
     ],
     targets: [
         .target(
             name: "MagicBorderKit",
             dependencies: [
-                .product(name: "Crypto", package: "swift-crypto")
+                .product(name: "Crypto", package: "swift-crypto"),
             ],
-            linkerSettings: []
-        ),
+            linkerSettings: []),
         .executableTarget(
             name: "MagicBorder",
             dependencies: ["MagicBorderKit"],
             resources: [.process("Resources")],
-            linkerSettings: []
-        ),
+            linkerSettings: []),
         .executableTarget(
             name: "MagicBorderCLI",
             dependencies: ["MagicBorderKit"],
-            linkerSettings: []
-        ),
-    ]
-)
+            linkerSettings: []),
+    ])

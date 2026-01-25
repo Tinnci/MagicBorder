@@ -56,10 +56,9 @@ struct PairingFlowView: View {
 
             Label(
                 isKeyValid ? "Key Ready" : "At least 16 characters",
-                systemImage: isKeyValid ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"
-            )
-            .font(.caption)
-            .foregroundStyle(isKeyValid ? .green : .orange)
+                systemImage: isKeyValid ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(isKeyValid ? .green : .orange)
 
             if let message = statusMessage {
                 Label(message, systemImage: statusStyle.iconName)
@@ -126,9 +125,8 @@ struct PairingFlowView: View {
             "Pairing Error",
             isPresented: Binding(
                 get: { networkManager.pairingError != nil },
-                set: { if !$0 { networkManager.pairingError = nil } }
-            )
-        ) {
+                set: { if !$0 { networkManager.pairingError = nil } }))
+        {
             Button("Copy Details") {
                 let pasteboard = NSPasteboard.general
                 pasteboard.clearContents()
@@ -173,15 +171,13 @@ private struct WindowsPairingGuideView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-
                     VStack(alignment: .leading, spacing: 4) {
                         Text("1. Install Software")
                             .font(.headline)
                         Text(
-                            "Install Mouse Without Borders (included in PowerToys) on your Windows machine."
-                        )
-                        .foregroundStyle(.secondary)
-                        .font(.body)
+                            "Install Mouse Without Borders (included in PowerToys) on your Windows machine.")
+                            .foregroundStyle(.secondary)
+                            .font(.body)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -211,9 +207,8 @@ private struct WindowsPairingGuideView: View {
                         Text("3. Check Firewall")
                             .font(.headline)
                         Text(
-                            "Ensure ports **15100** and **15101** are allowed in Windows Firewall."
-                        )
-                        .foregroundStyle(.secondary)
+                            "Ensure ports **15100** and **15101** are allowed in Windows Firewall.")
+                            .foregroundStyle(.secondary)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -263,17 +258,17 @@ private enum StatusStyle {
 
     var color: Color {
         switch self {
-        case .neutral: return .secondary
-        case .success: return .green
-        case .warning: return .orange
+        case .neutral: .secondary
+        case .success: .green
+        case .warning: .orange
         }
     }
 
     var iconName: String {
         switch self {
-        case .neutral: return "info.circle"
-        case .success: return "checkmark.circle.fill"
-        case .warning: return "exclamationmark.triangle.fill"
+        case .neutral: "info.circle"
+        case .success: "checkmark.circle.fill"
+        case .warning: "exclamationmark.triangle.fill"
         }
     }
 }

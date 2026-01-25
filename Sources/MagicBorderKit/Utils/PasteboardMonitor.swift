@@ -17,10 +17,10 @@ public final class MBPasteboardMonitor {
 
     public init(pasteboard: NSPasteboard = .general) {
         self.pasteboard = pasteboard
-        self.lastChangeCount = pasteboard.changeCount
+        lastChangeCount = pasteboard.changeCount
     }
 
-    public func startPolling(interval: UInt64 = 500_000_000) {
+    public func startPolling(interval: UInt64 = 500000000) {
         Task { @MainActor in
             while true {
                 try? await Task.sleep(nanoseconds: interval)
@@ -56,7 +56,8 @@ public final class MBPasteboardMonitor {
         if let image = NSImage(pasteboard: pasteboard),
            let tiff = image.tiffRepresentation,
            let bitmap = NSBitmapImageRep(data: tiff),
-           let png = bitmap.representation(using: .png, properties: [:]) {
+           let png = bitmap.representation(using: .png, properties: [:])
+        {
             onChange?(.image(png))
         }
     }

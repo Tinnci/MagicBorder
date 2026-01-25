@@ -1,0 +1,21 @@
+disabled_rules:
+  - trailing_whitespace
+  - line_length
+  - function_body_length
+  - cyclomatic_complexity
+  - file_length
+  - type_body_length
+  - identifier_name
+  - large_tuple
+  - closure_parameter_position
+
+opt_in_rules:
+  - empty_count
+  - empty_string
+
+included:
+  - Sources
+
+excluded:
+  - Tests
+  - .build

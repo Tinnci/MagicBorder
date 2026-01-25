@@ -17,8 +17,7 @@ enum MWBCompression {
                     srcBase.assumingMemoryBound(to: UInt8.self),
                     srcSize,
                     nil,
-                    COMPRESSION_ZLIB
-                )
+                    COMPRESSION_ZLIB)
             }
 
             guard encodedSize > 0 else { return nil }
@@ -41,8 +40,7 @@ enum MWBCompression {
                     srcBase.assumingMemoryBound(to: UInt8.self),
                     srcSize,
                     nil,
-                    COMPRESSION_ZLIB
-                )
+                    COMPRESSION_ZLIB)
             }
 
             guard decodedSize > 0 else { return nil }
