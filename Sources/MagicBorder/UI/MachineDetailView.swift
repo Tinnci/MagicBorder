@@ -12,10 +12,8 @@ struct MachineDetailView: View {
     @State private var isRefreshing = false
 
     var body: some View {
-
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Compact Header
+        Form {
+            Section {
                 HStack(spacing: 16) {
                     Image(systemName: "desktopcomputer")
                         .font(.system(size: 48))
@@ -33,50 +31,31 @@ struct MachineDetailView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    Spacer()
                 }
-                .padding()
-
-                Divider()
-
-                // Pinned Programs Grid
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Pinned Programs")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(0..<8) { i in
-                            ProgramIconButton(name: "App \(i+1)", icon: "app.dashed")
-                        }
-                    }
-                }
-                .padding(.horizontal)
-
-                // Quick Links / Configuration
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Configuration")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-
-                    Form {
-                        Section {
-                            NavigationLink(destination: Text("Display Settings Content")) {
-                                Label("Display Settings", systemImage: "display")
-                            }
-                            NavigationLink(destination: Text("Input Configuration Content")) {
-                                Label("Input Configuration", systemImage: "keyboard")
-                            }
-                        }
-                    }
-                    .formStyle(.grouped)
-                    .frame(height: 160)  // Limit height for embedded form feeling
-                    .scrollDisabled(true)
-                }
-                .padding(.horizontal)
+                .padding(.vertical, 8)
             }
-            .padding(.bottom, 20)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets())
+
+            Section("Pinned Programs") {
+                LazyVGrid(columns: columns, spacing: 16) {
+                    ForEach(0..<8) { i in
+                        ProgramIconButton(name: "App \(i+1)", icon: "app.dashed")
+                    }
+                }
+                .padding(.vertical, 8)
+            }
+
+            Section("Configuration") {
+                NavigationLink(destination: Text("Display Settings Content")) {
+                    Label("Display Settings", systemImage: "display")
+                }
+                NavigationLink(destination: Text("Input Configuration Content")) {
+                    Label("Input Configuration", systemImage: "keyboard")
+                }
+            }
         }
+        .formStyle(.grouped)
         .navigationTitle(machine.name)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -122,8 +101,6 @@ struct ProgramIconButton: View {
     let name: String
     let icon: String
 
-    @State private var isHovering = false
-
     var body: some View {
         Button(action: {
             // Mock launch
@@ -133,12 +110,6 @@ struct ProgramIconButton: View {
                     .font(.system(size: 32))
                     .foregroundStyle(.blue)
                     .frame(width: 48, height: 48)
-                    .background {
-                        if isHovering {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.secondary.opacity(0.1))
-                        }
-                    }
 
                 Text(name)
                     .font(.caption)
@@ -146,7 +117,21 @@ struct ProgramIconButton: View {
                     .lineLimit(1)
             }
         }
-        .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
+        .buttonStyle(ProgramIconButtonStyle())
+    }
+}
+
+struct ProgramIconButtonStyle: ButtonStyle {
+    @State private var isHovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                if isHovering || configuration.isPressed {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.secondary.opacity(0.1))
+                }
+            }
+            .onHover { isHovering = $0 }
     }
 }

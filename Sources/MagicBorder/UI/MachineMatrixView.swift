@@ -45,41 +45,52 @@ struct MachineCard: View {
     let name: String
     let isOnline: Bool
 
-    @State private var isHovering = false
-
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "desktopcomputer")
-                .font(.system(size: 24))
-                .foregroundStyle(isOnline ? .primary : .secondary)
+        Button(action: {}) {
+            VStack(spacing: 8) {
+                Image(systemName: "desktopcomputer")
+                    .font(.system(size: 24))
+                    .foregroundStyle(isOnline ? .primary : .secondary)
 
-            VStack(spacing: 2) {
-                Text(name)
-                    .font(.body)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                VStack(spacing: 2) {
+                    Text(name)
+                        .font(.body)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
 
-                HStack(spacing: 4) {
-                    StatusDot(active: isOnline)
-                    Text(isOnline ? "Online" : "Offline")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        StatusDot(active: isOnline)
+                        Text(isOnline ? "Online" : "Offline")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, minHeight: 100)
+            .padding()
         }
-        .padding()
-        .frame(maxWidth: .infinity, minHeight: 100)
-        .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(isHovering ? Color.secondary.opacity(0.1) : Color.clear)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(.separator.opacity(0.4), lineWidth: 1)
-        }
-        .contentShape(Rectangle())
-        .onHover { isHovering = $0 }
+        .buttonStyle(MachineCardButtonStyle())
+    }
+}
+
+struct MachineCardButtonStyle: ButtonStyle {
+    @State private var isHovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(
+                        isHovering || configuration.isPressed
+                            ? Color.secondary.opacity(0.1) : Color.clear)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(.separator.opacity(0.4), lineWidth: 1)
+            }
+            .onHover { isHovering = $0 }
+            .contentShape(Rectangle())
     }
 }
 

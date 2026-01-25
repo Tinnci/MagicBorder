@@ -125,23 +125,7 @@ private struct WindowsPairingGuideView: View {
     @State private var highlightedStep: Int = 2
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("Windows Pairing Guide")
-                    .font(.headline)
-                Spacer()
-                Button(action: { dismiss() }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding()
-            .background(Color(nsColor: .controlBackgroundColor))
-
-            Divider()
-
+        NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
 
@@ -196,18 +180,14 @@ private struct WindowsPairingGuideView: View {
                 }
                 .padding()
             }
-
-            Divider()
-
-            HStack {
-                Spacer()
-                Button("Done") {
-                    dismiss()
+            .navigationTitle("Windows Pairing Guide")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
                 }
-                .keyboardShortcut(.defaultAction)
             }
-            .padding()
-            .background(Color(nsColor: .controlBackgroundColor))
         }
         .frame(width: 480, height: 450)
     }

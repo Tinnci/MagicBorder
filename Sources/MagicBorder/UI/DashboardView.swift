@@ -266,9 +266,6 @@ struct ArrangementDetailView: View {
         VStack(spacing: 0) {
             // Hero Canvas Area
             ZStack {
-                Color(nsColor: .windowBackgroundColor)
-                    .ignoresSafeArea()
-
                 ScrollView {
                     VStack(spacing: 24) {
                         if !accessibilityService.isTrusted {
