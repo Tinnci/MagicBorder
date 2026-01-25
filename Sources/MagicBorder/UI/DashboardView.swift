@@ -61,13 +61,18 @@ struct DashboardView: View {
                 }
 
                 Section("Machines") {
-                    ForEach(filteredMachines) { machine in
-                        NavigationLink(destination: MachineDetailView(machine: machine)) {
-                            HStack {
-                                Image(systemName: "desktopcomputer")
-                                Text(machine.name)
-                                Spacer()
-                                StatusDot(active: machine.isOnline)
+                    if filteredMachines.isEmpty {
+                        ContentUnavailableView.search(text: searchText)
+                            .listRowSeparator(.hidden)
+                    } else {
+                        ForEach(filteredMachines) { machine in
+                            NavigationLink(destination: MachineDetailView(machine: machine)) {
+                                HStack {
+                                    Image(systemName: "desktopcomputer")
+                                    Text(machine.name)
+                                    Spacer()
+                                    StatusDot(active: machine.isOnline)
+                                }
                             }
                         }
                     }
@@ -357,8 +362,8 @@ struct AccessibilityWarningBanner: View {
 
                 Spacer()
 
-                Button("Open Settings") {
-                    service.promptForPermission()
+                Button("Open System Settings") {
+                    service.openSystemSettings()
                 }
                 .controlSize(.small)
             }

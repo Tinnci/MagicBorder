@@ -12,6 +12,7 @@ struct PairingFlowView: View {
     @State private var isConnecting = false
     @State private var statusMessage: String?
     @State private var statusStyle: StatusStyle = .neutral
+    @State private var showChecklist = false
 
     private var trimmedKey: String {
         securityKey.replacingOccurrences(of: " ", with: "")
@@ -22,7 +23,7 @@ struct PairingFlowView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Label("Windows Pairing", systemImage: "windowslogo")
                     .font(.headline)
@@ -38,28 +39,26 @@ struct PairingFlowView: View {
                 .help("Pairing Guide")
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("1. Install Mouse Without Borders on Windows")
-                Text("2. Use the same Security Key on both devices")
-                Text("3. Allow ports 15100/15101 in Windows Firewall")
-                Text("4. Make sure both devices are on the same subnet")
+            DisclosureGroup("Pairing checklist", isExpanded: $showChecklist) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("1. Install Mouse Without Borders on Windows")
+                    Text("2. Use the same Security Key on both devices")
+                    Text("3. Allow ports 15100/15101 in Windows Firewall")
+                    Text("4. Make sure both devices are on the same subnet")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
 
             PairingCardView(securityKey: $securityKey)
 
-            HStack(spacing: 8) {
-                Image(
-                    systemName: isKeyValid
-                        ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"
-                )
-                .foregroundStyle(isKeyValid ? .green : .orange)
-                Text(isKeyValid ? "Key Ready" : "Min 16 req.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
+            Label(
+                isKeyValid ? "Key Ready" : "At least 16 characters",
+                systemImage: isKeyValid ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(isKeyValid ? .green : .orange)
 
             if let message = statusMessage {
                 Label(message, systemImage: statusStyle.iconName)
@@ -67,23 +66,17 @@ struct PairingFlowView: View {
                     .foregroundStyle(statusStyle.color)
             }
 
-            HStack(spacing: 8) {
-                TextField("Win IP (e.g. 192.168.1.5)", text: $ipAddress)
+            LabeledContent("Windows IP") {
+                TextField("192.168.1.5", text: $ipAddress)
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
-                    .labelsHidden()
-
-                Button("Connect") {
-                    startConnecting()
-                }
-                .disabled(ipAddress.isEmpty || !isKeyValid)
+                    .frame(width: 200)
             }
 
-            if !ipAddress.isEmpty {
-                Text("Ensuring valid IP...")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+            Button("Connect") {
+                startConnecting()
             }
+            .disabled(ipAddress.isEmpty || !isKeyValid)
         }
         .sheet(isPresented: $showGuide) {
             WindowsPairingGuideView(securityKey: securityKey, isKeyValid: isKeyValid)
