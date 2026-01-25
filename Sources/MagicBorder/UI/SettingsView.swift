@@ -2,44 +2,108 @@ import MagicBorderKit
 import SwiftUI
 
 struct SettingsView: View {
+    var body: some View {
+        TabView {
+            GeneralSettingsTab()
+                .tabItem {
+                    Label("General", systemImage: "gear")
+                }
+                .tag("general")
+
+            NetworkSettingsTab()
+                .tabItem {
+                    Label("Network", systemImage: "network")
+                }
+                .tag("network")
+
+            OverlaySettingsTab()
+                .tabItem {
+                    Label("Overlay", systemImage: "display")
+                }
+                .tag("overlay")
+        }
+        .frame(width: 500, height: 400)
+        .padding()
+    }
+}
+
+// MARK: - Tabs
+
+private struct GeneralSettingsTab: View {
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
     @Environment(MBAccessibilityService.self) private var accessibilityService
-    @Environment(MBOverlayPreferencesStore.self) private var overlayPreferences
     @AppStorage("wrapMouse") private var wrapMouse = false
     @AppStorage("hideMouse") private var hideMouse = true
     @AppStorage("captureInput") private var captureInput = true
-    @AppStorage("dragDropOverlayEnabled") private var dragDropOverlayEnabled = true
-    @AppStorage("dragDropOverlayShowDevice") private var dragDropOverlayShowDevice = true
-    @AppStorage("dragDropOverlayShowProgress") private var dragDropOverlayShowProgress = true
-    @AppStorage("dragDropOverlayScale") private var dragDropOverlayScale = 1.0
-    @AppStorage("dragDropOverlayPosition") private var dragDropOverlayPosition = "top"
-    @State private var selectedDevice: String = ""
 
     var body: some View {
         @Bindable var networkManager = networkManager
 
         Form {
-            Section(header: Label("Clipboard", systemImage: "clipboard")) {
+            Section("Clipboard & Files") {
                 Toggle(
                     "Share Clipboard", isOn: $networkManager.compatibilitySettings.shareClipboard)
                 Toggle("Transfer Files", isOn: $networkManager.compatibilitySettings.transferFiles)
             }
 
-            Section(header: Label("Cursor", systemImage: "cursorarrow.motionlines")) {
+            Section("Cursor control") {
                 Toggle("Capture Local Input", isOn: $captureInput)
                     .disabled(!accessibilityService.isTrusted)
+
                 if !accessibilityService.isTrusted {
-                    Text("Enable Accessibility permission to capture input.")
+                    Label(
+                        "Accessibility permission required", systemImage: "exclamationmark.triangle"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                }
+
+                Toggle(
+                    "Switch by Moving to Edge",
+                    isOn: $networkManager.compatibilitySettings.switchByMouse)
+                Toggle(
+                    "Block Corner Switching",
+                    isOn: $networkManager.compatibilitySettings.blockCorners)
+                Toggle("Wrap Mouse at Screen Edge", isOn: $wrapMouse)
+                Toggle("Hide Mouse at Edge", isOn: $hideMouse)
+                Toggle(
+                    "Relative Mouse Movement",
+                    isOn: $networkManager.compatibilitySettings.moveMouseRelatively)
+            }
+
+            Section("Matrix Logic") {
+                Toggle("Matrix One Row", isOn: $networkManager.compatibilitySettings.matrixOneRow)
+                Toggle(
+                    "Matrix Circle (Swap)", isOn: $networkManager.compatibilitySettings.matrixCircle
+                )
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+private struct NetworkSettingsTab: View {
+    @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
+
+    var body: some View {
+        @Bindable var networkManager = networkManager
+
+        Form {
+            Section("Security") {
+                SecureField("Security Key", text: $networkManager.compatibilitySettings.securityKey)
+
+                if let message = networkManager.compatibilitySettings.validationMessage {
+                    Text(message)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Toggle("Switch by Moving to Edge", isOn: $networkManager.compatibilitySettings.switchByMouse)
-                Toggle("Block Corner Switching", isOn: $networkManager.compatibilitySettings.blockCorners)
-                Toggle("Wrap Mouse at Screen Edge", isOn: $wrapMouse)
-                Toggle("Hide Mouse at Edge", isOn: $hideMouse)
+
+                Button("Validate Key") {
+                    _ = networkManager.compatibilitySettings.validateSecurityKey()
+                }
             }
 
-            Section(header: Label("Network", systemImage: "network")) {
+            Section("Ports") {
                 TextField(
                     "Message Port", value: $networkManager.compatibilitySettings.messagePort,
                     formatter: NumberFormatter())
@@ -47,107 +111,78 @@ struct SettingsView: View {
                     "Clipboard Port", value: $networkManager.compatibilitySettings.clipboardPort,
                     formatter: NumberFormatter())
             }
+        }
+        .formStyle(.grouped)
+    }
+}
 
-            Section(header: Label("Matrix", systemImage: "square.grid.2x2")) {
-                Toggle("Matrix One Row", isOn: $networkManager.compatibilitySettings.matrixOneRow)
-                Toggle(
-                    "Matrix Circle (Swap)", isOn: $networkManager.compatibilitySettings.matrixCircle
-                )
-                Toggle("Relative Mouse Movement", isOn: $networkManager.compatibilitySettings.moveMouseRelatively)
-            }
+private struct OverlaySettingsTab: View {
+    @Environment(MBOverlayPreferencesStore.self) private var overlayPreferences
+    @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
 
-            Section(header: Label("Security", systemImage: "key.fill")) {
-                TextField("Security Key", text: $networkManager.compatibilitySettings.securityKey)
-                if let message = networkManager.compatibilitySettings.validationMessage {
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Button("Validate Key") {
-                    _ = networkManager.compatibilitySettings.validateSecurityKey()
-                }
-            }
+    @AppStorage("dragDropOverlayEnabled") private var dragDropOverlayEnabled = true
+    @AppStorage("dragDropOverlayShowDevice") private var dragDropOverlayShowDevice = true
+    @AppStorage("dragDropOverlayShowProgress") private var dragDropOverlayShowProgress = true
+    @AppStorage("dragDropOverlayScale") private var dragDropOverlayScale = 1.0
+    @AppStorage("dragDropOverlayPosition") private var dragDropOverlayPosition = "top"
 
-            Section(header: Label("Drag & Drop Overlay", systemImage: "tray.and.arrow.down")) {
+    @State private var selectedDevice: String = ""
+
+    var body: some View {
+        Form {
+            Section("Global Defaults") {
                 Toggle("Show Overlay", isOn: $dragDropOverlayEnabled)
-                Toggle("Show Device Name", isOn: $dragDropOverlayShowDevice)
-                    .disabled(!dragDropOverlayEnabled)
-                Toggle("Show Progress", isOn: $dragDropOverlayShowProgress)
-                    .disabled(!dragDropOverlayEnabled)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Overlay Size")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Slider(value: $dragDropOverlayScale, in: 0.85...1.3, step: 0.05)
-                        .disabled(!dragDropOverlayEnabled)
-                }
+                Group {
+                    Toggle("Show Device Name", isOn: $dragDropOverlayShowDevice)
+                    Toggle("Show Progress", isOn: $dragDropOverlayShowProgress)
 
-                Picker("Position", selection: $dragDropOverlayPosition) {
-                    Text("Top").tag("top")
-                    Text("Top Left").tag("topLeading")
-                    Text("Top Right").tag("topTrailing")
-                    Text("Bottom").tag("bottom")
-                    Text("Bottom Left").tag("bottomLeading")
-                    Text("Bottom Right").tag("bottomTrailing")
+                    VStack(alignment: .leading) {
+                        Text("Size: \(Int(dragDropOverlayScale * 100))%")
+                        Slider(value: $dragDropOverlayScale, in: 0.85...1.3, step: 0.05)
+                    }
+
+                    Picker("Position", selection: $dragDropOverlayPosition) {
+                        Text("Top").tag("top")
+                        Text("Bottom").tag("bottom")
+                        Text("Top Left").tag("topLeading")
+                        Text("Top Right").tag("topTrailing")
+                        Text("Bottom Left").tag("bottomLeading")
+                        Text("Bottom Right").tag("bottomTrailing")
+                    }
                 }
-                .pickerStyle(.segmented)
                 .disabled(!dragDropOverlayEnabled)
             }
 
-            Section(header: Label("Drag & Drop Overlay (Per Device)", systemImage: "display")) {
-                Picker("Device", selection: $selectedDevice) {
+            Section("Per-Device Override") {
+                Picker("Target Device", selection: $selectedDevice) {
                     ForEach(deviceOptions, id: \.self) { device in
                         Text(device).tag(device)
                     }
                 }
 
-                Toggle("Use Custom Settings", isOn: useOverrideBinding)
-                    .disabled(selectedDevice.isEmpty)
+                if !selectedDevice.isEmpty {
+                    Toggle("Override Global Settings", isOn: useOverrideBinding)
 
-                Toggle("Show Device Name", isOn: showDeviceBinding)
-                    .disabled(!overlayPreferences.hasOverride(for: selectedDevice))
-                Toggle("Show Progress", isOn: showProgressBinding)
-                    .disabled(!overlayPreferences.hasOverride(for: selectedDevice))
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Overlay Size")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Slider(value: scaleBinding, in: 0.85...1.3, step: 0.05)
-                        .disabled(!overlayPreferences.hasOverride(for: selectedDevice))
+                    if overlayPreferences.hasOverride(for: selectedDevice) {
+                        Toggle("Show Device Name", isOn: showDeviceBinding)
+                        Toggle("Show Progress", isOn: showProgressBinding)
+                        Slider(value: scaleBinding, in: 0.85...1.3, step: 0.05) {
+                            Text("Size")
+                        }
+                    }
                 }
-
-                Picker("Position", selection: positionBinding) {
-                    Text("Top").tag(MBOverlayPosition.top)
-                    Text("Top Left").tag(MBOverlayPosition.topLeading)
-                    Text("Top Right").tag(MBOverlayPosition.topTrailing)
-                    Text("Bottom").tag(MBOverlayPosition.bottom)
-                    Text("Bottom Left").tag(MBOverlayPosition.bottomLeading)
-                    Text("Bottom Right").tag(MBOverlayPosition.bottomTrailing)
-                }
-                .pickerStyle(.segmented)
-                .disabled(!overlayPreferences.hasOverride(for: selectedDevice))
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Settings")
         .onAppear {
             if selectedDevice.isEmpty {
                 selectedDevice = networkManager.localDisplayName
             }
         }
-        .onChange(of: networkManager.compatibilitySettings.securityKey) { _, _ in
-            networkManager.applyCompatibilitySettings()
-        }
-        .onChange(of: networkManager.compatibilitySettings.messagePort) { _, _ in
-            networkManager.applyCompatibilitySettings()
-        }
-        .onChange(of: networkManager.compatibilitySettings.clipboardPort) { _, _ in
-            networkManager.applyCompatibilitySettings()
-        }
     }
 
+    // MARK: - Helpers
     private var deviceOptions: [String] {
         let connected = networkManager.connectedMachines.map { $0.name }
         let stored = overlayPreferences.allDeviceNames()
@@ -185,36 +220,21 @@ struct SettingsView: View {
     private var showDeviceBinding: Binding<Bool> {
         Binding(
             get: { currentDevicePreferences.showDevice },
-            set: { newValue in
-                updateDevicePreferences { $0.showDevice = newValue }
-            }
+            set: { val in updateDevicePreferences { $0.showDevice = val } }
         )
     }
 
     private var showProgressBinding: Binding<Bool> {
         Binding(
             get: { currentDevicePreferences.showProgress },
-            set: { newValue in
-                updateDevicePreferences { $0.showProgress = newValue }
-            }
+            set: { val in updateDevicePreferences { $0.showProgress = val } }
         )
     }
 
     private var scaleBinding: Binding<Double> {
         Binding(
             get: { currentDevicePreferences.scale },
-            set: { newValue in
-                updateDevicePreferences { $0.scale = newValue }
-            }
-        )
-    }
-
-    private var positionBinding: Binding<MBOverlayPosition> {
-        Binding(
-            get: { currentDevicePreferences.position },
-            set: { newValue in
-                updateDevicePreferences { $0.position = newValue }
-            }
+            set: { val in updateDevicePreferences { $0.scale = val } }
         )
     }
 
@@ -228,4 +248,6 @@ struct SettingsView: View {
 #Preview {
     SettingsView()
         .environment(MagicBorderKit.MBNetworkManager.shared)
+        .environment(MBAccessibilityService())
+        .environment(MBOverlayPreferencesStore())
 }

@@ -1,7 +1,7 @@
 /*
  * MagicBorder - A native macOS application for mouse and keyboard sharing.
  * Copyright (C) 2026 MagicBorder Contributors
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -45,15 +45,19 @@ struct MagicBorderApp: App {
                     syncInputCapture()
                 }
         }
-        MenuBarExtra("MagicBorder", systemImage: "rectangle.and.cursor.arrow") {
-            MenuBarView()
+        .commands {
+            // Add any custom commands if needed, but Settings is standard
+        }
+
+        Settings {
+            SettingsView()
                 .environment(accessibilityService)
                 .environment(networkManager)
                 .environment(overlayPreferences)
         }
 
-        Settings {
-            SettingsView()
+        MenuBarExtra("MagicBorder", systemImage: "rectangle.and.cursor.arrow") {
+            MenuBarView()
                 .environment(accessibilityService)
                 .environment(networkManager)
                 .environment(overlayPreferences)
