@@ -21,7 +21,5 @@ struct MagicBorderApp: App {
                     accessibilityService.startPolling()
                 }
         }
-        .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
     }
 }

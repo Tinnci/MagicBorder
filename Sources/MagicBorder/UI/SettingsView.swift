@@ -24,8 +24,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .padding()
-        .frame(width: 400, height: 300)
+        .navigationTitle("Settings")
     }
 }
 
