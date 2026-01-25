@@ -1,6 +1,8 @@
 import AppKit
+import CryptoKit
 import Foundation
 import Network
+import OSLog
 import Observation
 
 @MainActor
@@ -70,7 +72,20 @@ public class MBNetworkManager: Observation.Observable {
     let localNumericID: Int32 = Int32.random(in: 1000...999999)
 
     public var switchState: SwitchState = .idle
-    public var activeMachineId: UUID?
+    public var activeMachineId: UUID? {
+        didSet {
+            MBInputManager.shared.setRemoteTarget(activeMachineId)
+            if let id = activeMachineId,
+                let machine = connectedMachines.first(where: { $0.id == id })
+            {
+                activeMachineName = machine.name
+                switchState = .active
+            } else {
+                activeMachineName = localName
+                switchState = .idle
+            }
+        }
+    }
     public var activeMachineName: String = Host.current().localizedName ?? "Local Mac"
     public var lastSwitchTimestamp: Date?
 
@@ -107,7 +122,10 @@ public class MBNetworkManager: Observation.Observable {
             guard let self else { return }
             let id = self.uuid(for: peer.id)
             if !self.connectedMachines.contains(where: { $0.id == id }) {
-                let machine = ConnectedMachine(id: id, name: peer.name, connection: NWConnection(to: .hostPort(host: .ipv4(.any), port: 15101), using: .tcp))
+                let machine = ConnectedMachine(
+                    id: id, name: peer.name,
+                    connection: NWConnection(
+                        to: .hostPort(host: .ipv4(.any), port: 15101), using: .tcp))
                 self.connectedMachines.append(machine)
             }
         }
@@ -163,7 +181,12 @@ public class MBNetworkManager: Observation.Observable {
     }
 
     public func requestSwitch(to machineId: UUID) {
-        guard protocolMode != .modern else { return }
+        if protocolMode == .modern {
+            // Native Switching
+            self.activeMachineId = machineId
+            return
+        }
+
         guard let mwbId = uuidToMwbId[machineId] else { return }
         switchState = .switching
         compatibilityService?.sendNextMachine(targetId: mwbId)
@@ -190,19 +213,20 @@ public class MBNetworkManager: Observation.Observable {
             listener.service = NWListener.Service(name: localName, type: serviceType)
 
             listener.newConnectionHandler = { [weak self] connection in
-                print("New connection received from \(connection.endpoint)")
+                MBLogger.network.info(
+                    "New connection received from \(String(describing: connection.endpoint))")
                 Task {
                     await self?.handleNewConnection(connection)
                 }
             }
 
             listener.stateUpdateHandler = { newState in
-                print("Listener state: \(newState)")
+                MBLogger.network.info("Listener state: \(String(describing: newState))")
             }
 
             listener.start(queue: .main)
         } catch {
-            print("Failed to create listener: \(error)")
+            MBLogger.network.error("Failed to create listener: \(error.localizedDescription)")
         }
     }
 
@@ -366,13 +390,14 @@ public class MBNetworkManager: Observation.Observable {
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .ready:
-                print("Connection ready: \(connection.endpoint)")
+                MBLogger.network.info(
+                    "Connection ready: \(String(describing: connection.endpoint))")
                 Task {
                     await self?.sendHandshake(connection: connection)
                     await self?.receiveLoop(connection: connection)
                 }
             case .failed(let error):
-                print("Connection failed: \(error)")
+                MBLogger.network.error("Connection failed: \(error.localizedDescription)")
                 Task {
                     await self?.removeConnection(connection)
                 }
@@ -400,12 +425,23 @@ public class MBNetworkManager: Observation.Observable {
     // MARK: - Sending
 
     func sendHandshake(connection: NWConnection) {
-        let info = MachineInfo(
+        var info = MachineInfo(
             id: localID,
             name: localName,
             screenWidth: Double(NSScreen.main?.frame.width ?? 0),
-            screenHeight: Double(NSScreen.main?.frame.height ?? 0)
+            screenHeight: Double(NSScreen.main?.frame.height ?? 0),
+            signature: nil
         )
+
+        // Compute Signature
+        if let keyData = self.securityKey.data(using: .utf8),
+            let idData = info.id.uuidString.data(using: .utf8)
+        {
+            let key = SymmetricKey(data: keyData)
+            let signature = HMAC<SHA256>.authenticationCode(for: idData, using: key)
+            info.signature = Data(signature).base64EncodedString()
+        }
+
         let packet = PacketType.handshake(info: info)
         send(packet, to: connection)
     }
@@ -495,7 +531,29 @@ public class MBNetworkManager: Observation.Observable {
             let packet = try JSONDecoder().decode(PacketType.self, from: data)
             switch packet {
             case .handshake(let info):
-                print("Handshake from \(info.name)")
+                MBLogger.network.info("Handshake from \(info.name)")
+
+                // Verify Signature
+                if let signature = info.signature,
+                    let keyData = self.securityKey.data(using: .utf8),
+                    let idData = info.id.uuidString.data(using: .utf8)
+                {
+                    let key = SymmetricKey(data: keyData)
+                    let computed = HMAC<SHA256>.authenticationCode(for: idData, using: key)
+                    let computedString = Data(computed).base64EncodedString()
+
+                    if signature != computedString {
+                        MBLogger.security.error(
+                            "Invalid signature from \(info.name). Dropping connection.")
+                        connection.cancel()
+                        return
+                    }
+                    MBLogger.security.info("Verified signature from \(info.name)")
+                } else {
+                    // Legacy or unsecured fallback (Optional: enforce strict mode)
+                    MBLogger.security.warning("No signature from \(info.name).")
+                }
+
                 if !connectedMachines.contains(where: { $0.id == info.id }) {
                     let machine = ConnectedMachine(
                         id: info.id, name: info.name, connection: connection)
@@ -503,20 +561,13 @@ public class MBNetworkManager: Observation.Observable {
                 }
             case .inputEvent(let event):
                 // Handle remote input
-                // This simulates the event locally
-                print("Received event: \(event.type)")
-                self.simulateEvent(event)
+                MBInputManager.shared.simulateRemoteEvent(event)
             default:
                 break
             }
         } catch {
-            print("Decoding error: \(error)")
+            MBLogger.network.error("Decoding error: \(error.localizedDescription)")
         }
     }
 
-    // MARK: - Simulation (Should be moved to `InputManager` in real arch)
-    private func simulateEvent(_ event: RemoteEvent) {
-        // Just print for now, actual simulation requires CGEventCreate...
-        print("Simulating: \(event)")
-    }
 }

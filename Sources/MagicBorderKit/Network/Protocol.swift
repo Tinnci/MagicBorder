@@ -1,9 +1,9 @@
-import Foundation
 import CoreGraphics
+import Foundation
 
 // MARK: - Packet Types
 
-enum PacketType: Codable {
+public enum PacketType: Codable, Sendable {
     case handshake(info: MachineInfo)
     case inputEvent(RemoteEvent)
     case clipboardData(ClipboardPayload)
@@ -13,26 +13,37 @@ enum PacketType: Codable {
 
 // MARK: - Payloads
 
-struct MachineInfo: Codable, Equatable {
-    let id: UUID
-    let name: String
-    let screenWidth: Double
-    let screenHeight: Double
+public struct MachineInfo: Codable, Equatable, Sendable {
+    public let id: UUID
+    public let name: String
+    public let screenWidth: Double
+    public let screenHeight: Double
+    public var signature: String?  // HMAC(securityKey, id.uuidString)
+
+    public init(
+        id: UUID, name: String, screenWidth: Double, screenHeight: Double, signature: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.screenWidth = screenWidth
+        self.screenHeight = screenHeight
+        self.signature = signature
+    }
 }
 
-struct ClipboardPayload: Codable {
-    let content: Data
-    let type: ClipboardType
+public struct ClipboardPayload: Codable, Sendable {
+    public let content: Data
+    public let type: ClipboardType
 }
 
-enum ClipboardType: Codable {
+public enum ClipboardType: Codable, Sendable {
     case text
     case image
 }
 
 // MARK: - Input Events
 
-enum RemoteEventType: Codable {
+public enum RemoteEventType: Codable, Sendable {
     case mouseMove
     case leftMouseDown, leftMouseUp
     case rightMouseDown, rightMouseUp
@@ -40,25 +51,35 @@ enum RemoteEventType: Codable {
     case keyDown, keyUp
 }
 
-struct RemoteEvent: Codable {
-    let type: RemoteEventType
-    let point: CGPoint? // For mouse events
-    let keyCode: CGKeyCode? // For key events
-    let deltaX: Int? // For Scroll
-    let deltaY: Int? // For Scroll
-    
+public struct RemoteEvent: Codable, Sendable {
+    public let type: RemoteEventType
+    public let point: CGPoint?  // For mouse events
+    public let keyCode: CGKeyCode?  // For key events
+    public let deltaX: Int?  // For Scroll
+    public let deltaY: Int?  // For Scroll
+
+    public init(
+        type: RemoteEventType, point: CGPoint?, keyCode: CGKeyCode?, deltaX: Int?, deltaY: Int?
+    ) {
+        self.type = type
+        self.point = point
+        self.keyCode = keyCode
+        self.deltaX = deltaX
+        self.deltaY = deltaY
+    }
+
     // Helper init for Mouse Move
-    static func mouseMove(at point: CGPoint) -> RemoteEvent {
+    public static func mouseMove(at point: CGPoint) -> RemoteEvent {
         return RemoteEvent(type: .mouseMove, point: point, keyCode: nil, deltaX: nil, deltaY: nil)
     }
-    
+
     // Helper init for Click
-    static func mouseClick(type: RemoteEventType, at point: CGPoint) -> RemoteEvent {
+    public static func mouseClick(type: RemoteEventType, at point: CGPoint) -> RemoteEvent {
         return RemoteEvent(type: type, point: point, keyCode: nil, deltaX: nil, deltaY: nil)
     }
-    
+
     // Helper init for Key
-    static func key(type: RemoteEventType, code: CGKeyCode) -> RemoteEvent {
+    public static func key(type: RemoteEventType, code: CGKeyCode) -> RemoteEvent {
         return RemoteEvent(type: type, point: nil, keyCode: code, deltaX: nil, deltaY: nil)
     }
 }
