@@ -102,8 +102,10 @@ public class MBNetworkManager: Observation.Observable {
     private var localMatrix: [String] = []
     private var lastEdgeSwitchTime: TimeInterval = 0
     private var lastMouseLocation: CGPoint?
-    private let dragDropIndicator = MBDragDropIndicator()
     public var dragDropState: MBDragDropState?
+    public var dragDropSourceName: String?
+    public var dragDropFileSummary: String?
+    public var dragDropProgress: Double?
 
     private var compatibilityService: MWBCompatibilityService?
     private var mwbIdToUuid: [Int32: UUID] = [:]
@@ -172,8 +174,15 @@ public class MBNetworkManager: Observation.Observable {
             self.pasteboardMonitor?.ignoreNextChange()
             NSPasteboard.general.clearContents()
             NSPasteboard.general.writeObjects(urls as [NSURL])
-            self.dragDropState = nil
-            self.dragDropIndicator.hide()
+            self.dragDropFileSummary = self.makeFileSummary(urls)
+            self.dragDropProgress = 1.0
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                self?.dragDropState = nil
+                self?.dragDropSourceName = nil
+                self?.dragDropFileSummary = nil
+                self?.dragDropProgress = nil
+            }
         }
         service.onMachineSwitched = { [weak self] peer in
             guard let self else { return }
@@ -193,17 +202,22 @@ public class MBNetworkManager: Observation.Observable {
         service.onDragDropBegin = { [weak self] sourceName in
             guard let self else { return }
             self.dragDropState = .dragging
-            self.dragDropIndicator.show(state: .dragging, sourceName: sourceName)
+            self.dragDropSourceName = sourceName
+            self.dragDropFileSummary = nil
+            self.dragDropProgress = nil
         }
         service.onDragDropOperation = { [weak self] sourceName in
             guard let self else { return }
             self.dragDropState = .dropping
-            self.dragDropIndicator.show(state: .dropping, sourceName: sourceName)
+            self.dragDropSourceName = sourceName
+            self.dragDropProgress = nil
         }
         service.onDragDropEnd = { [weak self] in
             guard let self else { return }
             self.dragDropState = nil
-            self.dragDropIndicator.hide()
+            self.dragDropSourceName = nil
+            self.dragDropFileSummary = nil
+            self.dragDropProgress = nil
         }
         service.onCaptureScreen = { [weak self] sourceId in
             self?.sendScreenCapture(to: sourceId)
@@ -234,6 +248,14 @@ public class MBNetworkManager: Observation.Observable {
             guard compatibilitySettings.transferFiles else { return }
             sendFileDrop(urls)
         }
+    }
+
+    private func makeFileSummary(_ urls: [URL]) -> String? {
+        guard !urls.isEmpty else { return nil }
+        if urls.count == 1 {
+            return urls[0].lastPathComponent
+        }
+        return "\(urls[0].lastPathComponent) +\(urls.count - 1)"
     }
 
     private func sendScreenCapture(to sourceId: Int32?) {
@@ -642,6 +664,24 @@ public class MBNetworkManager: Observation.Observable {
         if let index = connectedMachines.firstIndex(where: { $0.connection === connection }) {
             connectedMachines.remove(at: index)
         }
+    }
+
+    public func disconnect(machineId: UUID) {
+        guard let machine = connectedMachines.first(where: { $0.id == machineId }) else { return }
+        machine.connection.cancel()
+        removeConnection(machine.connection)
+        if activeMachineId == machineId {
+            activeMachineId = nil
+        }
+    }
+
+    public func reconnect(machineId: UUID) {
+        guard let machine = connectedMachines.first(where: { $0.id == machineId }) else { return }
+        let endpoint = machine.connection.endpoint
+        machine.connection.cancel()
+        removeConnection(machine.connection)
+        let connection = NWConnection(to: endpoint, using: .tcp)
+        handleNewConnection(connection)
     }
 
     // MARK: - Sending

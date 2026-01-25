@@ -30,13 +30,17 @@ struct DashboardView: View {
     @State private var selection: SidebarItem? = .arrangement
     @State private var searchText = ""
     @State private var isRefreshing = false
+    @AppStorage("dragDropOverlayEnabled") private var dragDropOverlayEnabled = true
+    @AppStorage("dragDropOverlayShowDevice") private var dragDropOverlayShowDevice = true
+    @AppStorage("dragDropOverlayShowProgress") private var dragDropOverlayShowProgress = true
+    @AppStorage("dragDropOverlayScale") private var dragDropOverlayScale = 1.0
+    @AppStorage("dragDropOverlayPosition") private var dragDropOverlayPosition = "top"
 
     // Stable ID for local machine to avoid list flashes
     private let localMachineId = UUID()
 
     @State private var machines: [Machine] = []
 
-    @SceneStorage("securityKey") private var securityKey: String = "YOUR_SECURE_KEY_123"
 
     var filteredMachines: [Machine] {
         if searchText.isEmpty {
@@ -75,7 +79,7 @@ struct DashboardView: View {
             .searchable(text: $searchText, placement: .sidebar, prompt: "Search machines")
             .toolbar {
                 ToolbarItem {
-                    Button(action: { /* Add machine action */  }) {
+                    Button(action: { selection = .machines }) {
                         Image(systemName: "plus")
                     }
                     .help("Add Machine")
@@ -96,7 +100,7 @@ struct DashboardView: View {
             if let selection = selection {
                 switch selection {
                 case .arrangement:
-                    ArrangementDetailView(machines: $machines, securityKey: $securityKey)
+                    ArrangementDetailView(machines: $machines)
                 case .settings:
                     SettingsView()
                 case .machines:
@@ -107,10 +111,22 @@ struct DashboardView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .overlay(alignment: overlayAlignment) {
+            if dragDropOverlayEnabled, let state = networkManager.dragDropState {
+                DragDropOverlayView(
+                    state: state,
+                    sourceName: networkManager.dragDropSourceName,
+                    fileSummary: networkManager.dragDropFileSummary,
+                    progress: networkManager.dragDropProgress,
+                    showDevice: dragDropOverlayShowDevice,
+                    showProgress: dragDropOverlayShowProgress
+                )
+                .scaleEffect(dragDropOverlayScale)
+                .padding(overlayPadding)
+            }
+        }
         .frame(minWidth: 800, minHeight: 600)
         .onAppear {
-            networkManager.securityKey = securityKey
-            networkManager.compatibilitySettings.securityKey = securityKey
             networkManager.applyCompatibilitySettings()
 
             // Ensure local machine has stable ID on start
@@ -120,9 +136,7 @@ struct DashboardView: View {
                     isOnline: true)
             ]
         }
-        .onChange(of: securityKey) { _, newValue in
-            networkManager.securityKey = newValue
-            networkManager.compatibilitySettings.securityKey = newValue
+        .onChange(of: networkManager.compatibilitySettings.securityKey) { _, _ in
             networkManager.applyCompatibilitySettings()
         }
         .onChange(of: networkManager.connectedMachines, initial: true) { _, connected in
@@ -151,13 +165,86 @@ struct DashboardView: View {
 
         self.machines = newMachines
     }
+
+    private var overlayAlignment: Alignment {
+        switch dragDropOverlayPosition {
+        case "topLeading": return .topLeading
+        case "topTrailing": return .topTrailing
+        case "bottom": return .bottom
+        case "bottomLeading": return .bottomLeading
+        case "bottomTrailing": return .bottomTrailing
+        default: return .top
+        }
+    }
+
+    private var overlayPadding: EdgeInsets {
+        switch dragDropOverlayPosition {
+        case "bottom", "bottomLeading", "bottomTrailing":
+            return EdgeInsets(top: 0, leading: 16, bottom: 16, trailing: 16)
+        default:
+            return EdgeInsets(top: 16, leading: 16, bottom: 0, trailing: 16)
+        }
+    }
+}
+
+private struct DragDropOverlayView: View {
+    let state: MBDragDropState
+    let sourceName: String?
+    let fileSummary: String?
+    let progress: Double?
+    let showDevice: Bool
+    let showProgress: Bool
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                Image(systemName: state == .dropping ? "tray.and.arrow.down" : "hand.draw")
+                    .font(.title3)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(state == .dropping ? "松开以投递" : "正在拖拽文件")
+                        .font(.headline)
+                    if showDevice, let sourceName, !sourceName.isEmpty {
+                        Text(sourceName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+            }
+
+            if let summary = fileSummary {
+                Text(summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if showProgress {
+                if let progress {
+                    ProgressView(value: progress)
+                        .progressViewStyle(.linear)
+                } else {
+                    ProgressView()
+                        .progressViewStyle(.linear)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: 360)
+        .background(.ultraThinMaterial)
+        .clipShape(.rect(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+        )
+        .shadow(radius: 8, y: 2)
+    }
 }
 
 // MARK: - Detail Views
 
 struct ArrangementDetailView: View {
     @Binding var machines: [Machine]
-    @Binding var securityKey: String
     @Environment(MBAccessibilityService.self) private var accessibilityService:
         MBAccessibilityService
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager:
@@ -177,6 +264,7 @@ struct ArrangementDetailView: View {
     }
 
     var body: some View {
+        @Bindable var networkManager = networkManager
         ScrollView {
             VStack(spacing: 24) {
                 // Header status
@@ -201,7 +289,7 @@ struct ArrangementDetailView: View {
                 .cornerRadius(10)
                 .padding([.horizontal, .top])
 
-                PairingFlowView(securityKey: $securityKey)
+                PairingFlowView(securityKey: $networkManager.compatibilitySettings.securityKey)
                     .padding(.horizontal)
 
                 VStack(alignment: .leading) {

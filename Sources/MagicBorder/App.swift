@@ -27,7 +27,7 @@ struct MagicBorderApp: App {
     @AppStorage("captureInput") private var captureInput = true
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             DashboardView()
                 .environment(accessibilityService)
                 .environment(inputManager)
@@ -42,6 +42,11 @@ struct MagicBorderApp: App {
                 .onChange(of: captureInput) { _, _ in
                     syncInputCapture()
                 }
+        }
+        MenuBarExtra("MagicBorder", systemImage: "rectangle.and.cursor.arrow") {
+            MenuBarView()
+                .environment(accessibilityService)
+                .environment(networkManager)
         }
     }
 

@@ -7,6 +7,11 @@ struct SettingsView: View {
     @AppStorage("wrapMouse") private var wrapMouse = false
     @AppStorage("hideMouse") private var hideMouse = true
     @AppStorage("captureInput") private var captureInput = true
+    @AppStorage("dragDropOverlayEnabled") private var dragDropOverlayEnabled = true
+    @AppStorage("dragDropOverlayShowDevice") private var dragDropOverlayShowDevice = true
+    @AppStorage("dragDropOverlayShowProgress") private var dragDropOverlayShowProgress = true
+    @AppStorage("dragDropOverlayScale") private var dragDropOverlayScale = 1.0
+    @AppStorage("dragDropOverlayPosition") private var dragDropOverlayPosition = "top"
 
     var body: some View {
         @Bindable var networkManager = networkManager
@@ -59,6 +64,33 @@ struct SettingsView: View {
                 Button("Validate Key") {
                     _ = networkManager.compatibilitySettings.validateSecurityKey()
                 }
+            }
+
+            Section(header: Label("Drag & Drop Overlay", systemImage: "tray.and.arrow.down")) {
+                Toggle("Show Overlay", isOn: $dragDropOverlayEnabled)
+                Toggle("Show Device Name", isOn: $dragDropOverlayShowDevice)
+                    .disabled(!dragDropOverlayEnabled)
+                Toggle("Show Progress", isOn: $dragDropOverlayShowProgress)
+                    .disabled(!dragDropOverlayEnabled)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Overlay Size")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Slider(value: $dragDropOverlayScale, in: 0.85...1.3, step: 0.05)
+                        .disabled(!dragDropOverlayEnabled)
+                }
+
+                Picker("Position", selection: $dragDropOverlayPosition) {
+                    Text("Top").tag("top")
+                    Text("Top Left").tag("topLeading")
+                    Text("Top Right").tag("topTrailing")
+                    Text("Bottom").tag("bottom")
+                    Text("Bottom Left").tag("bottomLeading")
+                    Text("Bottom Right").tag("bottomTrailing")
+                }
+                .pickerStyle(.segmented)
+                .disabled(!dragDropOverlayEnabled)
             }
         }
         .formStyle(.grouped)

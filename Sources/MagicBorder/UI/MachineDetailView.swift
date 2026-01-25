@@ -1,6 +1,8 @@
+import MagicBorderKit
 import SwiftUI
 
 struct MachineDetailView: View {
+    @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
     let machine: Machine
     
     private let columns = [
@@ -82,13 +84,17 @@ struct MachineDetailView: View {
             Divider()
             
             HStack {
-                Button(action: {}) {
+                Button(action: {
+                    networkManager.reconnect(machineId: machine.id)
+                }) {
                     Label("Restart", systemImage: "restart")
                 }
                 .buttonStyle(.plain)
                 .help("Restart connection")
                 
-                Button(action: {}) {
+                Button(action: {
+                    networkManager.disconnect(machineId: machine.id)
+                }) {
                     Label("Disconnect", systemImage: "xmark.circle")
                 }
                 .buttonStyle(.plain)

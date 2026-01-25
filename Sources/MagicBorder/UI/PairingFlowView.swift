@@ -7,7 +7,7 @@ struct PairingFlowView: View {
         MagicBorderKit.MBNetworkManager
 
     @Binding var securityKey: String
-    @State private var ipAddress: String = ""
+    @AppStorage("pairingIPAddress") private var ipAddress: String = ""
     @State private var showGuide = false
     @State private var isConnecting = false
     @State private var toastMessage: String = ""
