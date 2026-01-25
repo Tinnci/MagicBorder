@@ -10,8 +10,8 @@ struct PairingFlowView: View {
     @AppStorage("pairingIPAddress") private var ipAddress: String = ""
     @State private var showGuide = false
     @State private var isConnecting = false
-    @State private var toastMessage: String = ""
-    @State private var showToast = false
+    @State private var statusMessage: String?
+    @State private var statusStyle: StatusStyle = .neutral
 
     private var trimmedKey: String {
         securityKey.replacingOccurrences(of: " ", with: "")
@@ -23,8 +23,7 @@ struct PairingFlowView: View {
 
     var body: some View {
         GroupBox {
-            ZStack(alignment: .topTrailing) {
-                VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Label("Windows Pairing", systemImage: "windowslogo")
                             .font(.headline)
@@ -58,6 +57,12 @@ struct PairingFlowView: View {
                         Spacer()
                     }
 
+                    if let message = statusMessage {
+                        Label(message, systemImage: statusStyle.iconName)
+                            .font(.caption)
+                            .foregroundStyle(statusStyle.color)
+                    }
+
                     Divider()
 
                     HStack(spacing: 8) {
@@ -83,24 +88,17 @@ struct PairingFlowView: View {
                     Text("Tip: If pairing fails, disable VPN and verify the key matches on both devices.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 4)
-
-                if showToast {
-                    ToastView(message: toastMessage)
-                        .padding(8)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
             }
+            .padding(.vertical, 4)
         }
         .sheet(isPresented: $showGuide) {
             WindowsPairingGuideView(securityKey: securityKey, isKeyValid: isKeyValid)
         }
         .onChange(of: networkManager.connectedMachines) { _, newValue in
             if newValue.isEmpty {
-                showToast(text: "连接已断开")
+                showStatus(text: "连接已断开", style: .warning)
             } else {
-                showToast(text: "连接成功")
+                showStatus(text: "连接成功", style: .success)
             }
         }
     }
@@ -109,20 +107,18 @@ struct PairingFlowView: View {
         guard !ipAddress.isEmpty, isKeyValid else { return }
         isConnecting = true
         networkManager.connectToHost(ip: ipAddress)
-        showToast(text: "已发送连接请求")
+        showStatus(text: "已发送连接请求", style: .neutral)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             isConnecting = false
         }
     }
 
-    private func showToast(text: String) {
-        toastMessage = text
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            showToast = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            withAnimation(.easeOut(duration: 0.2)) {
-                showToast = false
+    private func showStatus(text: String, style: StatusStyle) {
+        statusMessage = text
+        statusStyle = style
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            if statusMessage == text {
+                statusMessage = nil
             }
         }
     }
@@ -213,21 +209,25 @@ private struct ConnectionStatusBadge: View {
     }
 }
 
-private struct ToastView: View {
-    let message: String
+private enum StatusStyle {
+    case neutral
+    case success
+    case warning
 
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-            Text(message)
-                .font(.caption)
+    var color: Color {
+        switch self {
+        case .neutral: return .secondary
+        case .success: return .green
+        case .warning: return .orange
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
-        .cornerRadius(10)
-        .shadow(radius: 6, y: 2)
+    }
+
+    var iconName: String {
+        switch self {
+        case .neutral: return "info.circle"
+        case .success: return "checkmark.circle.fill"
+        case .warning: return "exclamationmark.triangle.fill"
+        }
     }
 }
 

@@ -30,7 +30,6 @@ struct DashboardView: View {
     @Environment(MBOverlayPreferencesStore.self) private var overlayPreferences
     @State private var selection: SidebarItem? = .arrangement
     @State private var searchText = ""
-    @State private var isRefreshing = false
     @AppStorage("dragDropOverlayEnabled") private var dragDropOverlayEnabled = true
     @AppStorage("dragDropOverlayShowDevice") private var dragDropOverlayShowDevice = true
     @AppStorage("dragDropOverlayShowProgress") private var dragDropOverlayShowProgress = true
@@ -85,25 +84,12 @@ struct DashboardView: View {
                     }
                     .help("Add Machine")
                 }
-                ToolbarItem {
-                    Button(action: refreshMachines) {
-                        Image(systemName: "arrow.clockwise")
-                            .rotationEffect(.degrees(isRefreshing ? 360 : 0))
-                            .animation(
-                                isRefreshing
-                                    ? .linear(duration: 1).repeatForever(autoreverses: false)
-                                    : .default, value: isRefreshing)
-                    }
-                    .help("Refresh Machines")
-                }
             }
         } detail: {
             if let selection = selection {
                 switch selection {
                 case .arrangement:
                     ArrangementDetailView(machines: $machines)
-                case .settings:
-                    SettingsView()
                 case .machines:
                     DiscoveredMachinesListView(networkManager: networkManager)
                 }
@@ -142,14 +128,6 @@ struct DashboardView: View {
         }
         .onChange(of: networkManager.connectedMachines, initial: true) { _, connected in
             updateMachines(from: connected)
-        }
-    }
-
-    private func refreshMachines() {
-        isRefreshing = true
-        // Simulate a refresh
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            isRefreshing = false
         }
     }
 
@@ -283,8 +261,8 @@ struct ArrangementDetailView: View {
 
     var body: some View {
         @Bindable var networkManager = networkManager
-        Form {
-            Section("System") {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
                 HStack(spacing: 12) {
                     StatusDot(active: accessibilityService.isTrusted)
                     VStack(alignment: .leading, spacing: 4) {
@@ -302,75 +280,85 @@ struct ArrangementDetailView: View {
                         .controlSize(.small)
                     }
                 }
-            }
+                .padding(.horizontal)
 
-            Section("Pairing") {
-                PairingFlowView(securityKey: $networkManager.compatibilitySettings.securityKey)
-            }
-
-            Section("Machine Arrangement") {
-                MachineMatrixView(
-                    machines: $machines,
-                    columns: matrixTwoRowBinding.wrappedValue ? 2 : max(1, machines.count)
-                )
-                .frame(height: 200)
-            }
-
-            Section("Switching") {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Active")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(networkManager.activeMachineName)
-                            .font(.headline)
-                    }
-                    Spacer()
-                    Text(networkManager.switchState.rawValue.capitalized)
-                        .font(.caption)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.thinMaterial, in: Capsule())
+                GroupBox("Arrangement") {
+                    MachineMatrixView(
+                        machines: $machines,
+                        columns: matrixTwoRowBinding.wrappedValue ? 2 : max(1, machines.count)
+                    )
+                    .frame(minHeight: 240)
+                    .padding(8)
                 }
+                .padding(.horizontal)
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(machines) { machine in
-                            Button(action: {
-                                networkManager.requestSwitch(to: machine.id)
-                            }) {
-                                Label(machine.name, systemImage: "arrow.right.circle")
+                HStack(alignment: .top, spacing: 16) {
+                    GroupBox("Pairing") {
+                        PairingFlowView(securityKey: $networkManager.compatibilitySettings.securityKey)
+                            .padding(4)
+                    }
+
+                    GroupBox("Devices") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Active")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Text(networkManager.activeMachineName)
+                                        .font(.headline)
+                                }
+                                Spacer()
+                                Text(networkManager.switchState.rawValue.capitalized)
                                     .font(.caption)
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 6)
+                                    .background(.thinMaterial, in: Capsule())
                             }
-                            .buttonStyle(.bordered)
+
+                            List {
+                                ForEach(machines) { machine in
+                                    HStack {
+                                        Text(machine.name)
+                                        Spacer()
+                                        Button("Switch") {
+                                            networkManager.requestSwitch(to: machine.id)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.small)
+                                    }
+                                }
+                            }
+                            .frame(minHeight: 200)
+                            .listStyle(.inset)
+                        }
+                        .padding(4)
+                    }
+                }
+                .padding(.horizontal)
+
+                GroupBox("Matrix Options") {
+                    Toggle("Two Row Matrix", isOn: matrixTwoRowBinding)
+                    Toggle("Swap Matrix Order", isOn: matrixSwapBinding)
+                }
+                .padding(.horizontal)
+
+                HStack {
+                    Spacer()
+                    Button("Send Files (MWB DragDrop)") {
+                        let panel = NSOpenPanel()
+                        panel.canChooseFiles = true
+                        panel.canChooseDirectories = true
+                        panel.allowsMultipleSelection = true
+                        if panel.runModal() == .OK {
+                            networkManager.sendFileDrop(panel.urls)
                         }
                     }
-                    .padding(.vertical, 4)
                 }
-                .scrollIndicators(.hidden)
+                .padding(.horizontal)
             }
-
-            Section("Matrix Options") {
-                Toggle("Two Row Matrix", isOn: matrixTwoRowBinding)
-                Toggle("Swap Matrix Order", isOn: matrixSwapBinding)
-            }
-
-            Section("Actions") {
-                Button("Send Files (MWB DragDrop)") {
-                    let panel = NSOpenPanel()
-                    panel.canChooseFiles = true
-                    panel.canChooseDirectories = true
-                    panel.allowsMultipleSelection = true
-                    if panel.runModal() == .OK {
-                        networkManager.sendFileDrop(panel.urls)
-                    }
-                }
-            }
+            .padding(.vertical, 16)
         }
-        .formStyle(.grouped)
-        .padding(.vertical, 8)
         .navigationTitle("Arrangement")
         .onChange(of: machines) { _, newValue in
             networkManager.updateLocalMatrix(names: newValue.map { $0.name })

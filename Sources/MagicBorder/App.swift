@@ -51,6 +51,13 @@ struct MagicBorderApp: App {
                 .environment(networkManager)
                 .environment(overlayPreferences)
         }
+
+        Settings {
+            SettingsView()
+                .environment(accessibilityService)
+                .environment(networkManager)
+                .environment(overlayPreferences)
+        }
     }
 
     private func syncInputCapture() {

@@ -9,12 +9,13 @@ struct MachineMatrixView: View {
     @State private var draggingMachine: Machine?
 
     var body: some View {
-        Grid(horizontalSpacing: 20, verticalSpacing: 20) {
+        Grid(horizontalSpacing: 16, verticalSpacing: 16) {
             let rows = machines.chunked(into: max(1, columns))
             ForEach(0..<rows.count, id: \.self) { rowIndex in
                 GridRow {
                     ForEach(rows[rowIndex]) { machine in
                         MachineCard(name: machine.name, isOnline: machine.isOnline)
+                            .frame(minWidth: 140, maxWidth: .infinity, minHeight: 72)
                             .onDrag {
                                 self.draggingMachine = machine
                                 return NSItemProvider(object: machine.id.uuidString as NSString)
@@ -28,9 +29,7 @@ struct MachineMatrixView: View {
                 }
             }
         }
-        .padding()
-        .background(Material.ultraThin)
-        .cornerRadius(12)
+        .padding(8)
         .animation(.default, value: machines)
     }
 }
@@ -51,48 +50,30 @@ struct MachineCard: View {
     @State private var isHovering = false
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(
-                isOnline
-                    ? AnyShapeStyle(
-                        LinearGradient(
-                            colors: [.blue.opacity(0.8), .purple.opacity(0.8)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    : AnyShapeStyle(Material.thick)
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(Color(nsColor: .controlBackgroundColor))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.primary.opacity(isHovering ? 0.18 : 0.08), lineWidth: 1)
             )
-            .frame(width: 120, height: 80)
             .overlay {
-                // Online Glow
-                if isOnline {
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                        .shadow(color: .blue.opacity(0.5), radius: 10)
-                }
-            }
-            .overlay {
-                VStack(spacing: 4) {
+                VStack(spacing: 6) {
                     Image(systemName: "desktopcomputer")
-                        .font(.title)
-                        .symbolEffect(.bounce, value: isOnline)
-                        .foregroundStyle(isOnline ? .white : .secondary)
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
 
-                    Text(name)
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(isOnline ? .white : .secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 4)
+                    HStack(spacing: 6) {
+                        StatusDot(active: isOnline)
+                        Text(name)
+                            .font(.caption)
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                    }
                 }
+                .padding(.horizontal, 8)
             }
-            .scaleEffect(isHovering ? 1.05 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHovering)
             .onHover { isHovering = $0 }
-            // Dim if offline
             .opacity(isOnline ? 1 : 0.6)
-            .saturation(isOnline ? 1 : 0)
     }
 }
 
