@@ -17,8 +17,9 @@ struct MenuBarView: View {
             NSApp.activate(ignoringOtherApps: true)
         }
 
-        Button("Quick Pair...") {
-            presentQuickPair()
+        Button("Machine Arrangement...") {
+            openWindow(id: "main")
+            NSApp.activate(ignoringOtherApps: true)
         }
 
         Divider()
@@ -51,35 +52,4 @@ struct MenuBarView: View {
         }
     }
 
-    private func presentQuickPair() {
-        let alert = NSAlert()
-        alert.messageText = "Quick Pair"
-        alert.informativeText = "Enter the Windows IP to connect."
-        alert.addButton(withTitle: "Connect")
-        alert.addButton(withTitle: "Cancel")
-
-        let ipField = NSTextField(string: pairingIPAddress)
-        ipField.placeholderString = "192.168.1.12"
-        ipField.controlSize = .regular
-
-        let keyField = NSTextField(string: networkManager.compatibilitySettings.securityKey)
-        keyField.placeholderString = "Security Key"
-        keyField.controlSize = .regular
-
-        let stack = NSStackView(views: [ipField, keyField])
-        stack.orientation = .vertical
-        stack.spacing = 8
-        stack.alignment = .leading
-        alert.accessoryView = stack
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        pairingIPAddress = ipField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        networkManager.compatibilitySettings.securityKey = keyField.stringValue
-        networkManager.applyCompatibilitySettings()
-        if !pairingIPAddress.isEmpty {
-            networkManager.connectToHost(ip: pairingIPAddress)
-        }
-    }
 }

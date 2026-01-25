@@ -24,70 +24,78 @@ struct PairingFlowView: View {
     var body: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Label("Windows Pairing", systemImage: "windowslogo")
-                            .font(.headline)
-                        Spacer()
-                        if isConnecting {
-                            ConnectionStatusBadge(title: "连接中")
-                        }
-                        Button("Guide") {
-                            showGuide = true
-                        }
-                        .buttonStyle(.link)
+                HStack {
+                    Label("Windows Pairing", systemImage: "windowslogo")
+                        .font(.headline)
+                    Spacer()
+                    if isConnecting {
+                        ConnectionStatusBadge(title: "连接中")
                     }
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("1. Install Mouse Without Borders on Windows")
-                        Text("2. Use the same Security Key on both devices")
-                        Text("3. Allow ports 15100/15101 in Windows Firewall")
-                        Text("4. Make sure both devices are on the same subnet")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                    PairingCardView(securityKey: $securityKey)
-
-                    HStack(spacing: 8) {
-                        Image(systemName: isKeyValid ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                            .foregroundStyle(isKeyValid ? .green : .orange)
-                        Text(isKeyValid ? "Security Key 就绪" : "Security Key 至少 16 位")
-                            .font(.caption)
+                    Button(action: { showGuide = true }) {
+                        Image(systemName: "questionmark.circle")
+                            .font(.body)
                             .foregroundStyle(.secondary)
-                        Spacer()
                     }
+                    .buttonStyle(.plain)
+                    .help("Pairing Guide")
+                }
 
-                    if let message = statusMessage {
-                        Label(message, systemImage: statusStyle.iconName)
-                            .font(.caption)
-                            .foregroundStyle(statusStyle.color)
-                    }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("1. Install Mouse Without Borders on Windows")
+                    Text("2. Use the same Security Key on both devices")
+                    Text("3. Allow ports 15100/15101 in Windows Firewall")
+                    Text("4. Make sure both devices are on the same subnet")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-                    Divider()
+                PairingCardView(securityKey: $securityKey)
 
-                    HStack(spacing: 8) {
-                        Image(systemName: "network")
-                            .foregroundStyle(.secondary)
-
-                        TextField("Windows IP (e.g. 192.168.1.12)", text: $ipAddress)
-                            .textFieldStyle(.roundedBorder)
-                            .autocorrectionDisabled()
-                            .onSubmit {
-                                if !ipAddress.isEmpty && isKeyValid {
-                                    startConnecting()
-                                }
-                            }
-
-                        Button("Connect") {
-                            startConnecting()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(ipAddress.isEmpty || !isKeyValid)
-                    }
-
-                    Text("Tip: If pairing fails, disable VPN and verify the key matches on both devices.")
-                        .font(.caption2)
+                HStack(spacing: 8) {
+                    Image(
+                        systemName: isKeyValid
+                            ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"
+                    )
+                    .foregroundStyle(isKeyValid ? .green : .orange)
+                    Text(isKeyValid ? "Security Key 就绪" : "Security Key 至少 16 位")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
+                    Spacer()
+                }
+
+                if let message = statusMessage {
+                    Label(message, systemImage: statusStyle.iconName)
+                        .font(.caption)
+                        .foregroundStyle(statusStyle.color)
+                }
+
+                Divider()
+
+                HStack(spacing: 8) {
+                    Image(systemName: "network")
+                        .foregroundStyle(.secondary)
+
+                    TextField("Windows IP (e.g. 192.168.1.12)", text: $ipAddress)
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled()
+                        .onSubmit {
+                            if !ipAddress.isEmpty && isKeyValid {
+                                startConnecting()
+                            }
+                        }
+
+                    Button("Connect") {
+                        startConnecting()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(ipAddress.isEmpty || !isKeyValid)
+                }
+
+                Text(
+                    "Tip: If pairing fails, disable VPN and verify the key matches on both devices."
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
             }
             .padding(.vertical, 4)
         }
@@ -146,11 +154,18 @@ private struct WindowsPairingGuideView: View {
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                GuideStepRow(index: 1, title: "Install Mouse Without Borders (PowerToys version is supported)", isHighlighted: highlightedStep == 1)
-                    .onTapGesture { highlightedStep = 1 }
+                GuideStepRow(
+                    index: 1,
+                    title: "Install Mouse Without Borders (PowerToys version is supported)",
+                    isHighlighted: highlightedStep == 1
+                )
+                .onTapGesture { highlightedStep = 1 }
 
-                GuideStepRow(index: 2, title: "Open Settings → Security Key and paste:", isHighlighted: highlightedStep == 2)
-                    .onTapGesture { highlightedStep = 2 }
+                GuideStepRow(
+                    index: 2, title: "Open Settings → Security Key and paste:",
+                    isHighlighted: highlightedStep == 2
+                )
+                .onTapGesture { highlightedStep = 2 }
 
                 Text(securityKey)
                     .font(.system(.body, design: .monospaced))
@@ -159,18 +174,28 @@ private struct WindowsPairingGuideView: View {
                     .cornerRadius(8)
 
                 HStack(spacing: 8) {
-                    Image(systemName: isKeyValid ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                        .foregroundStyle(isKeyValid ? .green : .orange)
+                    Image(
+                        systemName: isKeyValid
+                            ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"
+                    )
+                    .foregroundStyle(isKeyValid ? .green : .orange)
                     Text(isKeyValid ? "Security Key 格式正确" : "Security Key 至少 16 位")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
-                GuideStepRow(index: 3, title: "Allow ports 15100 (clipboard) and 15101 (control) in Windows Firewall", isHighlighted: highlightedStep == 3)
-                    .onTapGesture { highlightedStep = 3 }
+                GuideStepRow(
+                    index: 3,
+                    title: "Allow ports 15100 (clipboard) and 15101 (control) in Windows Firewall",
+                    isHighlighted: highlightedStep == 3
+                )
+                .onTapGesture { highlightedStep = 3 }
 
-                GuideStepRow(index: 4, title: "Ensure both machines are on the same LAN/subnet", isHighlighted: highlightedStep == 4)
-                    .onTapGesture { highlightedStep = 4 }
+                GuideStepRow(
+                    index: 4, title: "Ensure both machines are on the same LAN/subnet",
+                    isHighlighted: highlightedStep == 4
+                )
+                .onTapGesture { highlightedStep = 4 }
             }
             .font(.callout)
 
