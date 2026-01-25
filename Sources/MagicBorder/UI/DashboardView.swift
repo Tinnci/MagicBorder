@@ -378,6 +378,9 @@ struct ArrangementDetailView: View {
                 .cornerRadius(10)
                 .padding([.horizontal, .top])
 
+                PairingFlowView(securityKey: $securityKey)
+                    .padding(.horizontal)
+
                 VStack(alignment: .leading) {
                     Text("Machine Arrangement")
                         .font(.headline)
@@ -450,9 +453,6 @@ struct ArrangementDetailView: View {
                         .padding(.horizontal)
                 }
                 .buttonStyle(.bordered)
-                
-                PairingCardView(securityKey: $securityKey)
-                    .padding(.horizontal)
                 
                 Spacer()
             }

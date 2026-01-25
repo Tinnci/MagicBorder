@@ -59,6 +59,21 @@ public final class MWBCompatibilityService: ObservableObject {
         crypto.deriveKey(from: key)
     }
 
+    public func connectToHost(ip: String, messagePort: UInt16 = 15101, clipboardPort: UInt16 = 15100) {
+        guard !ip.isEmpty else { return }
+        let host = NWEndpoint.Host(ip)
+
+        if let port = NWEndpoint.Port(rawValue: messagePort) {
+            let connection = NWConnection(to: .hostPort(host: host, port: port), using: .tcp)
+            handleNewConnection(connection, kind: .message)
+        }
+
+        if let port = NWEndpoint.Port(rawValue: clipboardPort) {
+            let connection = NWConnection(to: .hostPort(host: host, port: port), using: .tcp)
+            handleNewConnection(connection, kind: .clipboard)
+        }
+    }
+
     public func sendMachineMatrix(_ machines: [String], twoRow: Bool = false, swap: Bool = false) {
         guard !messageSessions.isEmpty else { return }
         var packet = MWBPacket()

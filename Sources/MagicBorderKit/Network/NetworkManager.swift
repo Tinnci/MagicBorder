@@ -238,6 +238,19 @@ public class MBNetworkManager: Observation.Observable {
         handleNewConnection(connection)
     }
 
+    public func connectToHost(ip: String, port: UInt16 = 15101) {
+        guard !ip.isEmpty else { return }
+        if protocolMode != .modern {
+            compatibilityService?.connectToHost(ip: ip, messagePort: port)
+            return
+        }
+
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else { return }
+        let host = NWEndpoint.Host(ip)
+        let connection = NWConnection(to: .hostPort(host: host, port: nwPort), using: .tcp)
+        handleNewConnection(connection)
+    }
+
     // MARK: - Subnet Scanning
 
     public func startSubnetScanning() {
