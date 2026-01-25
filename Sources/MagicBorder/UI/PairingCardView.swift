@@ -3,56 +3,126 @@ import SwiftUI
 
 struct PairingCardView: View {
     @Binding var securityKey: String
+    @State private var isVisible = false
+    @State private var justCopied = false
+
+    var maskedKey: String {
+        String(repeating: "•", count: securityKey.count)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             Label("Security Key", systemImage: "key.fill")
                 .font(.headline)
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 12) {
-                SecureField("Security Key", text: $securityKey)
-                    .textFieldStyle(.plain)
-                    .font(.system(.title2, design: .monospaced))
-                    .padding(12)
-                    .background(Color.black.opacity(0.1))
-                    .cornerRadius(8)
-                // Make it visible on toggle? SecureField is usually hidden dots.
-                // MWB usually shows it or hides it.
-                // Let's use TextField for visibility if user wants to copy, or SecureField toggle.
-                // For "Pairs Card" design, usually it's visible or has an eyeicon.
-                // Let's simplify: Use TextField but monospaced.
+                // Key Display
+                HStack {
+                    ZStack(alignment: .leading) {
+                        if isVisible {
+                            TextField("Security Key", text: $securityKey)
+                                .textFieldStyle(.plain)
+                                .font(.system(.title3, design: .monospaced))
+                                .foregroundStyle(.primary)
+                                .transition(.opacity)
+                        } else {
+                            Text(maskedKey)
+                                .font(.system(.title3, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .transition(.opacity)
+                        }
+                    }
+                    Spacer()
 
-                Button(action: {
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    pasteboard.setString(securityKey, forType: .string)
-                }) {
-                    Image(systemName: "doc.on.doc")
-                        .font(.title2)
-                        .padding(8)
+                    // Visibility Toggle
+                    Button(action: {
+                        withAnimation(.snappy) { isVisible.toggle() }
+                    }) {
+                        Image(systemName: isVisible ? "eye.slash" : "eye")
+                            .foregroundStyle(.secondary)
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .help("Copy to Clipboard")
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Material.thick)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [.blue.opacity(0.3), .purple.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
 
-                Button(action: {
-                    // Regenerate Key
-                    // In real app, call MWBCrypto.createRandomKey() if we moved it to Logic.
-                    // For now, random alphanumeric string.
-                    securityKey = String(UUID().uuidString.prefix(16))
-                }) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .font(.title2)
-                        .padding(8)
+                // Actions
+                HStack(spacing: 8) {
+                    Button(action: {
+                        let pasteboard = NSPasteboard.general
+                        pasteboard.clearContents()
+                        pasteboard.setString(securityKey, forType: .string)
+
+                        withAnimation { justCopied = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation { justCopied = false }
+                        }
+                    }) {
+                        ZStack {
+                            Image(systemName: "doc.on.doc")
+                                .opacity(justCopied ? 0 : 1)
+                                .scaleEffect(justCopied ? 0.5 : 1)
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.green)
+                                .opacity(justCopied ? 1 : 0)
+                                .scaleEffect(justCopied ? 1 : 0.5)
+                        }
+                        .font(.title3)
+                        .frame(width: 36, height: 36)
+                        .background(Material.ultraThin.opacity(0.5))
+                        .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Copy to Clipboard")
+
+                    Button(action: {
+                        withAnimation(.bouncy) {
+                            securityKey = String(UUID().uuidString.prefix(16))
+                        }
+                    }) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.title3)
+                            .frame(width: 36, height: 36)
+                            .background(Material.ultraThin.opacity(0.5))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Generate New Key")
                 }
-                .buttonStyle(.plain)
-                .help("Generate New Key")
             }
         }
-        .padding()
-        .background(.ultraThinMaterial)
-        .cornerRadius(16)
-        .shadow(radius: 2)
+        .padding(20)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(Material.regular)
+
+                // Subtle glowing gradient background "bleed"
+                RoundedRectangle(cornerRadius: 24)
+                    .stroke(
+                        LinearGradient(
+                            colors: [.blue.opacity(0.2), .purple.opacity(0.2)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
+        )
+        .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 4)
     }
 }
 

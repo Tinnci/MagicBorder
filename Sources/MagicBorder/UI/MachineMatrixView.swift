@@ -1,11 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct Machine: Identifiable, Equatable, Codable {
-    let id: UUID
-    var name: String
-    var isOnline: Bool
-}
+
 
 struct MachineMatrixView: View {
     @Binding var machines: [Machine]
@@ -52,24 +48,51 @@ struct MachineCard: View {
     let name: String
     let isOnline: Bool
 
+    @State private var isHovering = false
+
     var body: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(isOnline ? Color.blue.gradient : Color.gray.gradient)
+            .fill(
+                isOnline
+                    ? AnyShapeStyle(
+                        LinearGradient(
+                            colors: [.blue.opacity(0.8), .purple.opacity(0.8)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    : AnyShapeStyle(Material.thick)
+            )
             .frame(width: 120, height: 80)
             .overlay {
-                VStack {
+                // Online Glow
+                if isOnline {
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                        .shadow(color: .blue.opacity(0.5), radius: 10)
+                }
+            }
+            .overlay {
+                VStack(spacing: 4) {
                     Image(systemName: "desktopcomputer")
-                        .font(.largeTitle)
+                        .font(.title)
                         .symbolEffect(.bounce, value: isOnline)
+                        .foregroundStyle(isOnline ? .white : .secondary)
 
                     Text(name)
                         .font(.caption)
-                        .fontWeight(.medium)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(isOnline ? .white : .secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 4)
                 }
-                .foregroundStyle(.white)
             }
-            .shadow(radius: isOnline ? 5 : 0)
-            .scaleEffect(isOnline ? 1.05 : 1.0)
+            .scaleEffect(isHovering ? 1.05 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHovering)
+            .onHover { isHovering = $0 }
+            // Dim if offline
+            .opacity(isOnline ? 1 : 0.6)
+            .saturation(isOnline ? 1 : 0)
     }
 }
 
