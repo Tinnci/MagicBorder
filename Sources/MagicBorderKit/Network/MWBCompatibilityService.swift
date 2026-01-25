@@ -34,9 +34,15 @@ public final class MWBCompatibilityService: ObservableObject {
     public var onRemoteKey: ((MWBKeyEvent) -> Void)?
     public var onMachineSwitched: ((MWBPeer?) -> Void)?
     public var onMachineMatrix: (([String]) -> Void)?
+    public var onMatrixOptions: ((Bool, Bool) -> Void)?
     public var onClipboardText: ((String) -> Void)?
     public var onClipboardImage: ((Data) -> Void)?
     public var onClipboardFiles: (([URL]) -> Void)?
+    public var onHideMouse: (() -> Void)?
+    public var onDragDropOperation: ((String?) -> Void)?
+    public var onDragDropBegin: ((String?) -> Void)?
+    public var onDragDropEnd: (() -> Void)?
+    public var onCaptureScreen: ((Int32?) -> Void)?
 
     public init(localName: String, localId: Int32, messagePort: UInt16 = 15101, clipboardPort: UInt16 = 15100) {
         self.localName = localName
@@ -111,10 +117,49 @@ public final class MWBCompatibilityService: ObservableObject {
         broadcast(packet, to: messageSessions)
     }
 
+    public func sendMouseEvent(x: Int32, y: Int32, wheel: Int32, flags: Int32) {
+        guard !messageSessions.isEmpty else { return }
+        var packet = MWBPacket()
+        packet.type = .mouse
+        packet.src = localId
+        packet.des = Int32(255)
+        packet.mouseX = x
+        packet.mouseY = y
+        packet.mouseWheel = wheel
+        packet.mouseFlags = flags
+        broadcast(packet, to: messageSessions)
+    }
+
+    public func sendKeyEvent(keyCode: Int32, flags: Int32) {
+        guard !messageSessions.isEmpty else { return }
+        var packet = MWBPacket()
+        packet.type = .keyboard
+        packet.src = localId
+        packet.des = Int32(255)
+        packet.keyCode = keyCode
+        packet.keyFlags = flags
+        broadcast(packet, to: messageSessions)
+    }
+
+    public func sendHideMouse() {
+        guard !messageSessions.isEmpty else { return }
+        var packet = MWBPacket()
+        packet.type = .hideMouse
+        packet.src = localId
+        packet.des = Int32(255)
+        broadcast(packet, to: messageSessions)
+    }
+
     public func sendFileDrop(_ urls: [URL]) {
         guard !messageSessions.isEmpty else { return }
         let payload = encodeFileDrop(urls)
         sendChunked(type: .clipboardDragDrop, data: payload, to: messageSessions)
+
+        var beginPacket = MWBPacket()
+        beginPacket.type = .clipboardDragDropOperation
+        beginPacket.src = localId
+        beginPacket.des = Int32(255)
+        broadcast(beginPacket, to: messageSessions)
 
         var endPacket = MWBPacket()
         endPacket.type = .clipboardDragDropEnd
@@ -123,8 +168,24 @@ public final class MWBCompatibilityService: ObservableObject {
         broadcast(endPacket, to: messageSessions)
     }
 
+    public func sendClipboardText(_ text: String) {
+        guard let target = clipboardTargets().first else { return }
+        sendClipboardText(text, via: target)
+    }
+
+    public func sendClipboardImage(_ data: Data) {
+        guard let target = clipboardTargets().first else { return }
+        sendClipboardImage(data, via: target)
+    }
+
+    public func sendClipboardImage(_ data: Data, to peerId: Int32?) {
+        guard let target = clipboardTargets().first(where: { $0.peer?.id == peerId })
+            ?? messageSessions.first(where: { $0.peer?.id == peerId }) else { return }
+        sendClipboardImage(data, via: target)
+    }
+
     public func sendClipboardFromPasteboard() {
-        guard let session = messageSessions.first else { return }
+        guard let session = clipboardTargets().first else { return }
         if let string = NSPasteboard.general.string(forType: .string) {
             sendClipboardText(string, via: session)
             return
@@ -136,6 +197,13 @@ public final class MWBCompatibilityService: ObservableObject {
            let png = bitmap.representation(using: .png, properties: [:]) {
             sendClipboardImage(png, via: session)
         }
+    }
+
+    private func clipboardTargets() -> [MWBSession] {
+        if !clipboardSessions.isEmpty {
+            return clipboardSessions
+        }
+        return messageSessions
     }
 
     private func startMessageListener() {
@@ -231,6 +299,17 @@ public final class MWBCompatibilityService: ObservableObject {
             if let peer = session.peer {
                 onConnected?(peer)
             }
+        case .hello, .hi, .awake, .heartbeat, .heartbeatEx, .heartbeatExL2, .heartbeatExL3:
+            if session.peer == nil {
+                session.peer = MWBPeer(id: packet.src, name: packet.machineName)
+            }
+            if let peer = session.peer {
+                onConnected?(peer)
+            }
+        case .byeBye:
+            if let peer = session.peer {
+                onDisconnected?(peer)
+            }
         case .clipboard, .clipboardPush:
             if session.kind == .clipboard {
                 session.peer = MWBPeer(id: packet.src, name: packet.machineName)
@@ -259,23 +338,37 @@ public final class MWBCompatibilityService: ObservableObject {
             }
         case .clipboardAsk:
             sendClipboardFromPasteboard()
+        case .clipboardCapture:
+            sendClipboardFromPasteboard()
         case .clipboardDragDrop, .explorerDragDrop:
             session.appendDragDropChunk(packet.clipboardPayload)
+            onDragDropBegin?(session.peer?.name)
+        case .clipboardDragDropOperation:
+            onDragDropOperation?(session.peer?.name)
         case .clipboardDragDropEnd:
             if let payload = session.consumeDragDropPayload(),
                let urls = decodeFileDrop(payload) {
                 onClipboardFiles?(urls)
             }
+            onDragDropEnd?()
         case .machineSwitched:
             onMachineSwitched?(session.peer)
         case .nextMachine:
             onMachineSwitched?(session.peer)
+        case .hideMouse:
+            onHideMouse?()
+        case .captureScreenCommand:
+            onCaptureScreen?(packet.src)
         case .matrix:
             // Basic matrix info: machineName field contains a CSV on some builds
             let matrix = packet.machineName.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
             if !matrix.isEmpty {
                 onMachineMatrix?(matrix)
             }
+            let flags = packet.rawType & 0x0F
+            let swap = (flags & 0x02) != 0
+            let twoRow = (flags & 0x04) != 0
+            onMatrixOptions?(twoRow, swap)
         default:
             break
         }

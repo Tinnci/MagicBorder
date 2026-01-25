@@ -98,6 +98,13 @@ public class MBNetworkManager: Observation.Observable {
 
     public var compatibilitySettings = MBCompatibilitySettings()
 
+    private var pasteboardMonitor: MBPasteboardMonitor?
+    private var localMatrix: [String] = []
+    private var lastEdgeSwitchTime: TimeInterval = 0
+    private var lastMouseLocation: CGPoint?
+    private let dragDropIndicator = MBDragDropIndicator()
+    public var dragDropState: MBDragDropState?
+
     private var compatibilityService: MWBCompatibilityService?
     private var mwbIdToUuid: [Int32: UUID] = [:]
     private var uuidToMwbId: [UUID: Int32] = [:]
@@ -108,6 +115,7 @@ public class MBNetworkManager: Observation.Observable {
         startBrowsing()
         startSubnetScanning()
         configureCompatibility()
+        setupPasteboardMonitoring()
     }
 
     private func configureCompatibility() {
@@ -140,19 +148,32 @@ public class MBNetworkManager: Observation.Observable {
         service.onRemoteKey = { event in
             MBInputManager.shared.simulateKeyEvent(event)
         }
+        service.onMachineMatrix = { [weak self] matrix in
+            self?.updateLocalMatrix(names: matrix)
+        }
+        service.onMatrixOptions = { [weak self] twoRow, swap in
+            guard let self else { return }
+            self.compatibilitySettings.matrixOneRow = !twoRow
+            self.compatibilitySettings.matrixCircle = swap
+        }
         service.onClipboardText = { text in
+            self.pasteboardMonitor?.ignoreNextChange()
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
         }
         service.onClipboardImage = { data in
+            self.pasteboardMonitor?.ignoreNextChange()
             if let image = NSImage(data: data) {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.writeObjects([image])
             }
         }
         service.onClipboardFiles = { urls in
+            self.pasteboardMonitor?.ignoreNextChange()
             NSPasteboard.general.clearContents()
             NSPasteboard.general.writeObjects(urls as [NSURL])
+            self.dragDropState = nil
+            self.dragDropIndicator.hide()
         }
         service.onMachineSwitched = { [weak self] peer in
             guard let self else { return }
@@ -166,8 +187,69 @@ public class MBNetworkManager: Observation.Observable {
             self.switchState = .active
             self.lastSwitchTimestamp = Date()
         }
+        service.onHideMouse = {
+            NSCursor.hide()
+        }
+        service.onDragDropBegin = { [weak self] sourceName in
+            guard let self else { return }
+            self.dragDropState = .dragging
+            self.dragDropIndicator.show(state: .dragging, sourceName: sourceName)
+        }
+        service.onDragDropOperation = { [weak self] sourceName in
+            guard let self else { return }
+            self.dragDropState = .dropping
+            self.dragDropIndicator.show(state: .dropping, sourceName: sourceName)
+        }
+        service.onDragDropEnd = { [weak self] in
+            guard let self else { return }
+            self.dragDropState = nil
+            self.dragDropIndicator.hide()
+        }
+        service.onCaptureScreen = { [weak self] sourceId in
+            self?.sendScreenCapture(to: sourceId)
+        }
         self.compatibilityService = service
         service.start(securityKey: securityKey)
+    }
+
+    private func setupPasteboardMonitoring() {
+        let monitor = MBPasteboardMonitor()
+        monitor.onChange = { [weak self] content in
+            guard let self else { return }
+            self.handleLocalPasteboard(content)
+        }
+        pasteboardMonitor = monitor
+        monitor.startPolling()
+    }
+
+    private func handleLocalPasteboard(_ content: MBPasteboardContent) {
+        guard compatibilitySettings.shareClipboard else { return }
+
+        switch content {
+        case .text(let text):
+            sendClipboardText(text)
+        case .image(let data):
+            sendClipboardImage(data)
+        case .files(let urls):
+            guard compatibilitySettings.transferFiles else { return }
+            sendFileDrop(urls)
+        }
+    }
+
+    private func sendScreenCapture(to sourceId: Int32?) {
+        guard let image = captureMainScreenPNG() else { return }
+        compatibilityService?.sendClipboardImage(image, to: sourceId)
+    }
+
+    private func captureMainScreenPNG() -> Data? {
+        guard let screen = NSScreen.main,
+            let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+                as? NSNumber
+        else { return nil }
+        let displayId = CGDirectDisplayID(truncating: screenNumber)
+        guard let cgImage = CGDisplayCreateImage(displayId) else { return nil }
+        let rep = NSBitmapImageRep(cgImage: cgImage)
+        return rep.representation(using: .png, properties: [:])
     }
 
     private func uuid(for id: Int32) -> UUID {
@@ -178,6 +260,13 @@ public class MBNetworkManager: Observation.Observable {
         mwbIdToUuid[id] = newId
         uuidToMwbId[newId] = id
         return newId
+    }
+
+    private func mwbId(for name: String) -> Int32? {
+        guard let machine = connectedMachines.first(where: { $0.name.uppercased() == name }) else {
+            return nil
+        }
+        return uuidToMwbId[machine.id]
     }
 
     public func requestSwitch(to machineId: UUID) {
@@ -192,15 +281,148 @@ public class MBNetworkManager: Observation.Observable {
         compatibilityService?.sendNextMachine(targetId: mwbId)
     }
 
+    public func requestSwitch(toMachineNamed name: String) {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if normalized == localName.uppercased() {
+            activeMachineId = nil
+            return
+        }
+
+        if protocolMode != .mwbCompatibility {
+            if let target = connectedMachines.first(where: { $0.name.uppercased() == normalized }) {
+                activeMachineId = target.id
+            }
+        }
+
+        if protocolMode != .modern {
+            if let mwbId = mwbId(for: normalized) {
+                compatibilityService?.sendNextMachine(targetId: mwbId)
+                activeMachineId = uuid(for: mwbId)
+            }
+        }
+    }
+
     public func sendMachineMatrix(names: [String], twoRow: Bool = false, swap: Bool = false) {
         guard protocolMode != .modern else { return }
         let uppercased = names.map { $0.uppercased() }
+        updateLocalMatrix(names: uppercased)
         compatibilityService?.sendMachineMatrix(uppercased, twoRow: twoRow, swap: swap)
     }
 
     public func sendFileDrop(_ urls: [URL]) {
         guard protocolMode != .modern else { return }
         compatibilityService?.sendFileDrop(urls)
+    }
+
+    public func updateLocalMatrix(names: [String]) {
+        localMatrix = names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
+    }
+
+    public func handleLocalMouseEvent(_ event: CGEvent, type: CGEventType) {
+        let snapshot = EventSnapshot(from: event, type: type)
+        handleLocalMouseEvent(snapshot: snapshot)
+    }
+
+    public func handleLocalMouseEvent(snapshot: EventSnapshot) {
+        guard compatibilitySettings.switchByMouse else { return }
+        guard activeMachineId == nil else { return }
+        guard let screen = NSScreen.main else { return }
+
+        let location = snapshot.location
+        let bounds = screen.frame
+        let threshold: CGFloat = 2
+
+        let nearLeft = location.x <= bounds.minX + threshold
+        let nearRight = location.x >= bounds.maxX - threshold
+        let nearBottom = location.y <= bounds.minY + threshold
+        let nearTop = location.y >= bounds.maxY - threshold
+
+        if compatibilitySettings.blockCorners {
+            let nearCorner = (nearLeft || nearRight) && (nearBottom || nearTop)
+            if nearCorner { return }
+        }
+
+        let direction: EdgeDirection?
+        if nearLeft {
+            direction = .left
+        } else if nearRight {
+            direction = .right
+        } else if nearTop {
+            direction = .up
+        } else if nearBottom {
+            direction = .down
+        } else {
+            direction = nil
+        }
+
+        guard let dir = direction, let target = nextMachineName(for: dir) else { return }
+
+        let now = CFAbsoluteTimeGetCurrent()
+        if now - lastEdgeSwitchTime < 0.1 { return }
+        lastEdgeSwitchTime = now
+
+        requestSwitch(toMachineNamed: target)
+    }
+
+    private enum EdgeDirection {
+        case left
+        case right
+        case up
+        case down
+    }
+
+    private func nextMachineName(for direction: EdgeDirection) -> String? {
+        var matrix = localMatrix
+        if matrix.isEmpty {
+            matrix = [localName.uppercased()] + connectedMachines.map { $0.name.uppercased() }
+        }
+
+        guard let currentIndex = matrix.firstIndex(of: localName.uppercased()) else { return nil }
+
+        if compatibilitySettings.matrixOneRow {
+            switch direction {
+            case .left:
+                let next = currentIndex - 1
+                if next >= 0 { return matrix[next] }
+                return compatibilitySettings.matrixCircle ? matrix.last : nil
+            case .right:
+                let next = currentIndex + 1
+                if next < matrix.count { return matrix[next] }
+                return compatibilitySettings.matrixCircle ? matrix.first : nil
+            default:
+                return nil
+            }
+        }
+
+        let columns = 2
+        let row = currentIndex / columns
+        let col = currentIndex % columns
+        let rows = Int(ceil(Double(matrix.count) / Double(columns)))
+
+        var newRow = row
+        var newCol = col
+
+        switch direction {
+        case .left:
+            newCol -= 1
+        case .right:
+            newCol += 1
+        case .up:
+            newRow -= 1
+        case .down:
+            newRow += 1
+        }
+
+        if compatibilitySettings.matrixCircle {
+            if newCol < 0 { newCol = columns - 1 }
+            if newCol >= columns { newCol = 0 }
+            if newRow < 0 { newRow = rows - 1 }
+            if newRow >= rows { newRow = 0 }
+        }
+
+        let newIndex = newRow * columns + newCol
+        guard newIndex >= 0, newIndex < matrix.count else { return nil }
+        return matrix[newIndex]
     }
 
     // MARK: - Hosting (Server)
@@ -447,11 +669,99 @@ public class MBNetworkManager: Observation.Observable {
     }
 
     func broadcast(_ event: RemoteEvent) {
-        // Send to all connected peers
-        // In a real scenario, we might only send to the "Active" remote machine
+        sendRemoteEvent(event)
+    }
+
+    public func sendRemoteInput(event: CGEvent, type: CGEventType) {
+        let snapshot = EventSnapshot(from: event, type: type)
+        sendRemoteInput(snapshot: snapshot)
+    }
+
+    public func sendRemoteInput(snapshot: EventSnapshot) {
+        switch protocolMode {
+        case .modern:
+            if let remoteEvent = MBInputManager.shared.convertToRemoteEvent(snapshot: snapshot) {
+                sendRemoteEvent(remoteEvent)
+            }
+        case .mwbCompatibility:
+            sendCompatibilityInput(snapshot: snapshot)
+        case .dual:
+            if let remoteEvent = MBInputManager.shared.convertToRemoteEvent(snapshot: snapshot) {
+                sendRemoteEvent(remoteEvent)
+            }
+            sendCompatibilityInput(snapshot: snapshot)
+        }
+    }
+
+    private func sendRemoteEvent(_ event: RemoteEvent) {
         let packet = PacketType.inputEvent(event)
-        for peer in peers {
-            send(packet, to: peer)
+        if let active = activeConnection() {
+            send(packet, to: active)
+        } else {
+            for peer in peers {
+                send(packet, to: peer)
+            }
+        }
+    }
+
+    private func activeConnection() -> NWConnection? {
+        guard let activeId = activeMachineId else { return nil }
+        return connectedMachines.first(where: { $0.id == activeId })?.connection
+    }
+
+    private func sendCompatibilityInput(event: CGEvent, type: CGEventType) {
+        let snapshot = EventSnapshot(from: event, type: type)
+        sendCompatibilityInput(snapshot: snapshot)
+    }
+
+    private func sendCompatibilityInput(snapshot: EventSnapshot) {
+        guard let screen = NSScreen.main else { return }
+        let bounds = screen.frame
+        let location = snapshot.location
+
+        let normalizedX = Int32(((location.x - bounds.minX) / bounds.width) * 65535.0)
+        let normalizedY = Int32(((bounds.maxY - location.y) / bounds.height) * 65535.0)
+
+        switch snapshot.type {
+        case .mouseMoved, .leftMouseDragged, .rightMouseDragged:
+            if compatibilitySettings.moveMouseRelatively, let last = lastMouseLocation {
+                let dx = Int32(location.x - last.x)
+                let dy = Int32(location.y - last.y)
+                let offset: Int32 = 100000
+                let relX = dx + (dx < 0 ? -offset : offset)
+                let relY = dy + (dy < 0 ? -offset : offset)
+                compatibilityService?.sendMouseEvent(x: relX, y: relY, wheel: 0, flags: 0x200)
+            } else {
+                compatibilityService?.sendMouseEvent(
+                    x: normalizedX, y: normalizedY, wheel: 0, flags: 0x200)
+            }
+            lastMouseLocation = location
+        case .leftMouseDown:
+            compatibilityService?.sendMouseEvent(
+                x: normalizedX, y: normalizedY, wheel: 0, flags: 0x201)
+        case .leftMouseUp:
+            compatibilityService?.sendMouseEvent(
+                x: normalizedX, y: normalizedY, wheel: 0, flags: 0x202)
+        case .rightMouseDown:
+            compatibilityService?.sendMouseEvent(
+                x: normalizedX, y: normalizedY, wheel: 0, flags: 0x204)
+        case .rightMouseUp:
+            compatibilityService?.sendMouseEvent(
+                x: normalizedX, y: normalizedY, wheel: 0, flags: 0x205)
+        case .scrollWheel:
+            let deltaY = Int32(snapshot.scrollDeltaY)
+            compatibilityService?.sendMouseEvent(
+                x: normalizedX, y: normalizedY, wheel: deltaY, flags: 0x20A)
+        case .keyDown:
+            if let key = MBInputManager.shared.windowsKeyCode(for: CGKeyCode(snapshot.keyCode)) {
+                compatibilityService?.sendKeyEvent(keyCode: key, flags: 0)
+            }
+        case .keyUp:
+            if let key = MBInputManager.shared.windowsKeyCode(for: CGKeyCode(snapshot.keyCode)) {
+                compatibilityService?.sendKeyEvent(keyCode: key, flags: 0x80)
+            }
+        default:
+            break
         }
     }
 
@@ -472,6 +782,37 @@ public class MBNetworkManager: Observation.Observable {
                 })
         } catch {
             print("Encoding error: \(error)")
+        }
+    }
+
+    private func sendClipboardText(_ text: String) {
+        if protocolMode != .mwbCompatibility {
+            let payload = ClipboardPayload(content: Data(text.utf8), type: .text)
+            sendClipboardPayload(payload)
+        }
+        if protocolMode != .modern {
+            compatibilityService?.sendClipboardText(text)
+        }
+    }
+
+    private func sendClipboardImage(_ data: Data) {
+        if protocolMode != .mwbCompatibility {
+            let payload = ClipboardPayload(content: data, type: .image)
+            sendClipboardPayload(payload)
+        }
+        if protocolMode != .modern {
+            compatibilityService?.sendClipboardImage(data)
+        }
+    }
+
+    private func sendClipboardPayload(_ payload: ClipboardPayload) {
+        let packet = PacketType.clipboardData(payload)
+        if let active = activeConnection() {
+            send(packet, to: active)
+        } else {
+            for peer in peers {
+                send(packet, to: peer)
+            }
         }
     }
 
@@ -562,6 +903,20 @@ public class MBNetworkManager: Observation.Observable {
             case .inputEvent(let event):
                 // Handle remote input
                 MBInputManager.shared.simulateRemoteEvent(event)
+            case .clipboardData(let payload):
+                pasteboardMonitor?.ignoreNextChange()
+                switch payload.type {
+                case .text:
+                    if let text = String(data: payload.content, encoding: .utf8) {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(text, forType: .string)
+                    }
+                case .image:
+                    if let image = NSImage(data: payload.content) {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.writeObjects([image])
+                    }
+                }
             default:
                 break
             }

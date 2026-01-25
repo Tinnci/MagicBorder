@@ -3,8 +3,10 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
+    @Environment(MBAccessibilityService.self) private var accessibilityService
     @AppStorage("wrapMouse") private var wrapMouse = false
     @AppStorage("hideMouse") private var hideMouse = true
+    @AppStorage("captureInput") private var captureInput = true
 
     var body: some View {
         @Bindable var networkManager = networkManager
@@ -17,6 +19,15 @@ struct SettingsView: View {
             }
 
             Section(header: Label("Cursor", systemImage: "cursorarrow.motionlines")) {
+                Toggle("Capture Local Input", isOn: $captureInput)
+                    .disabled(!accessibilityService.isTrusted)
+                if !accessibilityService.isTrusted {
+                    Text("Enable Accessibility permission to capture input.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Toggle("Switch by Moving to Edge", isOn: $networkManager.compatibilitySettings.switchByMouse)
+                Toggle("Block Corner Switching", isOn: $networkManager.compatibilitySettings.blockCorners)
                 Toggle("Wrap Mouse at Screen Edge", isOn: $wrapMouse)
                 Toggle("Hide Mouse at Edge", isOn: $hideMouse)
             }
@@ -35,6 +46,7 @@ struct SettingsView: View {
                 Toggle(
                     "Matrix Circle (Swap)", isOn: $networkManager.compatibilitySettings.matrixCircle
                 )
+                Toggle("Relative Mouse Movement", isOn: $networkManager.compatibilitySettings.moveMouseRelatively)
             }
 
             Section(header: Label("Security", systemImage: "key.fill")) {

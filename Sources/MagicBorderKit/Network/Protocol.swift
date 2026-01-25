@@ -78,8 +78,27 @@ public struct RemoteEvent: Codable, Sendable {
         return RemoteEvent(type: type, point: point, keyCode: nil, deltaX: nil, deltaY: nil)
     }
 
-    // Helper init for Key
     public static func key(type: RemoteEventType, code: CGKeyCode) -> RemoteEvent {
         return RemoteEvent(type: type, point: nil, keyCode: code, deltaX: nil, deltaY: nil)
+    }
+}
+
+// MARK: - Local Event Snapshot (Sendable)
+
+public struct EventSnapshot: Sendable {
+    public let location: CGPoint
+    public let type: CGEventType
+    public let keyCode: Int64
+    public let scrollDeltaY: Int64
+    public let scrollDeltaX: Int64
+    public let flags: CGEventFlags
+
+    public init(from event: CGEvent, type: CGEventType) {
+        self.location = event.location
+        self.type = type
+        self.keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+        self.scrollDeltaY = event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
+        self.scrollDeltaX = event.getIntegerValueField(.scrollWheelEventDeltaAxis2)
+        self.flags = event.flags
     }
 }

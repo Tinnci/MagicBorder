@@ -18,7 +18,6 @@
 
 import AppKit
 import MagicBorderKit
-import Observation
 import SwiftUI
 
 // MARK: - Main View
@@ -28,11 +27,6 @@ struct DashboardView: View {
         MagicBorderKit.MBNetworkManager
     @Environment(MBAccessibilityService.self) private var accessibilityService:
         MBAccessibilityService
-    @Environment(MagicBorderKit.MBInputManager.self) private var inputManager:
-        MagicBorderKit.MBInputManager
-
-    @Binding var showSettings: Bool
-
     @State private var selection: SidebarItem? = .arrangement
     @State private var searchText = ""
     @State private var isRefreshing = false
@@ -48,16 +42,8 @@ struct DashboardView: View {
         if searchText.isEmpty {
             return machines
         } else {
-            return machines.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+            return machines.filter { $0.name.localizedStandardContains(searchText) }
         }
-    }
-
-    // Initializer to set initial machine state
-    init(showSettings: Binding<Bool>) {
-        self._showSettings = showSettings
-        self._machines = State(initialValue: [
-            Machine(id: UUID(), name: Host.current().localizedName ?? "Local Mac", isOnline: true)
-        ])
     }
 
     var body: some View {
@@ -267,6 +253,7 @@ struct ArrangementDetailView: View {
                         }
                         .padding(.horizontal)
                     }
+                    .scrollIndicators(.hidden)
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
@@ -299,6 +286,7 @@ struct ArrangementDetailView: View {
         }
         .navigationTitle("Arrangement")
         .onChange(of: machines) { _, newValue in
+            networkManager.updateLocalMatrix(names: newValue.map { $0.name })
             networkManager.sendMachineMatrix(
                 names: newValue.map { $0.name },
                 twoRow: matrixTwoRowBinding.wrappedValue,
@@ -306,6 +294,7 @@ struct ArrangementDetailView: View {
             )
         }
         .onChange(of: networkManager.compatibilitySettings.matrixOneRow) { _, _ in
+            networkManager.updateLocalMatrix(names: machines.map { $0.name })
             networkManager.sendMachineMatrix(
                 names: machines.map { $0.name },
                 twoRow: matrixTwoRowBinding.wrappedValue,
@@ -313,6 +302,7 @@ struct ArrangementDetailView: View {
             )
         }
         .onChange(of: networkManager.compatibilitySettings.matrixCircle) { _, _ in
+            networkManager.updateLocalMatrix(names: machines.map { $0.name })
             networkManager.sendMachineMatrix(
                 names: machines.map { $0.name },
                 twoRow: matrixTwoRowBinding.wrappedValue,

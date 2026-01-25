@@ -6,6 +6,9 @@ import Observation
 public final class MBCompatibilitySettings {
     public var shareClipboard: Bool = true
     public var transferFiles: Bool = false
+    public var switchByMouse: Bool = true
+    public var blockCorners: Bool = false
+    public var moveMouseRelatively: Bool = false
     public var matrixOneRow: Bool = true
     public var matrixCircle: Bool = false
     public var messagePort: UInt16 = 15101

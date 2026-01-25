@@ -97,53 +97,62 @@ public class MBInputManager: Observation.Observable {
     nonisolated func handle(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<
         CGEvent
     >? {
+        // Create snapshot synchronously (safe)
+        let snapshot = EventSnapshot(from: event, type: type)
+
         // Core Logic
         guard _remoteID.withLock({ $0 }) != nil else {
+            if type == .mouseMoved || type == .leftMouseDragged || type == .rightMouseDragged {
+                Task { @MainActor in
+                    MBNetworkManager.shared.handleLocalMouseEvent(snapshot: snapshot)
+                }
+            }
             // Local mode: pass-through
             return Unmanaged.passRetained(event)
         }
 
         // Remote mode: intercept and send
-        guard let remoteEvent = convertToRemoteEvent(event, type: type) else {
+        guard convertToRemoteEvent(snapshot: snapshot) != nil else {
             // If we can't convert it (e.g. some system event), maybe let it pass or just consume?
             // Safest is to consume if we are "in remote mode" to avoid local ghost clicks.
             return nil
         }
 
-        Task {
-            await MBNetworkManager.shared.broadcast(remoteEvent)
+        Task { @MainActor in
+            MBNetworkManager.shared.sendRemoteInput(snapshot: snapshot)
         }
 
         return nil
     }
 
-    nonisolated private func convertToRemoteEvent(_ event: CGEvent, type: CGEventType)
+    nonisolated func convertToRemoteEvent(_ event: CGEvent, type: CGEventType)
         -> RemoteEvent?
     {
-        // Simple conversion logic
-        switch type {
-        case .mouseMoved:
-            return RemoteEvent.mouseMove(at: event.location)
+        let snapshot = EventSnapshot(from: event, type: type)
+        return convertToRemoteEvent(snapshot: snapshot)
+    }
+
+    nonisolated func convertToRemoteEvent(snapshot: EventSnapshot) -> RemoteEvent? {
+        switch snapshot.type {
+        case .mouseMoved, .leftMouseDragged, .rightMouseDragged:
+            return RemoteEvent.mouseMove(at: snapshot.location)
         case .leftMouseDown:
-            return RemoteEvent.mouseClick(type: .leftMouseDown, at: event.location)
+            return RemoteEvent.mouseClick(type: .leftMouseDown, at: snapshot.location)
         case .leftMouseUp:
-            return RemoteEvent.mouseClick(type: .leftMouseUp, at: event.location)
+            return RemoteEvent.mouseClick(type: .leftMouseUp, at: snapshot.location)
         case .rightMouseDown:
-            return RemoteEvent.mouseClick(type: .rightMouseDown, at: event.location)
+            return RemoteEvent.mouseClick(type: .rightMouseDown, at: snapshot.location)
         case .rightMouseUp:
-            return RemoteEvent.mouseClick(type: .rightMouseUp, at: event.location)
+            return RemoteEvent.mouseClick(type: .rightMouseUp, at: snapshot.location)
         case .scrollWheel:
-            // Extract deltas
-            let deltaY = event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
-            let deltaX = event.getIntegerValueField(.scrollWheelEventDeltaAxis2)
             return RemoteEvent(
-                type: .scrollWheel, point: nil, keyCode: nil, deltaX: Int(deltaX),
-                deltaY: Int(deltaY))
+                type: .scrollWheel, point: nil, keyCode: nil, deltaX: Int(snapshot.scrollDeltaX),
+                deltaY: Int(snapshot.scrollDeltaY))
         case .keyDown:
-            let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+            let code = CGKeyCode(snapshot.keyCode)
             return RemoteEvent.key(type: .keyDown, code: code)
         case .keyUp:
-            let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+            let code = CGKeyCode(snapshot.keyCode)
             return RemoteEvent.key(type: .keyUp, code: code)
         default:
             return nil
@@ -361,6 +370,18 @@ public class MBInputManager: Observation.Observable {
         0x2D: 114,  // Insert
         0x2E: 117,  // Delete
     ]
+
+    private static let windowsKeyCodeMap: [CGKeyCode: Int32] = {
+        var map: [CGKeyCode: Int32] = [:]
+        for (win, mac) in keyCodeMap {
+            map[mac] = Int32(win)
+        }
+        return map
+    }()
+
+    public func windowsKeyCode(for macKeyCode: CGKeyCode) -> Int32? {
+        Self.windowsKeyCodeMap[macKeyCode]
+    }
 }
 
 // Global callback function matching CGEventTapCallBack signature

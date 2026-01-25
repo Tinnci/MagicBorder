@@ -16,28 +16,37 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-@preconcurrency import ApplicationServices
 import MagicBorderKit
-import Observation
 import SwiftUI
 
 @main
 struct MagicBorderApp: App {
-    @State var accessibilityService = MBAccessibilityService()
-    @State var inputManager = MBInputManager.shared
-    @State var networkManager = MBNetworkManager.shared
-
-    @State private var showSettings = false
+    @State private var accessibilityService = MBAccessibilityService()
+    @State private var inputManager = MBInputManager.shared
+    @State private var networkManager = MBNetworkManager.shared
+    @AppStorage("captureInput") private var captureInput = true
 
     var body: some Scene {
         WindowGroup {
-            DashboardView(showSettings: $showSettings)
+            DashboardView()
                 .environment(accessibilityService)
                 .environment(inputManager)
                 .environment(networkManager)
                 .onAppear {
                     accessibilityService.startPolling()
+                    syncInputCapture()
+                }
+                .onChange(of: accessibilityService.isTrusted) { _, _ in
+                    syncInputCapture()
+                }
+                .onChange(of: captureInput) { _, _ in
+                    syncInputCapture()
                 }
         }
+    }
+
+    private func syncInputCapture() {
+        let shouldCapture = captureInput && accessibilityService.isTrusted
+        inputManager.toggleInterception(shouldCapture)
     }
 }

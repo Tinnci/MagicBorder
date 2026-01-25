@@ -9,7 +9,6 @@ struct PairingFlowView: View {
     @Binding var securityKey: String
     @State private var ipAddress: String = ""
     @State private var showGuide = false
-    @State private var showKey = false
     @State private var isConnecting = false
     @State private var toastMessage: String = ""
     @State private var showToast = false
@@ -48,52 +47,7 @@ struct PairingFlowView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Security Key")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        HStack(spacing: 8) {
-                            Group {
-                                if showKey {
-                                    TextField("Security Key", text: $securityKey)
-                                } else {
-                                    SecureField("Security Key", text: $securityKey)
-                                }
-                            }
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(.body, design: .monospaced))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(isKeyValid ? Color.clear : Color.orange.opacity(0.6), lineWidth: 1)
-                            )
-
-                            Button(action: { showKey.toggle() }) {
-                                Image(systemName: showKey ? "eye.slash" : "eye")
-                            }
-                            .buttonStyle(.plain)
-                            .help(showKey ? "隐藏" : "显示")
-
-                            Button(action: {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(securityKey, forType: .string)
-                                showToast(text: "已复制 Security Key")
-                            }) {
-                                Image(systemName: "doc.on.doc")
-                            }
-                            .buttonStyle(.plain)
-                            .help("复制")
-
-                            Button(action: {
-                                securityKey = String(UUID().uuidString.prefix(16))
-                                showToast(text: "已刷新 Security Key")
-                            }) {
-                                Image(systemName: "arrow.triangle.2.circlepath")
-                            }
-                            .buttonStyle(.plain)
-                            .help("刷新")
-                        }
-                    }
+                    PairingCardView(securityKey: $securityKey)
 
                     HStack(spacing: 8) {
                         Image(systemName: isKeyValid ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
