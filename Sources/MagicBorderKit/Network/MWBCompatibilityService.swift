@@ -466,7 +466,6 @@ public final class MWBCompatibilityService: ObservableObject {
                     dedupeSessions(using: session)
                     session.startHeartbeat(initial: true)
                     if session.kind == .message {
-                        session.sendHelloBurst()
                         session.startClipboardBeat()
                         connectClipboardIfNeeded()
                     }
