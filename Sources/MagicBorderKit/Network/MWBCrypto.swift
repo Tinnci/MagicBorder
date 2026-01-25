@@ -170,6 +170,78 @@ public class MWBCrypto: @unchecked Sendable {
         }
         return nil
     }
+
+    public func encryptZeroPadded(_ data: Data) -> Data? {
+        guard let key = sessionKey else { return nil }
+        let iv = generateIV()
+
+        var padded = data
+        let remainder = padded.count % kCCBlockSizeAES128
+        if remainder != 0 {
+            padded.append(Data(count: kCCBlockSizeAES128 - remainder))
+        }
+
+        let bufferSize = padded.count + kCCBlockSizeAES128
+        var buffer = Data(count: bufferSize)
+        var numBytesEncrypted: Int = 0
+
+        let cryptStatus = buffer.withUnsafeMutableBytes { bufferBytes in
+            padded.withUnsafeBytes { dataBytes in
+                key.withUnsafeBytes { keyBytes in
+                    iv.withUnsafeBytes { ivBytes in
+                        CCCrypt(
+                            CCOperation(kCCEncrypt),
+                            CCAlgorithm(kCCAlgorithmAES),
+                            CCOptions(0),
+                            keyBytes.baseAddress, key.count,
+                            ivBytes.baseAddress,
+                            dataBytes.baseAddress, padded.count,
+                            bufferBytes.baseAddress, bufferSize,
+                            &numBytesEncrypted
+                        )
+                    }
+                }
+            }
+        }
+
+        if cryptStatus == kCCSuccess {
+            return buffer.prefix(numBytesEncrypted)
+        }
+        return nil
+    }
+
+    public func decryptZeroPadded(_ data: Data) -> Data? {
+        guard let key = sessionKey else { return nil }
+        let iv = generateIV()
+
+        let bufferSize = data.count + kCCBlockSizeAES128
+        var buffer = Data(count: bufferSize)
+        var numBytesDecrypted: Int = 0
+
+        let cryptStatus = buffer.withUnsafeMutableBytes { bufferBytes in
+            data.withUnsafeBytes { dataBytes in
+                key.withUnsafeBytes { keyBytes in
+                    iv.withUnsafeBytes { ivBytes in
+                        CCCrypt(
+                            CCOperation(kCCDecrypt),
+                            CCAlgorithm(kCCAlgorithmAES),
+                            CCOptions(0),
+                            keyBytes.baseAddress, key.count,
+                            ivBytes.baseAddress,
+                            dataBytes.baseAddress, data.count,
+                            bufferBytes.baseAddress, bufferSize,
+                            &numBytesDecrypted
+                        )
+                    }
+                }
+            }
+        }
+
+        if cryptStatus == kCCSuccess {
+            return buffer.prefix(numBytesDecrypted)
+        }
+        return nil
+    }
 }
 
 // MARK: - Streaming Cipher (CBC, Zero Padding)

@@ -322,9 +322,13 @@ struct DashboardView: View {
         .frame(minWidth: 800, minHeight: 600)
         .onAppear {
             networkManager.securityKey = securityKey
+            networkManager.compatibilitySettings.securityKey = securityKey
+            networkManager.applyCompatibilitySettings()
         }
         .onChange(of: securityKey) { _, newValue in
             networkManager.securityKey = newValue
+            networkManager.compatibilitySettings.securityKey = newValue
+            networkManager.applyCompatibilitySettings()
         }
         .onChange(of: networkManager.connectedMachines, initial: true) { _, connected in
             updateMachines(from: connected)
@@ -353,8 +357,18 @@ struct ArrangementDetailView: View {
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager:
         MagicBorderKit.MBNetworkManager
 
-    @State private var matrixTwoRow = false
-    @State private var matrixSwap = false
+    private var matrixTwoRowBinding: Binding<Bool> {
+        Binding(
+            get: { !networkManager.compatibilitySettings.matrixOneRow },
+            set: { networkManager.compatibilitySettings.matrixOneRow = !$0 }
+        )
+    }
+    private var matrixSwapBinding: Binding<Bool> {
+        Binding(
+            get: { networkManager.compatibilitySettings.matrixCircle },
+            set: { networkManager.compatibilitySettings.matrixCircle = $0 }
+        )
+    }
     
     var body: some View {
         ScrollView {
@@ -386,7 +400,10 @@ struct ArrangementDetailView: View {
                         .font(.headline)
                         .padding(.leading)
 
-                    MachineMatrixView(machines: $machines)
+                    MachineMatrixView(
+                        machines: $machines,
+                        columns: matrixTwoRowBinding.wrappedValue ? 2 : max(1, machines.count)
+                    )
                         .frame(height: 200)
                 }
 
@@ -434,9 +451,9 @@ struct ArrangementDetailView: View {
                         .font(.headline)
                         .padding(.leading)
 
-                    Toggle("Two Row Matrix", isOn: $matrixTwoRow)
+                    Toggle("Two Row Matrix", isOn: matrixTwoRowBinding)
                         .padding(.horizontal)
-                    Toggle("Swap Matrix Order", isOn: $matrixSwap)
+                    Toggle("Swap Matrix Order", isOn: matrixSwapBinding)
                         .padding(.horizontal)
                 }
 
@@ -459,13 +476,25 @@ struct ArrangementDetailView: View {
         }
         .navigationTitle("Arrangement")
         .onChange(of: machines) { _, newValue in
-            networkManager.sendMachineMatrix(names: newValue.map { $0.name }, twoRow: matrixTwoRow, swap: matrixSwap)
+            networkManager.sendMachineMatrix(
+                names: newValue.map { $0.name },
+                twoRow: matrixTwoRowBinding.wrappedValue,
+                swap: matrixSwapBinding.wrappedValue
+            )
         }
-        .onChange(of: matrixTwoRow) { _, _ in
-            networkManager.sendMachineMatrix(names: machines.map { $0.name }, twoRow: matrixTwoRow, swap: matrixSwap)
+        .onChange(of: networkManager.compatibilitySettings.matrixOneRow) { _, _ in
+            networkManager.sendMachineMatrix(
+                names: machines.map { $0.name },
+                twoRow: matrixTwoRowBinding.wrappedValue,
+                swap: matrixSwapBinding.wrappedValue
+            )
         }
-        .onChange(of: matrixSwap) { _, _ in
-            networkManager.sendMachineMatrix(names: machines.map { $0.name }, twoRow: matrixTwoRow, swap: matrixSwap)
+        .onChange(of: networkManager.compatibilitySettings.matrixCircle) { _, _ in
+            networkManager.sendMachineMatrix(
+                names: machines.map { $0.name },
+                twoRow: matrixTwoRowBinding.wrappedValue,
+                swap: matrixSwapBinding.wrappedValue
+            )
         }
     }
 }

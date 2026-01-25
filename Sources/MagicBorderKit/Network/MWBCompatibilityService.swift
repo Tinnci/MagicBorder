@@ -24,6 +24,9 @@ public final class MWBCompatibilityService: ObservableObject {
 
     private let localName: String
     private let localId: Int32
+    private var messagePort: UInt16
+    private var clipboardPort: UInt16
+    private var currentSecurityKey: String = ""
 
     public var onConnected: ((MWBPeer) -> Void)?
     public var onDisconnected: ((MWBPeer) -> Void)?
@@ -35,12 +38,15 @@ public final class MWBCompatibilityService: ObservableObject {
     public var onClipboardImage: ((Data) -> Void)?
     public var onClipboardFiles: (([URL]) -> Void)?
 
-    public init(localName: String, localId: Int32) {
+    public init(localName: String, localId: Int32, messagePort: UInt16 = 15101, clipboardPort: UInt16 = 15100) {
         self.localName = localName
         self.localId = localId
+        self.messagePort = messagePort
+        self.clipboardPort = clipboardPort
     }
 
     public func start(securityKey: String) {
+        currentSecurityKey = securityKey
         crypto.deriveKey(from: securityKey)
         startMessageListener()
         startClipboardListener()
@@ -56,19 +62,30 @@ public final class MWBCompatibilityService: ObservableObject {
     }
 
     public func updateSecurityKey(_ key: String) {
+        currentSecurityKey = key
         crypto.deriveKey(from: key)
     }
 
-    public func connectToHost(ip: String, messagePort: UInt16 = 15101, clipboardPort: UInt16 = 15100) {
+    public func updatePorts(messagePort: UInt16, clipboardPort: UInt16) {
+        guard self.messagePort != messagePort || self.clipboardPort != clipboardPort else { return }
+        self.messagePort = messagePort
+        self.clipboardPort = clipboardPort
+        stop()
+        if !currentSecurityKey.isEmpty {
+            start(securityKey: currentSecurityKey)
+        }
+    }
+
+    public func connectToHost(ip: String, messagePort: UInt16? = nil, clipboardPort: UInt16? = nil) {
         guard !ip.isEmpty else { return }
         let host = NWEndpoint.Host(ip)
 
-        if let port = NWEndpoint.Port(rawValue: messagePort) {
+        if let port = NWEndpoint.Port(rawValue: messagePort ?? self.messagePort) {
             let connection = NWConnection(to: .hostPort(host: host, port: port), using: .tcp)
             handleNewConnection(connection, kind: .message)
         }
 
-        if let port = NWEndpoint.Port(rawValue: clipboardPort) {
+        if let port = NWEndpoint.Port(rawValue: clipboardPort ?? self.clipboardPort) {
             let connection = NWConnection(to: .hostPort(host: host, port: port), using: .tcp)
             handleNewConnection(connection, kind: .clipboard)
         }
@@ -123,14 +140,18 @@ public final class MWBCompatibilityService: ObservableObject {
 
     private func startMessageListener() {
         do {
-            let listener = try NWListener(using: .tcp, on: 15101)
+            guard let port = NWEndpoint.Port(rawValue: messagePort) else {
+                print("MWBCompatibility: invalid message port: \(messagePort)")
+                return
+            }
+            let listener = try NWListener(using: .tcp, on: port)
             self.messageListener = listener
             listener.newConnectionHandler = { [weak self] connection in
                 Task { @MainActor [weak self] in
                     self?.handleNewConnection(connection, kind: .message)
                 }
             }
-            listener.start(queue: .main)
+            listener.start(queue: DispatchQueue.main)
         } catch {
             print("MWBCompatibility: failed to start message listener: \(error)")
         }
@@ -138,14 +159,18 @@ public final class MWBCompatibilityService: ObservableObject {
 
     private func startClipboardListener() {
         do {
-            let listener = try NWListener(using: .tcp, on: 15100)
+            guard let port = NWEndpoint.Port(rawValue: clipboardPort) else {
+                print("MWBCompatibility: invalid clipboard port: \(clipboardPort)")
+                return
+            }
+            let listener = try NWListener(using: .tcp, on: port)
             self.clipboardListener = listener
             listener.newConnectionHandler = { [weak self] connection in
                 Task { @MainActor [weak self] in
                     self?.handleNewConnection(connection, kind: .clipboard)
                 }
             }
-            listener.start(queue: .main)
+            listener.start(queue: DispatchQueue.main)
         } catch {
             print("MWBCompatibility: failed to start clipboard listener: \(error)")
         }

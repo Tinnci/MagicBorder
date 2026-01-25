@@ -9,13 +9,12 @@ struct Machine: Identifiable, Equatable, Codable {
 
 struct MachineMatrixView: View {
     @Binding var machines: [Machine]
+    var columns: Int = 2
     @State private var draggingMachine: Machine?
 
     var body: some View {
         Grid(horizontalSpacing: 20, verticalSpacing: 20) {
-            // Display machines in a grid (e.g., 2 columns)
-            // For simplicity in this specialized view, we use chunks if more than 2
-            let rows = machines.chunked(into: 2)
+            let rows = machines.chunked(into: max(1, columns))
             ForEach(0..<rows.count, id: \.self) { rowIndex in
                 GridRow {
                     ForEach(rows[rowIndex]) { machine in

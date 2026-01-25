@@ -130,7 +130,7 @@ public class MWBClient {
 
     private func handleRawData(_ encryptedData: Data) {
         // Decrypt
-        guard let decrypted = crypto.decrypt(encryptedData) else {
+        guard let decrypted = crypto.decryptZeroPadded(encryptedData) else {
             print("Decryption failed for block of size \(encryptedData.count)")
             return
         }
@@ -162,7 +162,7 @@ public class MWBClient {
 
     private func send(packet: MWBPacket) {
         // Encrypt
-        guard let encrypted = crypto.encrypt(packet.data) else {
+        guard let encrypted = crypto.encryptZeroPadded(packet.data) else {
             print("Encryption failed")
             return
         }

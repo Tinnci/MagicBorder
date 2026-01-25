@@ -81,11 +81,14 @@ public class MBNetworkManager: Observation.Observable {
         }
     }
 
+    public var compatibilitySettings = MBCompatibilitySettings()
+
     private var compatibilityService: MWBCompatibilityService?
     private var mwbIdToUuid: [Int32: UUID] = [:]
     private var uuidToMwbId: [UUID: Int32] = [:]
 
     init() {
+        compatibilitySettings.securityKey = securityKey
         startAdvertising()
         startBrowsing()
         startSubnetScanning()
@@ -94,7 +97,12 @@ public class MBNetworkManager: Observation.Observable {
 
     private func configureCompatibility() {
         guard protocolMode != .modern else { return }
-        let service = MWBCompatibilityService(localName: localName, localId: localNumericID)
+        let service = MWBCompatibilityService(
+            localName: localName,
+            localId: localNumericID,
+            messagePort: compatibilitySettings.messagePort,
+            clipboardPort: compatibilitySettings.clipboardPort
+        )
         service.onConnected = { [weak self] peer in
             guard let self else { return }
             let id = self.uuid(for: peer.id)
@@ -241,7 +249,11 @@ public class MBNetworkManager: Observation.Observable {
     public func connectToHost(ip: String, port: UInt16 = 15101) {
         guard !ip.isEmpty else { return }
         if protocolMode != .modern {
-            compatibilityService?.connectToHost(ip: ip, messagePort: port)
+            compatibilityService?.connectToHost(
+                ip: ip,
+                messagePort: compatibilitySettings.messagePort,
+                clipboardPort: compatibilitySettings.clipboardPort
+            )
             return
         }
 
@@ -249,6 +261,14 @@ public class MBNetworkManager: Observation.Observable {
         let host = NWEndpoint.Host(ip)
         let connection = NWConnection(to: .hostPort(host: host, port: nwPort), using: .tcp)
         handleNewConnection(connection)
+    }
+
+    public func applyCompatibilitySettings() {
+        securityKey = compatibilitySettings.securityKey
+        compatibilityService?.updatePorts(
+            messagePort: compatibilitySettings.messagePort,
+            clipboardPort: compatibilitySettings.clipboardPort
+        )
     }
 
     // MARK: - Subnet Scanning
