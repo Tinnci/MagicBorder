@@ -59,9 +59,19 @@ public struct MWBPacket {
 
     // MARK: - Header (0-3)
 
+    public var rawType: UInt8 {
+        get { data[0] }
+        set { data[0] = newValue }
+    }
+
     public var type: MWBPacketType {
-        get { MWBPacketType(rawValue: data[0]) ?? .invalid }
-        set { data[0] = newValue.rawValue }
+        get {
+            if (rawType & MWBPacketType.matrix.rawValue) == MWBPacketType.matrix.rawValue {
+                return .matrix
+            }
+            return MWBPacketType(rawValue: rawType) ?? .invalid
+        }
+        set { rawType = newValue.rawValue }
     }
 
     public var checksum: UInt8 {
@@ -215,7 +225,7 @@ public struct MWBPacket {
     }
 
     public var isMatrixPacket: Bool {
-        (type.rawValue & MWBPacketType.matrix.rawValue) == MWBPacketType.matrix.rawValue
+        (rawType & MWBPacketType.matrix.rawValue) == MWBPacketType.matrix.rawValue
     }
 
     public var isBigPackage: Bool {
@@ -229,11 +239,11 @@ public struct MWBPacket {
         }
     }
 
-    public static func isBigType(_ type: MWBPacketType) -> Bool {
-        if (type.rawValue & MWBPacketType.matrix.rawValue) == MWBPacketType.matrix.rawValue {
+    public static func isBigType(rawType: UInt8) -> Bool {
+        if (rawType & MWBPacketType.matrix.rawValue) == MWBPacketType.matrix.rawValue {
             return true
         }
-        switch type {
+        switch MWBPacketType(rawValue: rawType) ?? .invalid {
         case .hello, .awake, .heartbeat, .heartbeatEx, .handshake, .handshakeAck, .clipboardPush, .clipboard, .clipboardAsk, .clipboardImage, .clipboardText, .clipboardDataEnd:
             return true
         default:

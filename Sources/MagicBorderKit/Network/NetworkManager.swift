@@ -8,6 +8,12 @@ import Observation
 public class MBNetworkManager: Observation.Observable {
     public static let shared = MBNetworkManager()
 
+    public enum SwitchState: String {
+        case idle
+        case switching
+        case active
+    }
+
     // Config
     let port: NWEndpoint.Port = 12345
     let serviceType = "_magicborder._tcp"
@@ -63,6 +69,11 @@ public class MBNetworkManager: Observation.Observable {
     let localName = Host.current().localizedName ?? "Unknown Mac"
     let localNumericID: Int32 = Int32.random(in: 1000...999999)
 
+    public var switchState: SwitchState = .idle
+    public var activeMachineId: UUID?
+    public var activeMachineName: String = Host.current().localizedName ?? "Local Mac"
+    public var lastSwitchTimestamp: Date?
+
     public var protocolMode: MBProtocolMode = .dual
     public var securityKey: String = "YOUR_SECURE_KEY_123" {
         didSet {
@@ -72,6 +83,7 @@ public class MBNetworkManager: Observation.Observable {
 
     private var compatibilityService: MWBCompatibilityService?
     private var mwbIdToUuid: [Int32: UUID] = [:]
+    private var uuidToMwbId: [UUID: Int32] = [:]
 
     init() {
         startAdvertising()
@@ -116,6 +128,18 @@ public class MBNetworkManager: Observation.Observable {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.writeObjects(urls as [NSURL])
         }
+        service.onMachineSwitched = { [weak self] peer in
+            guard let self else { return }
+            if let peer {
+                self.activeMachineId = self.uuid(for: peer.id)
+                self.activeMachineName = peer.name
+            } else {
+                self.activeMachineId = nil
+                self.activeMachineName = self.localName
+            }
+            self.switchState = .active
+            self.lastSwitchTimestamp = Date()
+        }
         self.compatibilityService = service
         service.start(securityKey: securityKey)
     }
@@ -126,7 +150,26 @@ public class MBNetworkManager: Observation.Observable {
         }
         let newId = UUID()
         mwbIdToUuid[id] = newId
+        uuidToMwbId[newId] = id
         return newId
+    }
+
+    public func requestSwitch(to machineId: UUID) {
+        guard protocolMode != .modern else { return }
+        guard let mwbId = uuidToMwbId[machineId] else { return }
+        switchState = .switching
+        compatibilityService?.sendNextMachine(targetId: mwbId)
+    }
+
+    public func sendMachineMatrix(names: [String], twoRow: Bool = false, swap: Bool = false) {
+        guard protocolMode != .modern else { return }
+        let uppercased = names.map { $0.uppercased() }
+        compatibilityService?.sendMachineMatrix(uppercased, twoRow: twoRow, swap: swap)
+    }
+
+    public func sendFileDrop(_ urls: [URL]) {
+        guard protocolMode != .modern else { return }
+        compatibilityService?.sendFileDrop(urls)
     }
 
     // MARK: - Hosting (Server)

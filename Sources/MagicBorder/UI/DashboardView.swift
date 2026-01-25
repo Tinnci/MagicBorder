@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import AppKit
 import MagicBorderKit
 import Observation
 import SwiftUI
@@ -349,6 +350,11 @@ struct ArrangementDetailView: View {
     @Binding var machines: [Machine]
     @Binding var securityKey: String
     @Environment(MBAccessibilityService.self) private var accessibilityService: MBAccessibilityService
+    @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager:
+        MagicBorderKit.MBNetworkManager
+
+    @State private var matrixTwoRow = false
+    @State private var matrixSwap = false
     
     var body: some View {
         ScrollView {
@@ -380,6 +386,70 @@ struct ArrangementDetailView: View {
                     MachineMatrixView(machines: $machines)
                         .frame(height: 200)
                 }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Switching")
+                        .font(.headline)
+                        .padding(.leading)
+
+                    HStack(spacing: 12) {
+                        Text("Active: \(networkManager.activeMachineName)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        Spacer()
+
+                        Text(networkManager.switchState.rawValue.capitalized)
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Material.thin)
+                            .cornerRadius(8)
+                    }
+                    .padding(.horizontal)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(machines) { machine in
+                                Button(action: {
+                                    networkManager.requestSwitch(to: machine.id)
+                                }) {
+                                    Label(machine.name, systemImage: "arrow.right.circle")
+                                        .font(.caption)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Matrix Options")
+                        .font(.headline)
+                        .padding(.leading)
+
+                    Toggle("Two Row Matrix", isOn: $matrixTwoRow)
+                        .padding(.horizontal)
+                    Toggle("Swap Matrix Order", isOn: $matrixSwap)
+                        .padding(.horizontal)
+                }
+
+                Button(action: {
+                    let panel = NSOpenPanel()
+                    panel.canChooseFiles = true
+                    panel.canChooseDirectories = true
+                    panel.allowsMultipleSelection = true
+                    if panel.runModal() == .OK {
+                        networkManager.sendFileDrop(panel.urls)
+                    }
+                }) {
+                    Label("Send Files (MWB DragDrop)", systemImage: "tray.and.arrow.up")
+                        .padding(.horizontal)
+                }
+                .buttonStyle(.bordered)
                 
                 PairingCardView(securityKey: $securityKey)
                     .padding(.horizontal)
@@ -388,6 +458,15 @@ struct ArrangementDetailView: View {
             }
         }
         .navigationTitle("Arrangement")
+        .onChange(of: machines) { _, newValue in
+            networkManager.sendMachineMatrix(names: newValue.map { $0.name }, twoRow: matrixTwoRow, swap: matrixSwap)
+        }
+        .onChange(of: matrixTwoRow) { _, _ in
+            networkManager.sendMachineMatrix(names: machines.map { $0.name }, twoRow: matrixTwoRow, swap: matrixSwap)
+        }
+        .onChange(of: matrixSwap) { _, _ in
+            networkManager.sendMachineMatrix(names: machines.map { $0.name }, twoRow: matrixTwoRow, swap: matrixSwap)
+        }
     }
 }
 

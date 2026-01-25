@@ -59,6 +59,38 @@ public final class MWBCompatibilityService: ObservableObject {
         crypto.deriveKey(from: key)
     }
 
+    public func sendMachineMatrix(_ machines: [String], twoRow: Bool = false, swap: Bool = false) {
+        guard !messageSessions.isEmpty else { return }
+        var packet = MWBPacket()
+        let flags: UInt8 = (swap ? 0x02 : 0x00) | (twoRow ? 0x04 : 0x00)
+        packet.rawType = MWBPacketType.matrix.rawValue | flags
+        packet.src = localId
+        packet.des = Int32(255)
+        packet.machineName = machines.joined(separator: ",")
+        broadcast(packet, to: messageSessions)
+    }
+
+    public func sendNextMachine(targetId: Int32?) {
+        guard !messageSessions.isEmpty else { return }
+        var packet = MWBPacket()
+        packet.type = .nextMachine
+        packet.src = localId
+        packet.des = targetId ?? 0
+        broadcast(packet, to: messageSessions)
+    }
+
+    public func sendFileDrop(_ urls: [URL]) {
+        guard !messageSessions.isEmpty else { return }
+        let payload = encodeFileDrop(urls)
+        sendChunked(type: .clipboardDragDrop, data: payload, to: messageSessions)
+
+        var endPacket = MWBPacket()
+        endPacket.type = .clipboardDragDropEnd
+        endPacket.src = localId
+        endPacket.des = Int32(255)
+        broadcast(endPacket, to: messageSessions)
+    }
+
     public func sendClipboardFromPasteboard() {
         guard let session = messageSessions.first else { return }
         if let string = NSPasteboard.general.string(forType: .string) {
@@ -188,7 +220,10 @@ public final class MWBCompatibilityService: ObservableObject {
         case .clipboardAsk:
             sendClipboardFromPasteboard()
         case .clipboardDragDrop, .explorerDragDrop:
-            if let urls = decodeFileDrop(packet.clipboardPayload) {
+            session.appendDragDropChunk(packet.clipboardPayload)
+        case .clipboardDragDropEnd:
+            if let payload = session.consumeDragDropPayload(),
+               let urls = decodeFileDrop(payload) {
                 onClipboardFiles?(urls)
             }
         case .machineSwitched:
@@ -217,25 +252,42 @@ public final class MWBCompatibilityService: ObservableObject {
     }
 
     private func sendClipboardData(_ data: Data, isImage: Bool, via session: MWBSession) {
-        let chunkSize = 48
-        var index = 0
-        while index < data.count {
-            let end = min(index + chunkSize, data.count)
-            let chunk = data.subdata(in: index..<end)
-            var packet = MWBPacket()
-            packet.type = isImage ? .clipboardImage : .clipboardText
-            packet.src = localId
-            packet.des = Int32(255)
-            packet.clipboardPayload = chunk
-            session.send(packet)
-            index = end
-        }
+        let type: MWBPacketType = isImage ? .clipboardImage : .clipboardText
+        sendChunked(type: type, data: data, to: [session])
 
         var endPacket = MWBPacket()
         endPacket.type = .clipboardDataEnd
         endPacket.src = localId
         endPacket.des = Int32(255)
         session.send(endPacket)
+    }
+
+    private func sendChunked(type: MWBPacketType, data: Data, to sessions: [MWBSession]) {
+        let chunkSize = 48
+        var index = 0
+        while index < data.count {
+            let end = min(index + chunkSize, data.count)
+            let chunk = data.subdata(in: index..<end)
+            var packet = MWBPacket()
+            packet.type = type
+            packet.src = localId
+            packet.des = Int32(255)
+            packet.clipboardPayload = chunk
+            broadcast(packet, to: sessions)
+            index = end
+        }
+    }
+
+    private func broadcast(_ packet: MWBPacket, to sessions: [MWBSession]) {
+        for session in sessions {
+            session.send(packet)
+        }
+    }
+
+    private func encodeFileDrop(_ urls: [URL]) -> Data {
+        let paths = urls.map { $0.path }
+        let joined = paths.joined(separator: "\0") + "\0\0"
+        return joined.data(using: .utf16LittleEndian) ?? Data()
     }
 
     private func decodeClipboardText(_ data: Data) -> String? {
@@ -290,6 +342,7 @@ private final class MWBSession {
 
     private var clipboardAccumulator = Data()
     private var clipboardIsImage = false
+    private var dragDropAccumulator = Data()
 
     init(connection: NWConnection, kind: MWBSessionKind, crypto: MWBCrypto, localName: String, localId: Int32) {
         self.connection = connection
@@ -359,6 +412,17 @@ private final class MWBSession {
         return (data: data, isImage: clipboardIsImage)
     }
 
+    func appendDragDropChunk(_ payload: Data) {
+        dragDropAccumulator.append(payload)
+    }
+
+    func consumeDragDropPayload() -> Data? {
+        guard !dragDropAccumulator.isEmpty else { return nil }
+        let data = dragDropAccumulator
+        dragDropAccumulator = Data()
+        return data
+    }
+
     private func sendHandshakeBurst() {
         for _ in 0..<10 {
             var packet = MWBPacket()
@@ -412,12 +476,8 @@ private final class MWBSession {
 
     private func parsePackets() {
         while plainBuffer.count >= MWBPacket.baseSize {
-            guard let type = MWBPacketType(rawValue: plainBuffer[0]) else {
-                plainBuffer.removeFirst()
-                continue
-            }
-
-            let isBig = MWBPacket.isBigType(type)
+            let rawType = plainBuffer[0]
+            let isBig = MWBPacket.isBigType(rawType: rawType)
             let needed = isBig ? MWBPacket.extendedSize : MWBPacket.baseSize
             if plainBuffer.count < needed { break }
 
