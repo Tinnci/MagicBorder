@@ -91,7 +91,7 @@ public class MBNetworkManager: Observation.Observable {
     public var lastSwitchTimestamp: Date?
 
     public var protocolMode: MBProtocolMode = .dual
-    public var securityKey: String = "YOUR_SECURE_KEY_123" {
+    public var securityKey: String = "" {
         didSet {
             compatibilityService?.updateSecurityKey(securityKey)
         }
@@ -116,7 +116,8 @@ public class MBNetworkManager: Observation.Observable {
     private var uuidToMwbId: [UUID: Int32] = [:]
 
     init() {
-        compatibilitySettings.securityKey = securityKey
+        // Pull persisted compatibility key instead of overwriting it with a placeholder.
+        securityKey = compatibilitySettings.securityKey
         startAdvertising()
         startBrowsing()
         startSubnetScanning()
@@ -251,7 +252,13 @@ public class MBNetworkManager: Observation.Observable {
             self?.sendScreenCapture(to: sourceId)
         }
         self.compatibilityService = service
-        service.start(securityKey: securityKey)
+
+        // Only start when the key is valid to avoid spamming remote hosts with bad magic numbers.
+        if compatibilitySettings.validateSecurityKey() {
+            service.start(securityKey: securityKey)
+        } else {
+            appendPairingLog("Compatibility mode not started: security key invalid")
+        }
     }
 
     private func setupPasteboardMonitoring() {
@@ -561,6 +568,13 @@ public class MBNetworkManager: Observation.Observable {
 
     public func applyCompatibilitySettings() {
         securityKey = compatibilitySettings.securityKey
+
+        guard compatibilitySettings.validateSecurityKey() else {
+            compatibilityService?.stop()
+            appendPairingLog("Compatibility mode stopped: security key invalid")
+            return
+        }
+
         compatibilityService?.updatePorts(
             messagePort: compatibilitySettings.messagePort,
             clipboardPort: compatibilitySettings.clipboardPort

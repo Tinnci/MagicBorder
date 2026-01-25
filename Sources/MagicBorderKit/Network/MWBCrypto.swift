@@ -18,9 +18,13 @@ public class MWBCrypto: @unchecked Sendable {
     public var magicNumber: UInt32 = 0
 
     public func deriveKey(from secretKey: String) {
-        guard let passwordData = secretKey.data(using: .utf8),
+        let trimmedKey = secretKey.replacingOccurrences(of: " ", with: "")
+        guard !trimmedKey.isEmpty,
+            let passwordData = trimmedKey.data(using: .utf8),
             let saltData = saltString.data(using: .utf8)
         else {
+            sessionKey = nil
+            magicNumber = 0
             return
         }
 
@@ -48,7 +52,7 @@ public class MWBCrypto: @unchecked Sendable {
 
         if result == kCCSuccess {
             self.sessionKey = derivedKeyData
-            self.magicNumber = calculateMagicNumber(from: secretKey)
+            self.magicNumber = calculateMagicNumber(from: trimmedKey)
             print("Keys derived successfully. Magic: \(magicNumber)")
         } else {
             print("Failed to derive key: \(result)")
@@ -57,7 +61,8 @@ public class MWBCrypto: @unchecked Sendable {
 
     // Magic Number Calculation (Reverse engineered from Encryption.cs)
     public func calculateMagicNumber(from key: String) -> UInt32 {
-        guard let keyData = key.data(using: .utf8) else { return 0 }
+        let trimmedKey = key.replacingOccurrences(of: " ", with: "")
+        guard let keyData = trimmedKey.data(using: .utf8) else { return 0 }
 
         // Pad or truncate to 32 bytes (PACKAGE_SIZE) - Encryption.cs logic
         var bytes = Data(count: 32)
@@ -105,25 +110,27 @@ public class MWBCrypto: @unchecked Sendable {
         guard let key = sessionKey else { return nil }
         let iv = generateIV()
 
-        // Output buffer (size + one block for padding)
-        let bufferSize = data.count + kCCBlockSizeAES128
+        var padded = data
+        let remainder = padded.count % kCCBlockSizeAES128
+        if remainder != 0 {
+            padded.append(Data(count: kCCBlockSizeAES128 - remainder))
+        }
+
+        let bufferSize = padded.count + kCCBlockSizeAES128
         var buffer = Data(count: bufferSize)
         var numBytesEncrypted: Int = 0
 
         let cryptStatus = buffer.withUnsafeMutableBytes { bufferBytes in
-            data.withUnsafeBytes { dataBytes in
+            padded.withUnsafeBytes { dataBytes in
                 key.withUnsafeBytes { keyBytes in
                     iv.withUnsafeBytes { ivBytes in
                         CCCrypt(
                             CCOperation(kCCEncrypt),
                             CCAlgorithm(kCCAlgorithmAES),
-                            CCOptions(kCCOptionPKCS7Padding),  // Encryption.cs uses PaddingMode.Zeros? Checked: PaddingMode.Zeros.
-                            // WARNING: MWB uses PaddingMode.Zeros. kCCOptionPKCS7Padding is default.
-                            // If MWB uses Zeros and Stream mode, we might need manual padding or NoPadding if data is aligned.
-                            // Package size is 32 (aligned to 16), so NoPadding might work if we ensure input is multiple of 16.
+                            CCOptions(0),
                             keyBytes.baseAddress, key.count,
                             ivBytes.baseAddress,
-                            dataBytes.baseAddress, data.count,
+                            dataBytes.baseAddress, padded.count,
                             bufferBytes.baseAddress, bufferSize,
                             &numBytesEncrypted
                         )
@@ -142,6 +149,8 @@ public class MWBCrypto: @unchecked Sendable {
         guard let key = sessionKey else { return nil }
         let iv = generateIV()
 
+        guard data.count % kCCBlockSizeAES128 == 0 else { return nil }
+
         let bufferSize = data.count + kCCBlockSizeAES128
         var buffer = Data(count: bufferSize)
         var numBytesDecrypted: Int = 0
@@ -153,7 +162,7 @@ public class MWBCrypto: @unchecked Sendable {
                         CCCrypt(
                             CCOperation(kCCDecrypt),
                             CCAlgorithm(kCCAlgorithmAES),
-                            CCOptions(0),  // No padding for decrypt if matched?
+                            CCOptions(0),
                             keyBytes.baseAddress, key.count,
                             ivBytes.baseAddress,
                             dataBytes.baseAddress, data.count,
@@ -248,6 +257,7 @@ public class MWBCrypto: @unchecked Sendable {
 
 public struct MWBStreamCipher {
     private var cryptor: CCCryptorRef?
+    private let isEncrypting: Bool
 
     public init?(operation: CCOperation, key: Data, iv: Data) {
         var cryptorOut: CCCryptorRef?
@@ -269,27 +279,32 @@ public struct MWBStreamCipher {
         }
 
         self.cryptor = cryptorOut
+        self.isEncrypting = operation == CCOperation(kCCEncrypt)
     }
 
     public mutating func update(_ data: Data) -> Data? {
         guard let cryptor else { return nil }
 
         let blockSize = kCCBlockSizeAES128
-        var padded = data
-        let remainder = padded.count % blockSize
-        if remainder != 0 {
-            padded.append(Data(count: blockSize - remainder))
+        var input = data
+        let remainder = input.count % blockSize
+        if isEncrypting {
+            if remainder != 0 {
+                input.append(Data(count: blockSize - remainder))
+            }
+        } else {
+            guard remainder == 0 else { return nil }
         }
 
-        let outLength = CCCryptorGetOutputLength(cryptor, padded.count, false)
+        let outLength = CCCryptorGetOutputLength(cryptor, input.count, false)
         var outData = Data(count: outLength)
         var bytesOut: size_t = 0
 
         let status = outData.withUnsafeMutableBytes { outBytes in
-            padded.withUnsafeBytes { inBytes in
+            input.withUnsafeBytes { inBytes in
                 CCCryptorUpdate(
                     cryptor,
-                    inBytes.baseAddress, padded.count,
+                    inBytes.baseAddress, input.count,
                     outBytes.baseAddress, outLength,
                     &bytesOut
                 )
@@ -327,14 +342,14 @@ public struct MWBStreamCipher {
     }
 }
 
-public extension MWBCrypto {
-    func makeEncryptor() -> MWBStreamCipher? {
+extension MWBCrypto {
+    public func makeEncryptor() -> MWBStreamCipher? {
         guard let key = sessionKey else { return nil }
         let iv = generateIV()
         return MWBStreamCipher(operation: CCOperation(kCCEncrypt), key: key, iv: iv)
     }
 
-    func makeDecryptor() -> MWBStreamCipher? {
+    public func makeDecryptor() -> MWBStreamCipher? {
         guard let key = sessionKey else { return nil }
         let iv = generateIV()
         return MWBStreamCipher(operation: CCOperation(kCCDecrypt), key: key, iv: iv)

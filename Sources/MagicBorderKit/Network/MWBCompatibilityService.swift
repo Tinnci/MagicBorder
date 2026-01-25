@@ -46,7 +46,10 @@ public final class MWBCompatibilityService: ObservableObject {
     public var onLog: ((String) -> Void)?
     public var onError: ((String) -> Void)?
 
-    public init(localName: String, localId: Int32, messagePort: UInt16 = 15101, clipboardPort: UInt16 = 15100) {
+    public init(
+        localName: String, localId: Int32, messagePort: UInt16 = 15101,
+        clipboardPort: UInt16 = 15100
+    ) {
         self.localName = localName
         self.localId = localId
         self.messagePort = messagePort
@@ -54,6 +57,11 @@ public final class MWBCompatibilityService: ObservableObject {
     }
 
     public func start(securityKey: String) {
+        let trimmed = securityKey.replacingOccurrences(of: " ", with: "")
+        guard trimmed.count >= 16 else {
+            onLog?("MWB service not started: security key too short")
+            return
+        }
         currentSecurityKey = securityKey
         crypto.deriveKey(from: securityKey)
         startMessageListener()
@@ -71,6 +79,12 @@ public final class MWBCompatibilityService: ObservableObject {
     }
 
     public func updateSecurityKey(_ key: String) {
+        let trimmed = key.replacingOccurrences(of: " ", with: "")
+        guard trimmed.count >= 16 else {
+            stop()
+            onLog?("MWB service stopped: security key too short")
+            return
+        }
         currentSecurityKey = key
         crypto.deriveKey(from: key)
     }
@@ -85,11 +99,19 @@ public final class MWBCompatibilityService: ObservableObject {
         }
     }
 
-    public func connectToHost(ip: String, messagePort: UInt16? = nil, clipboardPort: UInt16? = nil) {
+    public func connectToHost(ip: String, messagePort: UInt16? = nil, clipboardPort: UInt16? = nil)
+    {
         guard !ip.isEmpty else { return }
+        let trimmedKey = currentSecurityKey.replacingOccurrences(of: " ", with: "")
+        guard trimmedKey.count >= 16 else {
+            onError?("Cannot connect: security key is invalid or empty")
+            return
+        }
         let host = NWEndpoint.Host(ip)
 
-        onLog?("Connecting to \(ip):\(messagePort ?? self.messagePort) and \(ip):\(clipboardPort ?? self.clipboardPort)")
+        onLog?(
+            "Connecting to \(ip):\(messagePort ?? self.messagePort) and \(ip):\(clipboardPort ?? self.clipboardPort)"
+        )
 
         if let port = NWEndpoint.Port(rawValue: messagePort ?? self.messagePort) {
             let connection = NWConnection(to: .hostPort(host: host, port: port), using: .tcp)
@@ -184,8 +206,10 @@ public final class MWBCompatibilityService: ObservableObject {
     }
 
     public func sendClipboardImage(_ data: Data, to peerId: Int32?) {
-        guard let target = clipboardTargets().first(where: { $0.peer?.id == peerId })
-            ?? messageSessions.first(where: { $0.peer?.id == peerId }) else { return }
+        guard
+            let target = clipboardTargets().first(where: { $0.peer?.id == peerId })
+                ?? messageSessions.first(where: { $0.peer?.id == peerId })
+        else { return }
         sendClipboardImage(data, via: target)
     }
 
@@ -197,9 +221,10 @@ public final class MWBCompatibilityService: ObservableObject {
         }
 
         if let image = NSImage(pasteboard: NSPasteboard.general),
-           let tiff = image.tiffRepresentation,
-           let bitmap = NSBitmapImageRep(data: tiff),
-           let png = bitmap.representation(using: .png, properties: [:]) {
+            let tiff = image.tiffRepresentation,
+            let bitmap = NSBitmapImageRep(data: tiff),
+            let png = bitmap.representation(using: .png, properties: [:])
+        {
             sendClipboardImage(png, via: session)
         }
     }
@@ -281,6 +306,10 @@ public final class MWBCompatibilityService: ObservableObject {
             self?.onLog?(message)
         }
 
+        session.onLog = { [weak self] message in
+            self?.onLog?(message)
+        }
+
         session.onDisconnected = { [weak self, weak session] in
             guard let self, let session else { return }
             self.removeSession(session)
@@ -337,7 +366,9 @@ public final class MWBCompatibilityService: ObservableObject {
                 session.sendClipboardHandshake(push: packet.type == .clipboardPush)
             }
         case .mouse:
-            let event = MWBMouseEvent(x: packet.mouseX, y: packet.mouseY, wheel: packet.mouseWheel, flags: packet.mouseFlags)
+            let event = MWBMouseEvent(
+                x: packet.mouseX, y: packet.mouseY, wheel: packet.mouseWheel,
+                flags: packet.mouseFlags)
             onRemoteMouse?(event)
         case .keyboard:
             let event = MWBKeyEvent(keyCode: packet.keyCode, flags: packet.keyFlags)
@@ -365,7 +396,8 @@ public final class MWBCompatibilityService: ObservableObject {
             onDragDropOperation?(session.peer?.name)
         case .clipboardDragDropEnd:
             if let payload = session.consumeDragDropPayload(),
-               let urls = decodeFileDrop(payload) {
+                let urls = decodeFileDrop(payload)
+            {
                 onClipboardFiles?(urls)
             }
             onDragDropEnd?()
@@ -379,7 +411,9 @@ public final class MWBCompatibilityService: ObservableObject {
             onCaptureScreen?(packet.src)
         case .matrix:
             // Basic matrix info: machineName field contains a CSV on some builds
-            let matrix = packet.machineName.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            let matrix = packet.machineName.split(separator: ",").map {
+                $0.trimmingCharacters(in: .whitespaces)
+            }
             if !matrix.isEmpty {
                 onMachineMatrix?(matrix)
             }
@@ -394,7 +428,8 @@ public final class MWBCompatibilityService: ObservableObject {
 
     private func sendClipboardText(_ text: String, via session: MWBSession) {
         guard let textData = text.data(using: .utf16LittleEndian),
-              let compressed = MWBCompression.deflateCompress(textData) else { return }
+            let compressed = MWBCompression.deflateCompress(textData)
+        else { return }
         sendClipboardData(compressed, isImage: false, via: session)
     }
 
@@ -484,6 +519,7 @@ private final class MWBSession {
     var onPacket: ((MWBPacket) -> Void)?
     var onDisconnected: (() -> Void)?
     var onError: ((String) -> Void)?
+    var onLog: ((String) -> Void)?
 
     private var encryptor: MWBStreamCipher?
     private var decryptor: MWBStreamCipher?
@@ -496,7 +532,10 @@ private final class MWBSession {
     private var clipboardIsImage = false
     private var dragDropAccumulator = Data()
 
-    init(connection: NWConnection, kind: MWBSessionKind, crypto: MWBCrypto, localName: String, localId: Int32) {
+    init(
+        connection: NWConnection, kind: MWBSessionKind, crypto: MWBCrypto, localName: String,
+        localId: Int32
+    ) {
         self.connection = connection
         self.kind = kind
         self.crypto = crypto
@@ -534,8 +573,9 @@ private final class MWBSession {
     }
 
     func send(_ packet: MWBPacket) {
-          guard let packetToSend = finalize(packet),
-              let encrypted = encrypt(packetToSend.data) else { return }
+        guard let packetToSend = finalize(packet),
+            let encrypted = encrypt(packetToSend.data)
+        else { return }
 
         connection.send(content: encrypted, completion: .contentProcessed { _ in })
     }
@@ -600,7 +640,8 @@ private final class MWBSession {
     }
 
     private func receiveLoop() {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { [weak self] content, _, isComplete, _ in
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) {
+            [weak self] content, _, isComplete, _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let content {
@@ -622,8 +663,10 @@ private final class MWBSession {
             let chunk = encryptedBuffer.prefix(16)
             encryptedBuffer.removeFirst(16)
             if let decrypted = decrypt(chunk) {
-                if decrypted.count != 16 {
-                    MBLogger.network.error("MWB decrypt block size mismatch: \(decrypted.count, privacy: .public)")
+                guard decrypted.count == 16 else {
+                    MBLogger.network.error(
+                        "MWB decrypt block size mismatch: \(decrypted.count, privacy: .public)")
+                    continue
                 }
                 plainBuffer.append(decrypted)
             } else {
@@ -644,14 +687,27 @@ private final class MWBSession {
             let needed = isBig ? MWBPacket.extendedSize : MWBPacket.baseSize
             if plainBuffer.count < needed { break }
 
-            let packetData = plainBuffer.prefix(needed)
+            let packetData = Data(plainBuffer.prefix(needed))
             plainBuffer.removeFirst(needed)
             var packet = MWBPacket(data: packetData)
 
+            guard packet.data.count >= 4 else {
+                onLog?("Packet too short for header: \(packet.data.count) bytes, rawType=\(rawType)")
+                continue
+            }
+
             guard packet.validate(magicNumber: crypto.magicNumber) else {
-                MBLogger.network.debug(
-                    "MWB packet rejected. size=\(packet.data.count, privacy: .public) rawType=\(rawType, privacy: .public)"
-                )
+                let expected = (crypto.magicNumber >> 16) & 0xFFFF
+                let msg =
+                    "MWB packet rejected. Magic mismatch: Got \(packet.magicHigh16) vs Expected \(expected). RawType=\(rawType)"
+                MBLogger.network.debug("\(msg)")
+                // Only log frequency to avoid spamming UI?
+                // For diagnosis, let's log it once or periodically.
+                if packet.magicHigh16 != 0 {  // Don't log all zeros
+                    onLog?(
+                        "Packet Reject: Magic \(String(format: "%04X", packet.magicHigh16)) != \(String(format: "%04X", expected))"
+                    )
+                }
                 continue
             }
 

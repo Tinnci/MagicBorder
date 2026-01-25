@@ -82,11 +82,17 @@ public struct MWBPacket {
     // Magic Number occupies data[2] and data[3]
     public var magicHigh16: UInt16 {
         get {
-            let b2 = UInt16(data[2])
-            let b3 = UInt16(data[3])
-            return (b3 << 8) | b2
+            guard data.count >= 4 else { return 0 }
+            return data.withUnsafeBytes { raw -> UInt16 in
+                guard let base = raw.baseAddress else { return 0 }
+                let bytes = base.assumingMemoryBound(to: UInt8.self)
+                let b2 = UInt16(bytes[2])
+                let b3 = UInt16(bytes[3])
+                return (b3 << 8) | b2
+            }
         }
         set {
+            if data.count < 4 { return }
             data[2] = UInt8(newValue & 0xFF)
             data[3] = UInt8((newValue >> 8) & 0xFF)
         }
@@ -189,10 +195,13 @@ public struct MWBPacket {
     public var machineName: String {
         get {
             let nameData = data.subdata(in: 32..<64)
-            return String(bytes: nameData, encoding: .ascii)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return String(bytes: nameData, encoding: .ascii)?.trimmingCharacters(
+                in: .whitespacesAndNewlines) ?? ""
         }
         set {
-            var bytes = Data(newValue.padding(toLength: 32, withPad: " ", startingAt: 0).data(using: .ascii) ?? Data())
+            var bytes = Data(
+                newValue.padding(toLength: 32, withPad: " ", startingAt: 0).data(using: .ascii)
+                    ?? Data())
             if bytes.count > 32 {
                 bytes = bytes.prefix(32)
             } else if bytes.count < 32 {
@@ -205,34 +214,52 @@ public struct MWBPacket {
     // MARK: - Helpers
 
     private func getInt32(at offset: Int) -> Int32 {
-        data.withUnsafeBytes { $0.load(fromByteOffset: offset, as: Int32.self) }
+        guard data.count >= offset + 4 else { return 0 }
+        return data.withUnsafeBytes { $0.load(fromByteOffset: offset, as: Int32.self) }
     }
 
     private mutating func setInt32(_ value: Int32, at offset: Int) {
+        // Ensure data is large enough
+        if data.count < offset + 4 {
+            if data.count < MWBPacket.extendedSize {
+                data.append(Data(count: MWBPacket.extendedSize - data.count))
+            }
+            // Re-check
+            if data.count < offset + 4 { return }
+        }
         var val = value
         let bytes = Data(bytes: &val, count: 4)
         data.replaceSubrange(offset..<offset + 4, with: bytes)
     }
 
     private func getInt64(at offset: Int) -> Int64 {
-        data.withUnsafeBytes { $0.load(fromByteOffset: offset, as: Int64.self) }
+        guard data.count >= offset + 8 else { return 0 }
+        return data.withUnsafeBytes { $0.load(fromByteOffset: offset, as: Int64.self) }
     }
 
     private mutating func setInt64(_ value: Int64, at offset: Int) {
+        if data.count < offset + 8 {
+            if data.count < MWBPacket.extendedSize {
+                data.append(Data(count: MWBPacket.extendedSize - data.count))
+            }
+            if data.count < offset + 8 { return }
+        }
         var val = value
         let bytes = Data(bytes: &val, count: 8)
         data.replaceSubrange(offset..<offset + 8, with: bytes)
     }
 
     public var isMatrixPacket: Bool {
-        (rawType & MWBPacketType.matrix.rawValue) == MWBPacketType.matrix.rawValue
+        guard !data.isEmpty else { return false }
+        return (rawType & MWBPacketType.matrix.rawValue) == MWBPacketType.matrix.rawValue
     }
 
     public var isBigPackage: Bool {
         if type == .invalid { return false }
         if isMatrixPacket { return true }
         switch type {
-        case .hello, .awake, .heartbeat, .heartbeatEx, .handshake, .handshakeAck, .clipboardPush, .clipboard, .clipboardAsk, .clipboardImage, .clipboardText, .clipboardDataEnd:
+        case .hello, .awake, .heartbeat, .heartbeatEx, .handshake, .handshakeAck, .clipboardPush,
+            .clipboard, .clipboardAsk, .clipboardImage, .clipboardText, .clipboardDataEnd:
             return true
         default:
             return false
@@ -244,7 +271,8 @@ public struct MWBPacket {
             return true
         }
         switch MWBPacketType(rawValue: rawType) ?? .invalid {
-        case .hello, .awake, .heartbeat, .heartbeatEx, .handshake, .handshakeAck, .clipboardPush, .clipboard, .clipboardAsk, .clipboardImage, .clipboardText, .clipboardDataEnd:
+        case .hello, .awake, .heartbeat, .heartbeatEx, .handshake, .handshakeAck, .clipboardPush,
+            .clipboard, .clipboardAsk, .clipboardImage, .clipboardText, .clipboardDataEnd:
             return true
         default:
             return false
