@@ -12,13 +12,13 @@ struct SettingsView: View {
 
             NetworkSettingsTab()
                 .tabItem {
-                    Label("Network", systemImage: "network")
+                    Label("Network", systemImage: "antenna.radiowaves.left.and.right")
                 }
                 .tag("network")
 
             OverlaySettingsTab()
                 .tabItem {
-                    Label("Overlay", systemImage: "display")
+                    Label("Overlay", systemImage: "macwindow.on.rectangle")
                 }
                 .tag("overlay")
         }
@@ -51,13 +51,28 @@ private struct GeneralSettingsTab: View {
                     .disabled(!self.accessibilityService.isTrusted)
 
                 if !self.accessibilityService.isTrusted {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                        Text("Accessibility permission required")
-                            .foregroundStyle(.secondary)
+                    GroupBox {
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                                .font(.title3)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Permission Required")
+                                    .font(.headline)
+                                Text(
+                                    "MagicBorder needs accessibility access to share mouse and keyboard input.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Button("Open System Settings") {
+                                    self.accessibilityService.openSystemSettings()
+                                }
+                                .controlSize(.small)
+                                .padding(.top, 4)
+                            }
+                        }
+                        .padding(4)
                     }
-                    .font(.caption)
+                    .padding(.vertical, 4)
                 }
 
                 Toggle(
@@ -256,7 +271,8 @@ private struct OverlaySettingsTab: View {
     }
 
     private var currentDevicePreferences: MBOverlayPreferences {
-        self.overlayPreferences.preferences(for: self.selectedDevice, default: self.defaultOverlayPreferences)
+        self.overlayPreferences.preferences(
+            for: self.selectedDevice, default: self.defaultOverlayPreferences)
     }
 
     private var useOverrideBinding: Binding<Bool> {
@@ -264,7 +280,8 @@ private struct OverlaySettingsTab: View {
             get: { self.overlayPreferences.hasOverride(for: self.selectedDevice) },
             set: { enabled in
                 if enabled {
-                    self.overlayPreferences.setOverride(self.currentDevicePreferences, for: self.selectedDevice)
+                    self.overlayPreferences.setOverride(
+                        self.currentDevicePreferences, for: self.selectedDevice)
                 } else {
                     self.overlayPreferences.clearOverride(for: self.selectedDevice)
                 }

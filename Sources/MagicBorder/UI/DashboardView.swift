@@ -158,8 +158,10 @@ struct DashboardView: View {
     }
 
     private var effectiveOverlayPreferences: MBOverlayPreferences {
-        let deviceName = self.networkManager.dragDropSourceName ?? self.networkManager.localDisplayName
-        return self.overlayPreferences.preferences(for: deviceName, default: self.defaultOverlayPreferences)
+        let deviceName =
+            self.networkManager.dragDropSourceName ?? self.networkManager.localDisplayName
+        return self.overlayPreferences.preferences(
+            for: deviceName, default: self.defaultOverlayPreferences)
     }
 }
 
@@ -270,7 +272,8 @@ struct ArrangementDetailView: View {
 
                         MachineMatrixView(
                             machines: self.$machines,
-                            columns: self.matrixTwoRowBinding.wrappedValue ? 2 : max(1, self.machines.count))
+                            columns: self.matrixTwoRowBinding.wrappedValue
+                                ? 2 : max(1, self.machines.count))
                             .padding(.horizontal)
 
                         Spacer()
@@ -307,6 +310,12 @@ struct ArrangementDetailView: View {
                     Label("Send Files", systemImage: "square.and.arrow.up")
                 }
                 .help("Send Files via MWB")
+            }
+            ToolbarItem {
+                SettingsLink {
+                    Label("Settings", systemImage: "gear")
+                }
+                .help("Open Settings")
             }
         }
         .onChange(of: self.machines) { _, newValue in

@@ -47,6 +47,13 @@ struct MenuBarView: View {
 
         Divider()
 
+        SettingsLink {
+            Text("Settings...")
+        }
+        .keyboardShortcut(",", modifiers: .command)
+
+        Divider()
+
         Button("Quit MagicBorder") {
             NSApp.terminate(nil)
         }
