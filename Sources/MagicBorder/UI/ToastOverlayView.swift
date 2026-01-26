@@ -7,12 +7,12 @@ struct ToastOverlayView: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: self.systemImage)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
             Text(self.message)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 14, weight: .medium))
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
         .background(.ultraThinMaterial, in: Capsule())
         .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
         .overlay(

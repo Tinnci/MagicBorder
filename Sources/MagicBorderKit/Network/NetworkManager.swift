@@ -181,6 +181,7 @@ public class MBNetworkManager: Observation.Observable {
                         to: .hostPort(host: .ipv4(.any), port: 15101), using: .tcp))
                 self.connectedMachines.append(machine)
             }
+            self.showToast(message: "已连接 \(peer.name)", systemImage: "link")
         }
         service.onDisconnected = { [weak self] peer in
             guard let self else { return }
@@ -189,6 +190,7 @@ public class MBNetworkManager: Observation.Observable {
             if self.activeMachineId == id {
                 self.forceReturnToLocal(reason: "disconnect")
             }
+            self.showToast(message: "已断开 \(peer.name)", systemImage: "link.slash")
         }
         service.onRemoteMouse = { event in
             MBInputManager.shared.simulateMouseEvent(event)
@@ -353,6 +355,9 @@ public class MBNetworkManager: Observation.Observable {
 
         guard let mwbId = uuidToMwbId[machineId] else { return }
         self.switchState = .switching
+        if let machine = connectedMachines.first(where: { $0.id == machineId }) {
+            self.showToast(message: "正在切换到 \(machine.name)", systemImage: "arrow.triangle.2.circlepath")
+        }
         self.compatibilityService?.sendNextMachine(targetId: mwbId)
     }
 
@@ -370,7 +375,7 @@ public class MBNetworkManager: Observation.Observable {
         }
     }
 
-    public func showToast(message: String, systemImage: String = "arrow.left.arrow.right", duration: TimeInterval = 1.2) {
+    public func showToast(message: String, systemImage: String = "arrow.left.arrow.right", duration: TimeInterval = 2.0) {
         self.toast = MBToastState(message: message, systemImage: systemImage)
         self.toastTask?.cancel()
         self.toastTask = Task { [weak self] in
@@ -384,6 +389,7 @@ public class MBNetworkManager: Observation.Observable {
     public func requestSwitch(toMachineNamed name: String) {
         let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         if normalized == self.localName.uppercased() {
+            self.showToast(message: "正在切回本机", systemImage: "arrow.triangle.2.circlepath")
             self.activeMachineId = nil
             return
         }
@@ -396,6 +402,7 @@ public class MBNetworkManager: Observation.Observable {
 
         if self.protocolMode != .modern {
             if let mwbId = mwbId(for: normalized) {
+                self.showToast(message: "正在切换到 \(normalized)", systemImage: "arrow.triangle.2.circlepath")
                 self.compatibilityService?.sendNextMachine(targetId: mwbId)
                 self.activeMachineId = self.uuid(for: mwbId)
             }

@@ -37,7 +37,7 @@ final class MBToastPresenter {
         guard let panel, let hostingView else { return }
 
         let targetSize = hostingView.fittingSize
-        let size = CGSize(width: max(180, targetSize.width), height: max(36, targetSize.height))
+        let size = CGSize(width: max(220, targetSize.width), height: max(44, targetSize.height))
         let screenFrame = NSScreen.main?.visibleFrame ?? .zero
         let origin = CGPoint(
             x: screenFrame.midX - size.width / 2,
