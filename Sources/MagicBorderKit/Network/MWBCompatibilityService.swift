@@ -49,6 +49,8 @@ public final class MWBCompatibilityService: ObservableObject {
     public var onDragDropBegin: ((String?) -> Void)?
     public var onDragDropEnd: (() -> Void)?
     public var onCaptureScreen: ((Int32?) -> Void)?
+    public var onReconnectAttempt: ((String) -> Void)?
+    public var onReconnectStopped: ((String) -> Void)?
     public var onLog: ((String) -> Void)?
     public var onError: ((String) -> Void)?
 
@@ -419,6 +421,7 @@ public final class MWBCompatibilityService: ObservableObject {
 
         if self.reconnectAttempts >= self.maxReconnectAttempts {
             self.onLog?("⏹ Auto-reconnect stopped after \(self.maxReconnectAttempts) attempts")
+            self.onReconnectStopped?(host)
             return
         }
 
@@ -428,6 +431,7 @@ public final class MWBCompatibilityService: ObservableObject {
             try? await Task.sleep(for: .seconds(1.5))
             await MainActor.run { [weak self] in
                 self?.onLog?("⟳ Reconnecting to \(host)...")
+                self?.onReconnectAttempt?(host)
                 self?.connectToHost(ip: host, messagePort: msgPort, clipboardPort: clipPort)
             }
         }

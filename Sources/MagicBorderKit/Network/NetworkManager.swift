@@ -119,6 +119,8 @@ public class MBNetworkManager: Observation.Observable {
     private var pasteboardMonitor: MBPasteboardMonitor?
     private var localMatrix: [String] = []
     private var lastEdgeSwitchTime: TimeInterval = 0
+    private var edgeSwitchLockedUntil: TimeInterval = 0
+    private var edgeSwitchPendingRelease = false
     private var lastMouseLocation: CGPoint?
     private var toastTask: Task<Void, Never>?
     public var dragDropState: MBDragDropState?
@@ -191,6 +193,12 @@ public class MBNetworkManager: Observation.Observable {
                 self.forceReturnToLocal(reason: "disconnect")
             }
             self.showToast(message: "已断开 \(peer.name)", systemImage: "link.slash")
+        }
+        service.onReconnectAttempt = { [weak self] host in
+            self?.showToast(message: "正在重连 \(host)", systemImage: "arrow.clockwise")
+        }
+        service.onReconnectStopped = { [weak self] host in
+            self?.showToast(message: "已停止重连 \(host)", systemImage: "pause.circle")
         }
         service.onRemoteMouse = { event in
             MBInputManager.shared.simulateMouseEvent(event)
@@ -346,7 +354,7 @@ public class MBNetworkManager: Observation.Observable {
         return self.uuidToMwbId[machine.id]
     }
 
-    public func requestSwitch(to machineId: UUID) {
+    public func requestSwitch(to machineId: UUID, reason: SwitchReason = .manual) {
         if self.protocolMode == .modern {
             // Native Switching
             self.activeMachineId = machineId
@@ -359,6 +367,10 @@ public class MBNetworkManager: Observation.Observable {
             self.showToast(message: "正在切换到 \(machine.name)", systemImage: "arrow.triangle.2.circlepath")
         }
         self.compatibilityService?.sendNextMachine(targetId: mwbId)
+        if reason == .manual {
+            self.setEdgeSwitchGuard()
+            self.centerRemoteCursorIfPossible()
+        }
     }
 
     public func forceReturnToLocal(reason: String) {
@@ -375,7 +387,7 @@ public class MBNetworkManager: Observation.Observable {
         }
     }
 
-    public func showToast(message: String, systemImage: String = "arrow.left.arrow.right", duration: TimeInterval = 2.0) {
+    public func showToast(message: String, systemImage: String = "arrow.left.arrow.right", duration: TimeInterval = 2.6) {
         self.toast = MBToastState(message: message, systemImage: systemImage)
         self.toastTask?.cancel()
         self.toastTask = Task { [weak self] in
@@ -386,7 +398,7 @@ public class MBNetworkManager: Observation.Observable {
         }
     }
 
-    public func requestSwitch(toMachineNamed name: String) {
+    public func requestSwitch(toMachineNamed name: String, reason: SwitchReason = .manual) {
         let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         if normalized == self.localName.uppercased() {
             self.showToast(message: "正在切回本机", systemImage: "arrow.triangle.2.circlepath")
@@ -405,6 +417,10 @@ public class MBNetworkManager: Observation.Observable {
                 self.showToast(message: "正在切换到 \(normalized)", systemImage: "arrow.triangle.2.circlepath")
                 self.compatibilityService?.sendNextMachine(targetId: mwbId)
                 self.activeMachineId = self.uuid(for: mwbId)
+                if reason == .manual {
+                    self.setEdgeSwitchGuard()
+                    self.centerRemoteCursorIfPossible()
+                }
             }
         }
     }
@@ -461,13 +477,24 @@ public class MBNetworkManager: Observation.Observable {
             nil
         }
 
-        guard let dir = direction, let target = nextMachineName(for: dir, from: self.localName) else { return }
+        if self.edgeSwitchPendingRelease {
+            if self.isAwayFromEdges(location: location, bounds: bounds, margin: 16) {
+                self.edgeSwitchPendingRelease = false
+            } else {
+                return
+            }
+        }
 
         let now = CFAbsoluteTimeGetCurrent()
+        if now < self.edgeSwitchLockedUntil { return }
+
+        guard let dir = direction, let target = nextMachineName(for: dir, from: self.localName) else { return }
+
         if now - self.lastEdgeSwitchTime < 0.1 { return }
         self.lastEdgeSwitchTime = now
+        self.setEdgeSwitchGuard()
 
-        self.requestSwitch(toMachineNamed: target)
+        self.requestSwitch(toMachineNamed: target, reason: .edge)
     }
 
     public func handleRemoteMouseEvent(snapshot: EventSnapshot) {
@@ -501,14 +528,24 @@ public class MBNetworkManager: Observation.Observable {
             nil
         }
 
+        if self.edgeSwitchPendingRelease {
+            if self.isAwayFromEdges(location: location, bounds: bounds, margin: 16) {
+                self.edgeSwitchPendingRelease = false
+            } else {
+                return
+            }
+        }
+
         let now = CFAbsoluteTimeGetCurrent()
+        if now < self.edgeSwitchLockedUntil { return }
         if now - self.lastEdgeSwitchTime < 0.1 { return }
         self.lastEdgeSwitchTime = now
+        self.setEdgeSwitchGuard()
 
         if let dir = direction,
            let target = nextMachineName(for: dir, from: self.activeMachineName)
         {
-            self.requestSwitch(toMachineNamed: target)
+            self.requestSwitch(toMachineNamed: target, reason: .edge)
             return
         }
 
@@ -522,6 +559,31 @@ public class MBNetworkManager: Observation.Observable {
         case right
         case up
         case down
+    }
+
+    enum SwitchReason {
+        case manual
+        case edge
+    }
+
+    private func setEdgeSwitchGuard() {
+        let now = CFAbsoluteTimeGetCurrent()
+        self.edgeSwitchLockedUntil = now + 0.4
+        self.edgeSwitchPendingRelease = true
+    }
+
+    private func isAwayFromEdges(location: CGPoint, bounds: CGRect, margin: CGFloat) -> Bool {
+        let awayLeft = location.x > bounds.minX + margin
+        let awayRight = location.x < bounds.maxX - margin
+        let awayBottom = location.y > bounds.minY + margin
+        let awayTop = location.y < bounds.maxY - margin
+        return awayLeft && awayRight && awayBottom && awayTop
+    }
+
+    private func centerRemoteCursorIfPossible() {
+        guard self.protocolMode != .modern else { return }
+        guard !self.compatibilitySettings.moveMouseRelatively else { return }
+        self.compatibilityService?.sendMouseEvent(x: 32767, y: 32767, wheel: 0, flags: 0x200)
     }
 
     private func nextMachineName(for direction: EdgeDirection, from currentName: String) -> String? {
@@ -648,6 +710,7 @@ public class MBNetworkManager: Observation.Observable {
     public func connectToHost(ip: String, port: UInt16 = 15101) {
         guard !ip.isEmpty else { return }
         if self.protocolMode != .modern {
+            self.showToast(message: "正在连接 \(ip)", systemImage: "arrow.right.circle")
             self.compatibilityService?.connectToHost(
                 ip: ip,
                 messagePort: self.compatibilitySettings.messagePort,
@@ -657,6 +720,7 @@ public class MBNetworkManager: Observation.Observable {
 
         guard let nwPort = NWEndpoint.Port(rawValue: port) else { return }
         let host = NWEndpoint.Host(ip)
+        self.showToast(message: "正在连接 \(ip)", systemImage: "arrow.right.circle")
         let connection = NWConnection(to: .hostPort(host: host, port: nwPort), using: .tcp)
         self.handleNewConnection(connection)
     }
