@@ -25,6 +25,7 @@ struct MagicBorderApp: App {
     @State private var inputManager = MBInputManager.shared
     @State private var networkManager = MBNetworkManager.shared
     @State private var overlayPreferences = MBOverlayPreferencesStore()
+    @State private var toastPresenter = MBToastPresenter()
     @AppStorage("captureInput") private var captureInput = true
 
     var body: some Scene {
@@ -45,6 +46,15 @@ struct MagicBorderApp: App {
                 }
                 .onChange(of: self.captureInput) { _, _ in
                     self.syncInputCapture()
+                }
+                .onChange(of: self.networkManager.toast) { _, toast in
+                    if let toast {
+                        self.toastPresenter.show(
+                            message: toast.message,
+                            systemImage: toast.systemImage)
+                    } else {
+                        self.toastPresenter.hide()
+                    }
                 }
         }
         .commands {
