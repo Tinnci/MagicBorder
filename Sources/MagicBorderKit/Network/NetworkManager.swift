@@ -10,6 +10,11 @@ import OSLog
 public class MBNetworkManager: Observation.Observable {
     public static let shared = MBNetworkManager()
 
+    public struct MBToastState: Equatable {
+        public let message: String
+        public let systemImage: String
+    }
+
     public enum SwitchState: String {
         case idle
         case switching
@@ -82,15 +87,22 @@ public class MBNetworkManager: Observation.Observable {
             {
                 self.activeMachineName = machine.name
                 self.switchState = .active
+                self.showToast(
+                    message: "已切换到 \(machine.name)",
+                    systemImage: "arrow.right")
             } else {
                 self.activeMachineName = self.localName
                 self.switchState = .idle
+                self.showToast(
+                    message: "已切回本机",
+                    systemImage: "arrow.left")
             }
         }
     }
 
     public var activeMachineName: String = Host.current().localizedName ?? "Local Mac"
     public var lastSwitchTimestamp: Date?
+    public var toast: MBToastState?
 
     public var protocolMode: MBProtocolMode = .dual
     public var securityKey: String = "" {
@@ -108,6 +120,7 @@ public class MBNetworkManager: Observation.Observable {
     private var localMatrix: [String] = []
     private var lastEdgeSwitchTime: TimeInterval = 0
     private var lastMouseLocation: CGPoint?
+    private var toastTask: Task<Void, Never>?
     public var dragDropState: MBDragDropState?
     public var dragDropSourceName: String?
     public var dragDropFileSummary: String?
@@ -354,6 +367,17 @@ public class MBNetworkManager: Observation.Observable {
             self.lastSwitchTimestamp = Date()
             NSCursor.unhide()
             self.appendPairingLog("Force return to local (\(reason))")
+        }
+    }
+
+    public func showToast(message: String, systemImage: String = "arrow.left.arrow.right", duration: TimeInterval = 1.2) {
+        self.toast = MBToastState(message: message, systemImage: systemImage)
+        self.toastTask?.cancel()
+        self.toastTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(duration))
+            await MainActor.run { [weak self] in
+                self?.toast = nil
+            }
         }
     }
 
@@ -905,6 +929,24 @@ public class MBNetworkManager: Observation.Observable {
             if let key = MBInputManager.shared.windowsKeyCode(for: CGKeyCode(snapshot.keyCode)) {
                 self.compatibilityService?.sendKeyEvent(keyCode: key, flags: 0x80)
             }
+        case .flagsChanged:
+            let macKey = CGKeyCode(snapshot.keyCode)
+            guard let key = MBInputManager.shared.windowsKeyCode(for: macKey) else { break }
+            let isDown: Bool = switch macKey {
+            case 56, 60:
+                snapshot.flags.contains(.maskShift)
+            case 59, 62:
+                snapshot.flags.contains(.maskControl)
+            case 58, 61:
+                snapshot.flags.contains(.maskAlternate)
+            case 55, 54:
+                snapshot.flags.contains(.maskCommand)
+            case 57:
+                snapshot.flags.contains(.maskAlphaShift)
+            default:
+                snapshot.flags.contains(.maskNonCoalesced)
+            }
+            self.compatibilityService?.sendKeyEvent(keyCode: key, flags: isDown ? 0 : 0x80)
         default:
             break
         }

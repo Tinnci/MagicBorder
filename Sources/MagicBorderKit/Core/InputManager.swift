@@ -107,23 +107,20 @@ public class MBInputManager: Observation.Observable {
             CGEvent
         >?
     {
-        let isRemoteActive = self._remoteID.withLock { $0 != nil }
-        if isRemoteActive, type == .keyDown {
-            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-            if keyCode == 53 {
-                Task { @MainActor in
-                    MBNetworkManager.shared.forceReturnToLocal(reason: "escape")
-                }
-                return Unmanaged.passUnretained(event)
-            }
-        }
-
         if self.shouldAllowLocalInteraction(type: type) {
             return Unmanaged.passUnretained(event)
         }
 
         // Create snapshot synchronously (safe)
         var snapshot = EventSnapshot(from: event, type: type)
+
+        let isRemoteActive = self._remoteID.withLock { $0 != nil }
+        if isRemoteActive, type == .keyDown, snapshot.keyCode == 53 {
+            Task { @MainActor in
+                MBNetworkManager.shared.forceReturnToLocal(reason: "escape")
+            }
+            return nil
+        }
 
         // Core Logic
         guard self._remoteID.withLock({ $0 }) != nil else {
@@ -187,7 +184,9 @@ public class MBInputManager: Observation.Observable {
                 }
             }
 
-            MBNetworkManager.shared.handleRemoteMouseEvent(snapshot: snapshot)
+            if type == .mouseMoved || type == .leftMouseDragged || type == .rightMouseDragged {
+                MBNetworkManager.shared.handleRemoteMouseEvent(snapshot: snapshot)
+            }
             MBNetworkManager.shared.sendRemoteInput(snapshot: snapshot)
         }
 

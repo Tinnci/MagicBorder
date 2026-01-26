@@ -115,6 +115,14 @@ struct DashboardView: View {
                     .padding(self.effectiveOverlayPreferences.position.padding)
             }
         }
+        .overlay(alignment: .top) {
+            if let toast = self.networkManager.toast {
+                ToastOverlayView(message: toast.message, systemImage: toast.systemImage)
+                    .padding(.top, 20)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: self.networkManager.toast)
         .frame(minWidth: 800, minHeight: 600)
         .onAppear {
             self.networkManager.applyCompatibilitySettings()
