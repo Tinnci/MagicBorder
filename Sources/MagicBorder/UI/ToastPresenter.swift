@@ -25,6 +25,8 @@ final class MBToastPresenter {
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
 
             let hostingView = NSHostingView(rootView: view)
+            hostingView.wantsLayer = true
+            hostingView.layer?.backgroundColor = NSColor.clear.cgColor
             hostingView.translatesAutoresizingMaskIntoConstraints = false
             panel.contentView = hostingView
 

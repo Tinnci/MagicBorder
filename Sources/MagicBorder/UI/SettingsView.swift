@@ -66,6 +66,33 @@ private struct GeneralSettingsTab: View {
                 Toggle(
                     "Block Corner Switching",
                     isOn: $networkManager.compatibilitySettings.blockCorners)
+                Toggle(
+                    "Center Cursor on Manual Switch",
+                    isOn: $networkManager.compatibilitySettings.centerCursorOnManualSwitch)
+                LabeledContent("Edge Switch Lock") {
+                    HStack {
+                        Slider(
+                            value: $networkManager.compatibilitySettings.edgeSwitchLockSeconds,
+                            in: 0.1 ... 1.0,
+                            step: 0.05)
+                        Text(
+                            "\(networkManager.compatibilitySettings.edgeSwitchLockSeconds, specifier: "%.2fs")")
+                            .monospacedDigit()
+                            .frame(width: 64, alignment: .trailing)
+                    }
+                }
+                LabeledContent("Edge Safe Margin") {
+                    HStack {
+                        Slider(
+                            value: $networkManager.compatibilitySettings.edgeSwitchSafeMargin,
+                            in: 4 ... 40,
+                            step: 2)
+                        Text(
+                            "\(Int(networkManager.compatibilitySettings.edgeSwitchSafeMargin))px")
+                            .monospacedDigit()
+                            .frame(width: 64, alignment: .trailing)
+                    }
+                }
                 Toggle("Wrap Mouse at Screen Edge", isOn: self.$wrapMouse)
                 Toggle("Hide Mouse at Edge", isOn: self.$hideMouse)
                 Toggle(

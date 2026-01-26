@@ -486,7 +486,11 @@ public class MBNetworkManager: Observation.Observable {
             }
 
         if self.edgeSwitchPendingRelease {
-            if self.isAwayFromEdges(location: location, bounds: bounds, margin: 16) {
+            if self.isAwayFromEdges(
+                location: location,
+                bounds: bounds,
+                margin: CGFloat(self.compatibilitySettings.edgeSwitchSafeMargin))
+            {
                 self.edgeSwitchPendingRelease = false
             } else {
                 return
@@ -539,7 +543,11 @@ public class MBNetworkManager: Observation.Observable {
             }
 
         if self.edgeSwitchPendingRelease {
-            if self.isAwayFromEdges(location: location, bounds: bounds, margin: 16) {
+            if self.isAwayFromEdges(
+                location: location,
+                bounds: bounds,
+                margin: CGFloat(self.compatibilitySettings.edgeSwitchSafeMargin))
+            {
                 self.edgeSwitchPendingRelease = false
             } else {
                 return
@@ -578,7 +586,8 @@ public class MBNetworkManager: Observation.Observable {
 
     private func setEdgeSwitchGuard() {
         let now = CFAbsoluteTimeGetCurrent()
-        self.edgeSwitchLockedUntil = now + 0.4
+        let lockSeconds = max(0.05, self.compatibilitySettings.edgeSwitchLockSeconds)
+        self.edgeSwitchLockedUntil = now + lockSeconds
         self.edgeSwitchPendingRelease = true
     }
 
@@ -593,6 +602,7 @@ public class MBNetworkManager: Observation.Observable {
     private func centerRemoteCursorIfPossible() {
         guard self.protocolMode != .modern else { return }
         guard !self.compatibilitySettings.moveMouseRelatively else { return }
+        guard self.compatibilitySettings.centerCursorOnManualSwitch else { return }
         self.compatibilityService?.sendMouseEvent(x: 32767, y: 32767, wheel: 0, flags: 0x200)
     }
 

@@ -10,6 +10,9 @@ public final class MBCompatibilitySettings {
         static let switchByMouse = "compat.switchByMouse"
         static let blockCorners = "compat.blockCorners"
         static let moveMouseRelatively = "compat.moveMouseRelatively"
+        static let centerCursorOnManualSwitch = "compat.centerCursorOnManualSwitch"
+        static let edgeSwitchLockSeconds = "compat.edgeSwitchLockSeconds"
+        static let edgeSwitchSafeMargin = "compat.edgeSwitchSafeMargin"
         static let matrixOneRow = "compat.matrixOneRow"
         static let matrixCircle = "compat.matrixCircle"
         static let messagePort = "compat.messagePort"
@@ -38,6 +41,26 @@ public final class MBCompatibilitySettings {
 
     public var moveMouseRelatively: Bool {
         didSet { self.defaults.set(self.moveMouseRelatively, forKey: Keys.moveMouseRelatively) }
+    }
+
+    public var centerCursorOnManualSwitch: Bool {
+        didSet {
+            self.defaults.set(
+                self.centerCursorOnManualSwitch,
+                forKey: Keys.centerCursorOnManualSwitch)
+        }
+    }
+
+    public var edgeSwitchLockSeconds: Double {
+        didSet {
+            self.defaults.set(self.edgeSwitchLockSeconds, forKey: Keys.edgeSwitchLockSeconds)
+        }
+    }
+
+    public var edgeSwitchSafeMargin: Double {
+        didSet {
+            self.defaults.set(self.edgeSwitchSafeMargin, forKey: Keys.edgeSwitchSafeMargin)
+        }
     }
 
     public var matrixOneRow: Bool {
@@ -73,6 +96,12 @@ public final class MBCompatibilitySettings {
         self.blockCorners = self.defaults.object(forKey: Keys.blockCorners) as? Bool ?? false
         self.moveMouseRelatively =
             self.defaults.object(forKey: Keys.moveMouseRelatively) as? Bool ?? false
+        self.centerCursorOnManualSwitch =
+            self.defaults.object(forKey: Keys.centerCursorOnManualSwitch) as? Bool ?? true
+        self.edgeSwitchLockSeconds =
+            self.defaults.object(forKey: Keys.edgeSwitchLockSeconds) as? Double ?? 0.4
+        self.edgeSwitchSafeMargin =
+            self.defaults.object(forKey: Keys.edgeSwitchSafeMargin) as? Double ?? 16
         self.matrixOneRow = self.defaults.object(forKey: Keys.matrixOneRow) as? Bool ?? true
         self.matrixCircle = self.defaults.object(forKey: Keys.matrixCircle) as? Bool ?? false
         if self.defaults.object(forKey: Keys.messagePort) != nil {

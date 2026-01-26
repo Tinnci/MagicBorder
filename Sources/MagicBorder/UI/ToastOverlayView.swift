@@ -18,6 +18,7 @@ struct ToastOverlayView: View {
         .overlay(
             Capsule()
                 .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
+        .padding(24) // Ensure window is large enough for shadow
         .accessibilityLabel(self.message)
     }
 }
