@@ -107,6 +107,17 @@ public class MBInputManager: Observation.Observable {
             CGEvent
         >?
     {
+        let isRemoteActive = self._remoteID.withLock { $0 != nil }
+        if isRemoteActive, type == .keyDown {
+            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+            if keyCode == 53 {
+                Task { @MainActor in
+                    MBNetworkManager.shared.forceReturnToLocal(reason: "escape")
+                }
+                return Unmanaged.passUnretained(event)
+            }
+        }
+
         if self.shouldAllowLocalInteraction(type: type) {
             return Unmanaged.passUnretained(event)
         }
@@ -176,6 +187,7 @@ public class MBInputManager: Observation.Observable {
                 }
             }
 
+            MBNetworkManager.shared.handleRemoteMouseEvent(snapshot: snapshot)
             MBNetworkManager.shared.sendRemoteInput(snapshot: snapshot)
         }
 
@@ -183,6 +195,10 @@ public class MBInputManager: Observation.Observable {
     }
 
     private nonisolated func shouldAllowLocalInteraction(type: CGEventType) -> Bool {
+        if self._remoteID.withLock({ $0 }) != nil {
+            return false
+        }
+
         if self._isAppActive.withLock({ $0 }) {
             return true
         }

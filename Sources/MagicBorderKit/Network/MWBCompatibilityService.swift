@@ -31,6 +31,8 @@ public final class MWBCompatibilityService: ObservableObject {
     private var lastConnectMessagePort: UInt16?
     private var lastConnectClipboardPort: UInt16?
     private var reconnectTask: Task<Void, Never>?
+    private var reconnectAttempts: Int = 0
+    private let maxReconnectAttempts: Int = 3
 
     public var onConnected: ((MWBPeer) -> Void)?
     public var onDisconnected: ((MWBPeer) -> Void)?
@@ -123,6 +125,8 @@ public final class MWBCompatibilityService: ObservableObject {
         self.lastConnectHost = ip
         self.lastConnectMessagePort = messagePort ?? self.messagePort
         self.lastConnectClipboardPort = clipboardPort ?? self.clipboardPort
+        self.reconnectAttempts = 0
+        self.reconnectTask?.cancel()
 
         if let port = NWEndpoint.Port(rawValue: messagePort ?? self.messagePort) {
             let connection = NWConnection(to: .hostPort(host: host, port: port), using: .tcp)
@@ -413,7 +417,13 @@ public final class MWBCompatibilityService: ObservableObject {
               let clipPort = lastConnectClipboardPort
         else { return }
 
+        if self.reconnectAttempts >= self.maxReconnectAttempts {
+            self.onLog?("⏹ Auto-reconnect stopped after \(self.maxReconnectAttempts) attempts")
+            return
+        }
+
         if self.reconnectTask?.isCancelled == false { return }
+        self.reconnectAttempts += 1
         self.reconnectTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.5))
             await MainActor.run { [weak self] in
@@ -421,6 +431,15 @@ public final class MWBCompatibilityService: ObservableObject {
                 self?.connectToHost(ip: host, messagePort: msgPort, clipboardPort: clipPort)
             }
         }
+    }
+
+    public func stopAutoReconnect() {
+        self.reconnectTask?.cancel()
+        self.reconnectTask = nil
+        self.reconnectAttempts = 0
+        self.lastConnectHost = nil
+        self.lastConnectMessagePort = nil
+        self.lastConnectClipboardPort = nil
     }
 
     private func handlePacket(_ packet: MWBPacket, from session: MWBSession) {
@@ -459,6 +478,8 @@ public final class MWBCompatibilityService: ObservableObject {
                 session.isHandshakeVerified = true
                 session.handshakeChallenge = nil
                 session.handshakeAckFailures = 0
+                self.reconnectAttempts = 0
+                self.reconnectTask?.cancel()
 
                 if let peer = session.peer {
                     self.onLog?("✓ HandshakeAck VERIFIED from '\(peer.name)' (ID=\(peer.id))")

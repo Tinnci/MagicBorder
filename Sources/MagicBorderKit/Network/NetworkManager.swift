@@ -173,6 +173,9 @@ public class MBNetworkManager: Observation.Observable {
             guard let self else { return }
             let id = self.uuid(for: peer.id)
             self.connectedMachines.removeAll { $0.id == id }
+            if self.activeMachineId == id {
+                self.forceReturnToLocal(reason: "disconnect")
+            }
         }
         service.onRemoteMouse = { event in
             MBInputManager.shared.simulateMouseEvent(event)
@@ -222,6 +225,7 @@ public class MBNetworkManager: Observation.Observable {
             } else {
                 self.activeMachineId = nil
                 self.activeMachineName = self.localName
+                NSCursor.unhide()
             }
             self.switchState = .active
             self.lastSwitchTimestamp = Date()
@@ -339,6 +343,20 @@ public class MBNetworkManager: Observation.Observable {
         self.compatibilityService?.sendNextMachine(targetId: mwbId)
     }
 
+    public func forceReturnToLocal(reason: String) {
+        if self.activeMachineId != nil {
+            if self.protocolMode != .modern {
+                self.compatibilityService?.sendNextMachine(targetId: nil)
+                self.compatibilityService?.stopAutoReconnect()
+            }
+            self.activeMachineId = nil
+            self.switchState = .idle
+            self.lastSwitchTimestamp = Date()
+            NSCursor.unhide()
+            self.appendPairingLog("Force return to local (\(reason))")
+        }
+    }
+
     public func requestSwitch(toMachineNamed name: String) {
         let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         if normalized == self.localName.uppercased() {
@@ -412,13 +430,60 @@ public class MBNetworkManager: Observation.Observable {
             nil
         }
 
-        guard let dir = direction, let target = nextMachineName(for: dir) else { return }
+        guard let dir = direction, let target = nextMachineName(for: dir, from: self.localName) else { return }
 
         let now = CFAbsoluteTimeGetCurrent()
         if now - self.lastEdgeSwitchTime < 0.1 { return }
         self.lastEdgeSwitchTime = now
 
         self.requestSwitch(toMachineNamed: target)
+    }
+
+    public func handleRemoteMouseEvent(snapshot: EventSnapshot) {
+        guard self.compatibilitySettings.switchByMouse else { return }
+        guard self.activeMachineId != nil else { return }
+        guard let screen = NSScreen.main else { return }
+
+        let location = snapshot.location
+        let bounds = screen.frame
+        let threshold: CGFloat = 2
+
+        let nearLeft = location.x <= bounds.minX + threshold
+        let nearRight = location.x >= bounds.maxX - threshold
+        let nearBottom = location.y <= bounds.minY + threshold
+        let nearTop = location.y >= bounds.maxY - threshold
+
+        if self.compatibilitySettings.blockCorners {
+            let nearCorner = (nearLeft || nearRight) && (nearBottom || nearTop)
+            if nearCorner { return }
+        }
+
+        let direction: EdgeDirection? = if nearLeft {
+            .left
+        } else if nearRight {
+            .right
+        } else if nearTop {
+            .up
+        } else if nearBottom {
+            .down
+        } else {
+            nil
+        }
+
+        let now = CFAbsoluteTimeGetCurrent()
+        if now - self.lastEdgeSwitchTime < 0.1 { return }
+        self.lastEdgeSwitchTime = now
+
+        if let dir = direction,
+           let target = nextMachineName(for: dir, from: self.activeMachineName)
+        {
+            self.requestSwitch(toMachineNamed: target)
+            return
+        }
+
+        if direction != nil {
+            self.forceReturnToLocal(reason: "edge")
+        }
     }
 
     private enum EdgeDirection {
@@ -428,13 +493,13 @@ public class MBNetworkManager: Observation.Observable {
         case down
     }
 
-    private func nextMachineName(for direction: EdgeDirection) -> String? {
+    private func nextMachineName(for direction: EdgeDirection, from currentName: String) -> String? {
         var matrix = self.localMatrix
         if matrix.isEmpty {
             matrix = [self.localName.uppercased()] + self.connectedMachines.map { $0.name.uppercased() }
         }
 
-        guard let currentIndex = matrix.firstIndex(of: localName.uppercased()) else { return nil }
+        guard let currentIndex = matrix.firstIndex(of: currentName.uppercased()) else { return nil }
 
         if self.compatibilitySettings.matrixOneRow {
             switch direction {
@@ -799,7 +864,7 @@ public class MBNetworkManager: Observation.Observable {
         let location = snapshot.location
 
         let normalizedX = Int32(((location.x - bounds.minX) / bounds.width) * 65535.0)
-        let normalizedY = Int32(((bounds.maxY - location.y) / bounds.height) * 65535.0)
+        let normalizedY = Int32(((location.y - bounds.minY) / bounds.height) * 65535.0)
 
         switch snapshot.type {
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged:
@@ -808,7 +873,8 @@ public class MBNetworkManager: Observation.Observable {
                 let dy = Int32(location.y - last.y)
                 let offset: Int32 = 100000
                 let relX = dx + (dx < 0 ? -offset : offset)
-                let relY = dy + (dy < 0 ? -offset : offset)
+                let winDy = -dy
+                let relY = winDy + (winDy < 0 ? -offset : offset)
                 self.compatibilityService?.sendMouseEvent(x: relX, y: relY, wheel: 0, flags: 0x200)
             } else {
                 self.compatibilityService?.sendMouseEvent(
