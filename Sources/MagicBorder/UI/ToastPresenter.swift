@@ -17,7 +17,7 @@ final class MBToastPresenter {
                 defer: true)
             panel.isFloatingPanel = true
             panel.level = .statusBar
-            panel.hasShadow = true
+            panel.hasShadow = false
             panel.backgroundColor = .clear
             panel.isOpaque = false
             panel.hidesOnDeactivate = false
