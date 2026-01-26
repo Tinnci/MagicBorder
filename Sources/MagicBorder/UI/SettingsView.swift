@@ -36,6 +36,12 @@ private struct GeneralSettingsTab: View {
     @AppStorage("hideMouse") private var hideMouse = true
     @AppStorage("captureInput") private var captureInput = true
 
+    private var matrixModeBinding: Binding<Int> {
+        Binding(
+            get: { self.networkManager.compatibilitySettings.matrixOneRow ? 0 : 1 },
+            set: { self.networkManager.compatibilitySettings.matrixOneRow = ($0 == 0) })
+    }
+
     var body: some View {
         @Bindable var networkManager = networkManager
 
@@ -115,12 +121,25 @@ private struct GeneralSettingsTab: View {
                     isOn: $networkManager.compatibilitySettings.moveMouseRelatively)
             }
 
-            Section("Matrix Configuration") {
-                Toggle(
-                    "Single Row Matrix", isOn: $networkManager.compatibilitySettings.matrixOneRow)
+            Section {
+                Picker("Layout Mode", selection: self.matrixModeBinding) {
+                    Label("Single Row", systemImage: "rectangle.grid.1x2").tag(0)
+                    Label("Grid (2 Rows)", systemImage: "square.grid.2x2").tag(1)
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+
                 Toggle(
                     "Cycle Through Screens",
                     isOn: $networkManager.compatibilitySettings.matrixCircle)
+            } header: {
+                Text("Matrix Configuration")
+            } footer: {
+                if networkManager.compatibilitySettings.matrixOneRow {
+                    Text("Machines are arranged in a single horizontal line.")
+                } else {
+                    Text("Machines are arranged in a 2-row grid layout.")
+                }
             }
         }
         .formStyle(.grouped)
