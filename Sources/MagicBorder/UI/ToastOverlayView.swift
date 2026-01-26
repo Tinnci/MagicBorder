@@ -5,16 +5,16 @@ struct ToastOverlayView: View {
     let systemImage: String
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             Image(systemName: self.systemImage)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 28, weight: .semibold))
             Text(self.message)
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: 18, weight: .medium))
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
         .background(.ultraThinMaterial, in: Capsule())
-        .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+        .shadow(color: .black.opacity(0.2), radius: 12, x: 0, y: 6)
         .overlay(
             Capsule()
                 .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))

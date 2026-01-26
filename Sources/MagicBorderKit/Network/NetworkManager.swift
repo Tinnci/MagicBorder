@@ -364,7 +364,8 @@ public class MBNetworkManager: Observation.Observable {
         guard let mwbId = uuidToMwbId[machineId] else { return }
         self.switchState = .switching
         if let machine = connectedMachines.first(where: { $0.id == machineId }) {
-            self.showToast(message: "正在切换到 \(machine.name)", systemImage: "arrow.triangle.2.circlepath")
+            self.showToast(
+                message: "正在切换到 \(machine.name)", systemImage: "arrow.triangle.2.circlepath")
         }
         self.compatibilityService?.sendNextMachine(targetId: mwbId)
         if reason == .manual {
@@ -387,7 +388,10 @@ public class MBNetworkManager: Observation.Observable {
         }
     }
 
-    public func showToast(message: String, systemImage: String = "arrow.left.arrow.right", duration: TimeInterval = 2.6) {
+    public func showToast(
+        message: String, systemImage: String = "arrow.left.arrow.right",
+        duration: TimeInterval = 2.6)
+    {
         self.toast = MBToastState(message: message, systemImage: systemImage)
         self.toastTask?.cancel()
         self.toastTask = Task { [weak self] in
@@ -414,7 +418,8 @@ public class MBNetworkManager: Observation.Observable {
 
         if self.protocolMode != .modern {
             if let mwbId = mwbId(for: normalized) {
-                self.showToast(message: "正在切换到 \(normalized)", systemImage: "arrow.triangle.2.circlepath")
+                self.showToast(
+                    message: "正在切换到 \(normalized)", systemImage: "arrow.triangle.2.circlepath")
                 self.compatibilityService?.sendNextMachine(targetId: mwbId)
                 self.activeMachineId = self.uuid(for: mwbId)
                 if reason == .manual {
@@ -438,7 +443,9 @@ public class MBNetworkManager: Observation.Observable {
     }
 
     public func updateLocalMatrix(names: [String]) {
-        self.localMatrix = names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
+        self.localMatrix = names.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        }
     }
 
     public func handleLocalMouseEvent(_ event: CGEvent, type: CGEventType) {
@@ -465,17 +472,18 @@ public class MBNetworkManager: Observation.Observable {
             if nearCorner { return }
         }
 
-        let direction: EdgeDirection? = if nearLeft {
-            .left
-        } else if nearRight {
-            .right
-        } else if nearTop {
-            .up
-        } else if nearBottom {
-            .down
-        } else {
-            nil
-        }
+        let direction: EdgeDirection? =
+            if nearLeft {
+                .left
+            } else if nearRight {
+                .right
+            } else if nearTop {
+                .up
+            } else if nearBottom {
+                .down
+            } else {
+                nil
+            }
 
         if self.edgeSwitchPendingRelease {
             if self.isAwayFromEdges(location: location, bounds: bounds, margin: 16) {
@@ -488,7 +496,8 @@ public class MBNetworkManager: Observation.Observable {
         let now = CFAbsoluteTimeGetCurrent()
         if now < self.edgeSwitchLockedUntil { return }
 
-        guard let dir = direction, let target = nextMachineName(for: dir, from: self.localName) else { return }
+        guard let dir = direction, let target = nextMachineName(for: dir, from: self.localName)
+        else { return }
 
         if now - self.lastEdgeSwitchTime < 0.1 { return }
         self.lastEdgeSwitchTime = now
@@ -516,17 +525,18 @@ public class MBNetworkManager: Observation.Observable {
             if nearCorner { return }
         }
 
-        let direction: EdgeDirection? = if nearLeft {
-            .left
-        } else if nearRight {
-            .right
-        } else if nearTop {
-            .up
-        } else if nearBottom {
-            .down
-        } else {
-            nil
-        }
+        let direction: EdgeDirection? =
+            if nearLeft {
+                .left
+            } else if nearRight {
+                .right
+            } else if nearTop {
+                .up
+            } else if nearBottom {
+                .down
+            } else {
+                nil
+            }
 
         if self.edgeSwitchPendingRelease {
             if self.isAwayFromEdges(location: location, bounds: bounds, margin: 16) {
@@ -561,7 +571,7 @@ public class MBNetworkManager: Observation.Observable {
         case down
     }
 
-    enum SwitchReason {
+    public enum SwitchReason {
         case manual
         case edge
     }
@@ -589,7 +599,8 @@ public class MBNetworkManager: Observation.Observable {
     private func nextMachineName(for direction: EdgeDirection, from currentName: String) -> String? {
         var matrix = self.localMatrix
         if matrix.isEmpty {
-            matrix = [self.localName.uppercased()] + self.connectedMachines.map { $0.name.uppercased() }
+            matrix =
+                [self.localName.uppercased()] + self.connectedMachines.map { $0.name.uppercased() }
         }
 
         guard let currentIndex = matrix.firstIndex(of: currentName.uppercased()) else { return nil }
@@ -1003,20 +1014,21 @@ public class MBNetworkManager: Observation.Observable {
         case .flagsChanged:
             let macKey = CGKeyCode(snapshot.keyCode)
             guard let key = MBInputManager.shared.windowsKeyCode(for: macKey) else { break }
-            let isDown: Bool = switch macKey {
-            case 56, 60:
-                snapshot.flags.contains(.maskShift)
-            case 59, 62:
-                snapshot.flags.contains(.maskControl)
-            case 58, 61:
-                snapshot.flags.contains(.maskAlternate)
-            case 55, 54:
-                snapshot.flags.contains(.maskCommand)
-            case 57:
-                snapshot.flags.contains(.maskAlphaShift)
-            default:
-                snapshot.flags.contains(.maskNonCoalesced)
-            }
+            let isDown: Bool =
+                switch macKey {
+                case 56, 60:
+                    snapshot.flags.contains(.maskShift)
+                case 59, 62:
+                    snapshot.flags.contains(.maskControl)
+                case 58, 61:
+                    snapshot.flags.contains(.maskAlternate)
+                case 55, 54:
+                    snapshot.flags.contains(.maskCommand)
+                case 57:
+                    snapshot.flags.contains(.maskAlphaShift)
+                default:
+                    snapshot.flags.contains(.maskNonCoalesced)
+                }
             self.compatibilityService?.sendKeyEvent(keyCode: key, flags: isDown ? 0 : 0x80)
         default:
             break
