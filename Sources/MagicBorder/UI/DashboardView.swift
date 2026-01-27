@@ -19,6 +19,7 @@
 import AppKit
 import MagicBorderKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Main View
 
@@ -234,6 +235,31 @@ private struct DragDropOverlayView: View {
     }
 }
 
+private struct FileDropZoneView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "tray.and.arrow.up")
+                .font(.system(size: 36, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+            Text("拖拽文件到此处发送")
+                .font(.headline)
+            Text("支持文件与文件夹")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(28)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(
+                            Color.accentColor.opacity(0.35), lineWidth: 2)))
+        .shadow(radius: 12)
+        .padding(24)
+    }
+}
+
 // MARK: - Detail Views
 
 struct ArrangementDetailView: View {
@@ -244,6 +270,7 @@ struct ArrangementDetailView: View {
         MagicBorderKit.MBNetworkManager
 
     @State private var isInspectorPresented = true
+    @State private var isFileDropTargeted = false
 
     private var matrixTwoRowBinding: Binding<Bool> {
         Binding(
@@ -280,7 +307,14 @@ struct ArrangementDetailView: View {
                     }
                     .padding(.vertical)
                 }
+                if self.isFileDropTargeted {
+                    FileDropZoneView()
+                        .transition(.opacity)
+                }
             }
+        }
+        .onDrop(of: [UTType.fileURL], isTargeted: self.$isFileDropTargeted) { providers in
+            self.handleFileDrop(providers)
         }
         .navigationTitle("Arrangement")
         .inspector(isPresented: self.$isInspectorPresented) {
@@ -339,6 +373,62 @@ struct ArrangementDetailView: View {
             names: self.machines.map(\.name),
             twoRow: self.matrixTwoRowBinding.wrappedValue,
             swap: self.matrixSwapBinding.wrappedValue)
+    }
+
+    private func handleFileDrop(_ providers: [NSItemProvider]) -> Bool {
+        Task { @MainActor in
+            let urls = await self.extractFileURLs(from: providers)
+            guard !urls.isEmpty else { return }
+            self.networkManager.sendFileDrop(urls)
+            self.networkManager.showToast(
+                message: "已发送\(self.fileSummary(urls))",
+                systemImage: "tray.and.arrow.up")
+        }
+        return true
+    }
+
+    private func extractFileURLs(from providers: [NSItemProvider]) async -> [URL] {
+        var urls: [URL] = []
+        for provider in providers {
+            guard provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else {
+                continue
+            }
+            if let url = await self.loadURL(from: provider) {
+                urls.append(url)
+            }
+        }
+        return Array(Set(urls))
+    }
+
+    private func loadURL(from provider: NSItemProvider) async -> URL? {
+        await withCheckedContinuation { continuation in
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) {
+                item, _ in
+                if let url = item as? URL {
+                    continuation.resume(returning: url)
+                    return
+                }
+                if let data = item as? Data,
+                   let url = URL(dataRepresentation: data, relativeTo: nil)
+                {
+                    continuation.resume(returning: url)
+                    return
+                }
+                if let string = item as? String, let url = URL(string: string) {
+                    continuation.resume(returning: url)
+                    return
+                }
+                continuation.resume(returning: nil)
+            }
+        }
+    }
+
+    private func fileSummary(_ urls: [URL]) -> String {
+        guard let first = urls.first else { return "" }
+        if urls.count == 1 {
+            return " \(first.lastPathComponent)"
+        }
+        return " \(first.lastPathComponent) +\(urls.count - 1)"
     }
 }
 
