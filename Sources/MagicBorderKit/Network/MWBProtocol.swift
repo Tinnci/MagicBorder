@@ -144,14 +144,15 @@ public struct MWBPacket {
     }
 
     // Keyboard Mode (KEYBDDATA)
+    // C# DATA layout uses DateTime at offset 16 (8 bytes), then KEYBDDATA at offset 24.
     public var keyCode: Int32 {
-        get { self.getInt32(at: 16) }
-        set { self.setInt32(newValue, at: 16) }
+        get { self.getInt32(at: 24) }
+        set { self.setInt32(newValue, at: 24) }
     }
 
     public var keyFlags: Int32 {
-        get { self.getInt32(at: 20) }
-        set { self.setInt32(newValue, at: 20) }
+        get { self.getInt32(at: 28) }
+        set { self.setInt32(newValue, at: 28) }
     }
 
     // Machine IDs / Matrix data (overlaps)
