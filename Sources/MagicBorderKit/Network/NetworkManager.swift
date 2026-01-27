@@ -805,10 +805,10 @@ public class MBNetworkManager: Observation.Observable {
     // MARK: - Subnet Scanning
 
     public func startSubnetScanning() {
-        print("Starting Subnet Scan...")
+        MBLogger.network.info("Starting Subnet Scan...")
         let prefixes = self.getLocalIPPrefixes()
         guard !prefixes.isEmpty else {
-            print("No local IP found for scanning.")
+            MBLogger.network.info("No local IP found for scanning.")
             return
         }
 
@@ -817,7 +817,7 @@ public class MBNetworkManager: Observation.Observable {
         let queue = DispatchQueue(label: "com.magicborder.scanner", attributes: .concurrent)
 
         for prefix in prefixes {
-            print("Scanning subnet: \(prefix).1-254")
+            MBLogger.network.debug("Scanning subnet: \(prefix).1-254")
             for i in 1 ... 254 {
                 let ip = "\(prefix).\(i)"
                 queue.async(group: group) {
@@ -850,7 +850,7 @@ public class MBNetworkManager: Observation.Observable {
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .ready:
-                print("Found Open Port at \(ip)!")
+                MBLogger.network.info("Found Open Port at \(ip)!")
                 Task { @MainActor [weak self] in
                     self?.addScannedPeer(ip: ip)
                 }
@@ -1066,22 +1066,22 @@ public class MBNetworkManager: Observation.Observable {
                 x: normalizedX, y: normalizedY, wheel: deltaY, flags: 0x20A)
         case .keyDown:
             if let key = MBInputManager.shared.windowsKeyCode(for: CGKeyCode(snapshot.keyCode)) {
-                print("DEBUG: Send keyDown: mac=\(snapshot.keyCode) -> win=\(key)")
+                MBLogger.input.debug("Send keyDown: mac=\(snapshot.keyCode) -> win=\(key)")
                 self.compatibilityService?.sendKeyEvent(keyCode: key, flags: 0)
             } else {
-                print("WARNING: Unknown mac keyDown: \(snapshot.keyCode)")
+                MBLogger.input.warning("Unknown mac keyDown: \(snapshot.keyCode)")
             }
         case .keyUp:
             if let key = MBInputManager.shared.windowsKeyCode(for: CGKeyCode(snapshot.keyCode)) {
-                print("DEBUG: Send keyUp: mac=\(snapshot.keyCode) -> win=\(key)")
+                MBLogger.input.debug("Send keyUp: mac=\(snapshot.keyCode) -> win=\(key)")
                 self.compatibilityService?.sendKeyEvent(keyCode: key, flags: 0x80)
             } else {
-                print("WARNING: Unknown mac keyUp: \(snapshot.keyCode)")
+                MBLogger.input.warning("Unknown mac keyUp: \(snapshot.keyCode)")
             }
         case .flagsChanged:
             let macKey = CGKeyCode(snapshot.keyCode)
             guard let key = MBInputManager.shared.windowsKeyCode(for: macKey) else {
-                print("WARNING: Unknown mac flagsChanged: \(snapshot.keyCode)")
+                MBLogger.input.warning("Unknown mac flagsChanged: \(snapshot.keyCode)")
                 break
             }
             let isDown: Bool =
@@ -1099,7 +1099,8 @@ public class MBNetworkManager: Observation.Observable {
                 default:
                     snapshot.flags.contains(.maskNonCoalesced)
                 }
-            print("DEBUG: Send flagsChanged: mac=\(snapshot.keyCode) -> win=\(key) isDown=\(isDown)")
+            MBLogger.input.debug(
+                "Send flagsChanged: mac=\(snapshot.keyCode) -> win=\(key) isDown=\(isDown)")
             self.compatibilityService?.sendKeyEvent(keyCode: key, flags: isDown ? 0 : 0x80)
         default:
             break
@@ -1118,11 +1119,11 @@ public class MBNetworkManager: Observation.Observable {
                 content: lengthData + data,
                 completion: .contentProcessed { error in
                     if let error {
-                        print("Send error: \(error)")
+                        MBLogger.network.error("Send error: \(error)")
                     }
                 })
         } catch {
-            print("Encoding error: \(error)")
+            MBLogger.network.error("Encoding error: \(error)")
         }
     }
 
@@ -1166,12 +1167,12 @@ public class MBNetworkManager: Observation.Observable {
             guard let self else { return }
 
             if let error {
-                print("Receive error: \(error)")
+                MBLogger.network.error("Receive error: \(error)")
                 return
             }
 
             if isComplete {
-                print("Connection closed by peer")
+                MBLogger.network.info("Connection closed by peer")
                 return
             }
 

@@ -1,6 +1,7 @@
 import CommonCrypto
 import CryptoKit
 import Foundation
+import OSLog
 
 // Polyfill for PBKDF2 if needed (Apple CryptoKit in Swift 6 might have it, but usually CommonCrypto is safer fallback for strict legacy compliance)
 // However, CryptoKit's RFC2898DeriveBytes equivalent is `KDF.PBKDF2` if available or we use CommonCrypto.
@@ -53,9 +54,9 @@ public class MWBCrypto: @unchecked Sendable {
         if result == kCCSuccess {
             self.sessionKey = derivedKeyData
             self.magicNumber = self.calculateMagicNumber(from: trimmedKey)
-            print("Keys derived successfully. Magic: \(self.magicNumber)")
+            MBLogger.security.info("Keys derived successfully. Magic: \(self.magicNumber)")
         } else {
-            print("Failed to derive key: \(result)")
+            MBLogger.security.error("Failed to derive key: \(result)")
         }
     }
 

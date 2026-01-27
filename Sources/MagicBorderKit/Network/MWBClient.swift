@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import Observation
+import OSLog
 import QuartzCore // For CACurrentMediaTime() or similar if needed
 
 @MainActor
@@ -47,7 +48,7 @@ public class MWBClient {
                 switch state {
                 case .ready:
                     self.status = "Connected. Starting Handshake..."
-                    print("TCP Ready. Starting Handshake Flow.")
+                    MBLogger.network.info("TCP Ready. Starting Handshake Flow.")
                     self.startHandshakeFlow()
                 case .failed(let error):
                     self.status = "Connection Failed: \(error)"
@@ -85,7 +86,7 @@ public class MWBClient {
         packet.machineName = self.machineName // Need to implement string setting
 
         // Send 10 times as per protocol spec
-        print("Sending 10 Handshake packets...")
+        MBLogger.network.debug("Sending 10 Handshake packets...")
         for _ in 0 ..< 10 {
             packet.finalizeForSend(magicNumber: self.crypto.magicNumber)
             self.send(packet: packet)
@@ -131,7 +132,7 @@ public class MWBClient {
     private func handleRawData(_ encryptedData: Data) {
         // Decrypt
         guard let decrypted = crypto.decryptZeroPadded(encryptedData) else {
-            print("Decryption failed for block of size \(encryptedData.count)")
+            MBLogger.security.error("Decryption failed for block of size \(encryptedData.count)")
             return
         }
 
@@ -144,17 +145,18 @@ public class MWBClient {
 
             // Check Magic
             if packet.magicHigh16 != (self.crypto.magicNumber >> 16) & 0xFFFF {
-                print(
+                MBLogger.security.warning(
                     "Invalid Magic Number received: \(packet.magicHigh16) vs expected \((self.crypto.magicNumber >> 16) & 0xFFFF)")
                 // return // Continue for now to see what happens
             }
 
-            print("Received Packet Type: \(packet.type)")
+            MBLogger.network.debug("Received Packet Type: \(String(describing: packet.type))")
 
             if packet.type == .handshakeAck {
                 self.status = "Handshake Authenticated! Connected."
                 self.isConnected = true
-                print("SUCCESS: Handshake ACK received from Machine ID \(packet.src).")
+                MBLogger.network.notice(
+                    "SUCCESS: Handshake ACK received from Machine ID \(packet.src).")
             }
         }
     }
@@ -162,7 +164,7 @@ public class MWBClient {
     private func send(packet: MWBPacket) {
         // Encrypt
         guard let encrypted = crypto.encryptZeroPadded(packet.data) else {
-            print("Encryption failed")
+            MBLogger.security.error("Encryption failed")
             return
         }
 
@@ -170,7 +172,7 @@ public class MWBClient {
             content: encrypted,
             completion: .contentProcessed { error in
                 if let error {
-                    print("Send error: \(error)")
+                    MBLogger.network.error("Send error: \(error)")
                 }
             })
     }
