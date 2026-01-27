@@ -1275,54 +1275,74 @@ public class MBNetworkManager: Observation.Observable {
 }
 
 private final class MouseCoalescer: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "com.magicborder.mouse.coalescing")
-    private var timer: DispatchSourceTimer?
-    private var pendingSnapshot: EventSnapshot?
+    private let queue = DispatchQueue(
+        label: "com.magicborder.mouse.coalescing", qos: .userInteractive)
     private weak var manager: MBNetworkManager?
+
+    // Coalescing State
+    private var pendingSnapshot: EventSnapshot?
+    private var isScheduled = false
+    private var lastSendTime: CFAbsoluteTime = 0
+    private let minInterval: TimeInterval = 0.008 // ~125 Hz
 
     init(manager: MBNetworkManager) {
         self.manager = manager
-        let timer = DispatchSource.makeTimerSource(queue: self.queue)
-        timer.schedule(deadline: .now(), repeating: .milliseconds(8))
-        timer.setEventHandler { [weak self] in
-            self?.flush()
-        }
-        timer.resume()
-        self.timer = timer
     }
 
     func update(snapshot: EventSnapshot) {
         self.queue.async {
             self.pendingSnapshot = snapshot
+            self.tryFlush()
         }
     }
 
     func forceFlush(snapshot: EventSnapshot) {
         self.queue.sync {
-            let pending = self.pendingSnapshot
+            // Clear pending to avoid double send
             self.pendingSnapshot = nil
+            // Update time to throttle subsequent implicit updates
+            self.lastSendTime = CFAbsoluteTimeGetCurrent()
+
             Task { @MainActor in
-                if let p = pending {
-                    self.manager?.sendCompatibilityInputInternal(snapshot: p)
-                }
                 self.manager?.sendCompatibilityInputInternal(snapshot: snapshot)
             }
         }
     }
 
-    private func flush() {
+    private func tryFlush() {
+        // If a flush is already pending in the queue, we just updated the snapshot
+        // and let the scheduled block handle it.
+        guard !self.isScheduled else { return }
+
+        let now = CFAbsoluteTimeGetCurrent()
+        let elapsed = now - self.lastSendTime
+
+        if elapsed >= self.minInterval {
+            // Ready to send immediately
+            self.performFlush()
+        } else {
+            // Must wait
+            let delay = self.minInterval - elapsed
+            self.isScheduled = true
+            self.queue.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self else { return }
+                self.isScheduled = false
+                self.performFlush()
+            }
+        }
+    }
+
+    private func performFlush() {
         guard let snapshot = self.pendingSnapshot else { return }
         self.pendingSnapshot = nil
+        self.lastSendTime = CFAbsoluteTimeGetCurrent()
+
         Task { @MainActor in
             self.manager?.sendCompatibilityInputInternal(snapshot: snapshot)
         }
     }
 
     func stop() {
-        self.timer?.cancel()
-    }
-
-    deinit {
-        timer?.cancel()
+        // No persistent timer to stop
     }
 }
