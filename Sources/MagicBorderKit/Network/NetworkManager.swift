@@ -131,6 +131,9 @@ public class MBNetworkManager: Observation.Observable {
     private var mwbIdToUuid: [Int32: UUID] = [:]
     private var uuidToMwbId: [UUID: Int32] = [:]
 
+    // Mouse Coalescing
+    private var mouseCoalescer: MouseCoalescer?
+
     init() {
         // Pull persisted compatibility key instead of overwriting it with a placeholder.
         self.securityKey = self.compatibilitySettings.securityKey
@@ -139,6 +142,8 @@ public class MBNetworkManager: Observation.Observable {
         self.startSubnetScanning()
         self.configureCompatibility()
         self.setupPasteboardMonitoring()
+        // Ensure coalescer is initialized
+        self.mouseCoalescer = MouseCoalescer(manager: self)
     }
 
     public func appendPairingLog(_ message: String) {
@@ -472,7 +477,8 @@ public class MBNetworkManager: Observation.Observable {
         // Quartz location.y (top-down) -> CocoaY (bottom-up)
         let cocoaY = mainScreen.frame.maxY - (location.y - mainScreen.frame.origin.y)
         let edgeLocation = CGPoint(x: location.x, y: cocoaY)
-        let screen = NSScreen.screens.first(where: { $0.frame.contains(edgeLocation) }) ?? mainScreen
+        let screen =
+            NSScreen.screens.first(where: { $0.frame.contains(edgeLocation) }) ?? mainScreen
         let bounds = screen.frame
 
         let nearLeft = edgeLocation.x <= bounds.minX + threshold
@@ -549,7 +555,8 @@ public class MBNetworkManager: Observation.Observable {
         // Quartz location.y (top-down) -> CocoaY (bottom-up)
         let cocoaY = mainScreen.frame.maxY - (location.y - mainScreen.frame.origin.y)
         let edgeLocation = CGPoint(x: location.x, y: cocoaY)
-        let screen = NSScreen.screens.first(where: { $0.frame.contains(edgeLocation) }) ?? mainScreen
+        let screen =
+            NSScreen.screens.first(where: { $0.frame.contains(edgeLocation) }) ?? mainScreen
         let bounds = screen.frame
 
         let nearLeft = edgeLocation.x <= bounds.minX + threshold
@@ -1010,6 +1017,15 @@ public class MBNetworkManager: Observation.Observable {
     }
 
     private func sendCompatibilityInput(snapshot: EventSnapshot) {
+        switch snapshot.type {
+        case .mouseMoved, .leftMouseDragged, .rightMouseDragged:
+            self.mouseCoalescer?.update(snapshot: snapshot)
+        default:
+            self.mouseCoalescer?.forceFlush(snapshot: snapshot)
+        }
+    }
+
+    fileprivate func sendCompatibilityInputInternal(snapshot: EventSnapshot) {
         guard let screen = NSScreen.main else { return }
         let bounds = screen.frame
         let location = snapshot.location
@@ -1240,5 +1256,58 @@ public class MBNetworkManager: Observation.Observable {
         } catch {
             MBLogger.network.error("Decoding error: \(error.localizedDescription)")
         }
+    }
+}
+
+private final class MouseCoalescer: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "com.magicborder.mouse.coalescing")
+    private var timer: DispatchSourceTimer?
+    private var pendingSnapshot: EventSnapshot?
+    private weak var manager: MBNetworkManager?
+
+    init(manager: MBNetworkManager) {
+        self.manager = manager
+        let timer = DispatchSource.makeTimerSource(queue: self.queue)
+        timer.schedule(deadline: .now(), repeating: .milliseconds(8))
+        timer.setEventHandler { [weak self] in
+            self?.flush()
+        }
+        timer.resume()
+        self.timer = timer
+    }
+
+    func update(snapshot: EventSnapshot) {
+        self.queue.async {
+            self.pendingSnapshot = snapshot
+        }
+    }
+
+    func forceFlush(snapshot: EventSnapshot) {
+        self.queue.sync {
+            let pending = self.pendingSnapshot
+            self.pendingSnapshot = nil
+            Task { @MainActor in
+                if let p = pending {
+                    self.manager?.sendCompatibilityInputInternal(snapshot: p)
+                }
+                self.manager?.sendCompatibilityInputInternal(snapshot: snapshot)
+            }
+        }
+    }
+
+    private func flush() {
+        guard let snapshot = self.pendingSnapshot else { return }
+        self.pendingSnapshot = nil
+        Task { @MainActor in
+            self.manager?.sendCompatibilityInputInternal(snapshot: snapshot)
+        }
+    }
+
+    func stop() {
+        self.timer?.cancel()
+    }
+
+    deinit {
+        timer?.cancel()
     }
 }
