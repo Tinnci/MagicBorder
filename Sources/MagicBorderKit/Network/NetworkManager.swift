@@ -116,7 +116,6 @@ public class MBNetworkManager: Observation.Observable {
     public var pairingDebugLog: [String] = []
     public var pairingError: String?
 
-    private var pasteboardMonitor: MBPasteboardMonitor?
     private var localMatrix: [String] = []
     private var lastEdgeSwitchTime: TimeInterval = 0
     private var edgeSwitchLockedUntil: TimeInterval = 0
@@ -215,23 +214,26 @@ public class MBNetworkManager: Observation.Observable {
             self.compatibilitySettings.matrixCircle = swap
         }
         service.onClipboardText = { text in
-            self.pasteboardMonitor?.ignoreNextChange()
+            MBInputManager.shared.ignoreNextClipboardChange()
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
+            self.showToast(message: "收到剪贴板文本", systemImage: "doc.on.clipboard")
         }
         service.onClipboardImage = { data in
-            self.pasteboardMonitor?.ignoreNextChange()
+            MBInputManager.shared.ignoreNextClipboardChange()
             if let image = NSImage(data: data) {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.writeObjects([image])
+                self.showToast(message: "收到剪贴板图片", systemImage: "photo")
             }
         }
         service.onClipboardFiles = { urls in
-            self.pasteboardMonitor?.ignoreNextChange()
+            MBInputManager.shared.ignoreNextClipboardChange()
             NSPasteboard.general.clearContents()
             NSPasteboard.general.writeObjects(urls as [NSURL])
             self.dragDropFileSummary = self.makeFileSummary(urls)
             self.dragDropProgress = 1.0
+            self.showToast(message: "收到剪贴板文件", systemImage: "tray.and.arrow.down")
             Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 1500000000)
                 self?.dragDropState = nil
@@ -290,26 +292,23 @@ public class MBNetworkManager: Observation.Observable {
     }
 
     private func setupPasteboardMonitoring() {
-        let monitor = MBPasteboardMonitor()
-        monitor.onChange = { [weak self] content in
-            guard let self else { return }
-            self.handleLocalPasteboard(content)
-        }
-        self.pasteboardMonitor = monitor
-        monitor.startPolling()
+        MBInputManager.shared.startClipboardSync()
     }
 
-    private func handleLocalPasteboard(_ content: MBPasteboardContent) {
+    public func handleLocalPasteboard(_ content: MBPasteboardContent) {
         guard self.compatibilitySettings.shareClipboard else { return }
 
         switch content {
         case .text(let text):
             self.sendClipboardText(text)
+            self.showToast(message: "已同步剪贴板文本", systemImage: "doc.on.clipboard")
         case .image(let data):
             self.sendClipboardImage(data)
+            self.showToast(message: "已同步剪贴板图片", systemImage: "photo")
         case .files(let urls):
             guard self.compatibilitySettings.transferFiles else { return }
             self.sendFileDrop(urls)
+            self.showToast(message: "已同步剪贴板文件", systemImage: "tray.and.arrow.up")
         }
     }
 
@@ -1184,17 +1183,19 @@ public class MBNetworkManager: Observation.Observable {
                 // Handle remote input
                 MBInputManager.shared.simulateRemoteEvent(event)
             case .clipboardData(let payload):
-                self.pasteboardMonitor?.ignoreNextChange()
+                MBInputManager.shared.ignoreNextClipboardChange()
                 switch payload.type {
                 case .text:
                     if let text = String(data: payload.content, encoding: .utf8) {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(text, forType: .string)
+                        self.showToast(message: "收到剪贴板文本", systemImage: "doc.on.clipboard")
                     }
                 case .image:
                     if let image = NSImage(data: payload.content) {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.writeObjects([image])
+                        self.showToast(message: "收到剪贴板图片", systemImage: "photo")
                     }
                 }
             default:

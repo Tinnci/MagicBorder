@@ -11,6 +11,7 @@ public class MBInputManager: Observation.Observable {
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var clipboardMonitor: MBPasteboardMonitor?
 
     public var isIntercepting: Bool = false
 
@@ -27,6 +28,29 @@ public class MBInputManager: Observation.Observable {
     public init() {
         self._isAppActive.withLock { $0 = NSRunningApplication.current.isActive }
         self.setupAppStateObservers()
+        self.startClipboardSync()
+    }
+
+    public func startClipboardSync() {
+        guard self.clipboardMonitor == nil else { return }
+        let monitor = MBPasteboardMonitor()
+        monitor.onChange = { content in
+            Task { @MainActor in
+                MBNetworkManager.shared.handleLocalPasteboard(content)
+            }
+        }
+        self.clipboardMonitor = monitor
+        monitor.startPolling()
+        MBLogger.input.info("Clipboard sync started.")
+    }
+
+    public func stopClipboardSync() {
+        self.clipboardMonitor = nil
+        MBLogger.input.info("Clipboard sync stopped.")
+    }
+
+    public func ignoreNextClipboardChange() {
+        self.clipboardMonitor?.ignoreNextChange()
     }
 
     public func toggleInterception(_ enable: Bool) {
