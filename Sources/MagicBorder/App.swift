@@ -87,29 +87,44 @@ struct MagicBorderApp: App {
         guard ProcessInfo.processInfo.environment["MB_I18N_DEBUG"] == "1" else { return }
         let mainBundle = Bundle.main
         MBLogger.ui.debug("[main] Preferred Localizations: \(mainBundle.preferredLocalizations)")
+        print("[main] Preferred Localizations: \(mainBundle.preferredLocalizations)")
         MBLogger.ui.debug("[main] Localizations in Bundle: \(mainBundle.localizations)")
+        print("[main] Localizations in Bundle: \(mainBundle.localizations)")
         MBLogger.ui.debug(
             "[main] Development Localization: \(mainBundle.developmentLocalization ?? "<nil>")")
+        print("[main] Development Localization: \(mainBundle.developmentLocalization ?? "<nil>")")
 
         let mainLocalizedStrings = mainBundle.paths(forResourcesOfType: "strings", inDirectory: nil)
             .filter { $0.contains("Localizable") }
         if mainLocalizedStrings.isEmpty {
             MBLogger.ui.warning("[main] No Localizable.strings found in bundle.")
+            print("[main] No Localizable.strings found in bundle.")
         } else {
             MBLogger.ui.debug("[main] Localizable.strings paths: \(mainLocalizedStrings)")
+            print("[main] Localizable.strings paths: \(mainLocalizedStrings)")
         }
         let moduleBundle = Bundle.module
         MBLogger.ui.debug("[module] Preferred Localizations: \(moduleBundle.preferredLocalizations)")
+        print("[module] Preferred Localizations: \(moduleBundle.preferredLocalizations)")
         MBLogger.ui.debug("[module] Localizations in Bundle: \(moduleBundle.localizations)")
+        print("[module] Localizations in Bundle: \(moduleBundle.localizations)")
         MBLogger.ui.debug(
             "[module] Development Localization: \(moduleBundle.developmentLocalization ?? "<nil>")")
+        print("[module] Development Localization: \(moduleBundle.developmentLocalization ?? "<nil>")")
 
         let moduleLocalizedStrings = moduleBundle.paths(forResourcesOfType: "strings", inDirectory: nil)
             .filter { $0.contains("Localizable") }
         if moduleLocalizedStrings.isEmpty {
             MBLogger.ui.warning("[module] No Localizable.strings found in bundle.")
+            print("[module] No Localizable.strings found in bundle.")
         } else {
             MBLogger.ui.debug("[module] Localizable.strings paths: \(moduleLocalizedStrings)")
+            print("[module] Localizable.strings paths: \(moduleLocalizedStrings)")
         }
+
+        let sampleKey = "Settings"
+        let sampleValue = MBLocalized(sampleKey)
+        MBLogger.ui.debug("[module] Sample \"\(sampleKey)\": \(sampleValue)")
+        print("[module] Sample \"\(sampleKey)\": \(sampleValue)")
     }
 }
