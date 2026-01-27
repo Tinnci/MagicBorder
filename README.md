@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="Sources/MagicBorder/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="128" height="128" alt="MagicBorder Icon">
+</p>
+
 # MagicBorder
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
