@@ -408,6 +408,66 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Built-in Retina Display" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "内置视网膜显示器" } }
       }
+    },
+    "Windows Pairing" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Windows Pairing" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Windows 配对" } }
+      }
+    },
+    "Pairing checklist" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pairing checklist" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "配对检查清单" } }
+      }
+    },
+    "1. Install Mouse Without Borders on Windows" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "1. Install Mouse Without Borders on Windows" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "1. 在 Windows 上安装 Mouse Without Borders" } }
+      }
+    },
+    "2. Use the same Security Key on both devices" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "2. Use the same Security Key on both devices" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "2. 两端使用相同的安全密钥" } }
+      }
+    },
+    "3. Allow ports 15100/15101 in Windows Firewall" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "3. Allow ports 15100/15101 in Windows Firewall" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "3. 允许 Windows 防火墙端口 15100/15101" } }
+      }
+    },
+    "4. Make sure both devices are on the same subnet" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "4. Make sure both devices are on the same subnet" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "4. 确保设备并在同一子网" } }
+      }
+    },
+    "Windows IP" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Windows IP" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Windows IP 地址" } }
+      }
+    },
+    "Debug log" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Debug log" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "调试日志" } }
+      }
+    },
+    "No logs yet" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No logs yet" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂无日志" } }
+      }
+    },
+    "Copy Log" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy Log" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制日志" } }
+      }
     }
   },
   "version" : "1.0"
