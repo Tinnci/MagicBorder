@@ -67,6 +67,7 @@ struct MagicBorderApp: App {
                 .environment(self.networkManager)
                 .environment(self.overlayPreferences)
         }
+        .windowResizability(.contentSize)
 
         MenuBarExtra("MagicBorder", systemImage: "rectangle.and.cursor.arrow") {
             MenuBarView()

@@ -2,28 +2,68 @@ import MagicBorderKit
 import SwiftUI
 
 struct SettingsView: View {
+    @State private var selection = "general"
+    @State private var tabHeights: [String: CGFloat] = [:]
+
+    private let fixedWidth: CGFloat = 560
+    private let verticalPadding: CGFloat = 24
+
     var body: some View {
-        TabView {
+        TabView(selection: self.$selection) {
             GeneralSettingsTab()
                 .tabItem {
                     Label("General", systemImage: "gear")
                 }
                 .tag("general")
+                .readTabHeight(tag: "general")
 
             NetworkSettingsTab()
                 .tabItem {
                     Label("Network", systemImage: "antenna.radiowaves.left.and.right")
                 }
                 .tag("network")
+                .readTabHeight(tag: "network")
 
             OverlaySettingsTab()
                 .tabItem {
                     Label("Overlay", systemImage: "macwindow.on.rectangle")
                 }
                 .tag("overlay")
+                .readTabHeight(tag: "overlay")
         }
-        .frame(width: 500)
-        .padding()
+        .tabViewStyle(.automatic)
+        .frame(
+            width: self.fixedWidth,
+            height: max((self.tabHeights[self.selection] ?? 0) + self.verticalPadding, 320))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .animation(.spring(response: 0.32, dampingFraction: 0.88), value: self.selection)
+        .onPreferenceChange(TabHeightKey.self) { heights in
+            self.tabHeights.merge(heights, uniquingKeysWith: { _, new in new })
+        }
+        .onChange(of: self.selection) { _, newValue in
+            if let height = self.tabHeights[newValue] {
+                self.tabHeights[newValue] = height
+            }
+        }
+    }
+}
+
+private struct TabHeightKey: PreferenceKey {
+    static var defaultValue: [String: CGFloat] = [:]
+
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+extension View {
+    fileprivate func readTabHeight(tag: String) -> some View {
+        self.background(
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(key: TabHeightKey.self, value: [tag: proxy.size.height])
+            })
     }
 }
 
