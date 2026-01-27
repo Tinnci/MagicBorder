@@ -28,7 +28,9 @@ struct MachineDetailView: View {
 
                         HStack(spacing: 6) {
                             StatusDot(active: self.machine.isOnline)
-                            Text(self.machine.isOnline ? "Online" : "Offline")
+                            Text(
+                                self.machine.isOnline
+                                    ? String(localized: "Online") : String(localized: "Offline"))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -43,7 +45,7 @@ struct MachineDetailView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     // Pinned Apps
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Pinned Apps")
+                        Text("Pinned Apps", comment: "Section header for pinned applications")
                             .font(.headline)
                             .padding(.horizontal)
 
@@ -63,7 +65,7 @@ struct MachineDetailView: View {
 
                     // Settings
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Settings")
+                        Text("Settings", comment: "Section header for machine settings")
                             .font(.headline)
                             .padding(.horizontal)
 
@@ -164,9 +166,10 @@ private struct MachineDisplaySettingsView: View {
     var body: some View {
         Form {
             Section("Display Info") {
-                LabeledContent("Name", value: "Built-in Retina Display")
+                LabeledContent("Name", value: String(localized: "Built-in Retina Display"))
                 LabeledContent(
-                    "Connection", value: self.machine.isOnline ? "Thunderbolt / IP" : "Offline")
+                    "Connection",
+                    value: self.machine.isOnline ? "Thunderbolt / IP" : String(localized: "Offline"))
             }
 
             Section("Settings") {

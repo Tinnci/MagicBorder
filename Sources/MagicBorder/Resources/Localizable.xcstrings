@@ -348,6 +348,66 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Bottom Right" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "右下角" } }
       }
+    },
+    "Connecting..." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting..." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接中..." } }
+      }
+    },
+    "Key Ready" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Key Ready" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "密钥就绪" } }
+      }
+    },
+    "At least 16 characters" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "At least 16 characters" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "至少16个字符" } }
+      }
+    },
+    "Connection lost" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection lost" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接已断开" } }
+      }
+    },
+    "Connected successfully" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected successfully" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接成功" } }
+      }
+    },
+    "Connection request sent" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection request sent" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已发送连接请求" } }
+      }
+    },
+    "Online" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Online" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在线" } }
+      }
+    },
+    "Offline" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Offline" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "离线" } }
+      }
+    },
+    "Pinned Apps" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pinned Apps" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "固定应用" } }
+      }
+    },
+    "Built-in Retina Display" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Built-in Retina Display" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "内置视网膜显示器" } }
+      }
     }
   },
   "version" : "1.0"

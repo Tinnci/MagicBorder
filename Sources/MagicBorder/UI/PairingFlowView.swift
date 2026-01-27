@@ -30,7 +30,7 @@ struct PairingFlowView: View {
                     .font(.headline)
                 Spacer()
                 if self.isConnecting {
-                    ConnectionStatusBadge(title: "连接中")
+                    ConnectionStatusBadge(title: String(localized: "Connecting..."))
                 }
                 Button(action: { self.showGuide = true }) {
                     Image(systemName: "questionmark.circle")
@@ -55,8 +55,10 @@ struct PairingFlowView: View {
             PairingCardView(securityKey: self.$securityKey)
 
             Label(
-                self.isKeyValid ? "Key Ready" : "At least 16 characters",
-                systemImage: self.isKeyValid ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                self.isKeyValid
+                    ? String(localized: "Key Ready") : String(localized: "At least 16 characters"),
+                systemImage: self.isKeyValid
+                    ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(self.isKeyValid ? .green : .orange)
 
@@ -74,7 +76,10 @@ struct PairingFlowView: View {
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 6) {
-                            ForEach(Array(self.networkManager.pairingDebugLog.suffix(12)).reversed(), id: \.self) { line in
+                            ForEach(
+                                Array(self.networkManager.pairingDebugLog.suffix(12)).reversed(),
+                                id: \.self)
+                            { line in
                                 Text(line)
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
@@ -89,7 +94,9 @@ struct PairingFlowView: View {
                         Button("Copy Log") {
                             let pasteboard = NSPasteboard.general
                             pasteboard.clearContents()
-                            pasteboard.setString(self.networkManager.pairingDebugLog.joined(separator: "\n"), forType: .string)
+                            pasteboard.setString(
+                                self.networkManager.pairingDebugLog.joined(separator: "\n"),
+                                forType: .string)
                         }
                         .buttonStyle(.bordered)
                         Spacer()
@@ -116,9 +123,9 @@ struct PairingFlowView: View {
         }
         .onChange(of: self.networkManager.connectedMachines) { _, newValue in
             if newValue.isEmpty {
-                self.showStatus(text: "连接已断开", style: .warning)
+                self.showStatus(text: String(localized: "Connection lost"), style: .warning)
             } else {
-                self.showStatus(text: "连接成功", style: .success)
+                self.showStatus(text: String(localized: "Connected successfully"), style: .success)
             }
         }
         .alert(
@@ -144,7 +151,7 @@ struct PairingFlowView: View {
         self.networkManager.appendPairingLog("User initiated connect")
         self.isConnecting = true
         self.networkManager.connectToHost(ip: self.ipAddress)
-        self.showStatus(text: "已发送连接请求", style: .neutral)
+        self.showStatus(text: String(localized: "Connection request sent"), style: .neutral)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             self.isConnecting = false
         }
