@@ -1066,15 +1066,26 @@ public class MBNetworkManager: Observation.Observable {
                 x: normalizedX, y: normalizedY, wheel: deltaY, flags: 0x20A)
         case .keyDown:
             if let key = MBInputManager.shared.windowsKeyCode(for: CGKeyCode(snapshot.keyCode)) {
+                MBLogger.input.debug(
+                    "Send keyDown: mac=\(snapshot.keyCode) win=\(key) flags=0")
                 self.compatibilityService?.sendKeyEvent(keyCode: key, flags: 0)
+            } else {
+                MBLogger.input.warning("Unknown mac keyDown: \(snapshot.keyCode)")
             }
         case .keyUp:
             if let key = MBInputManager.shared.windowsKeyCode(for: CGKeyCode(snapshot.keyCode)) {
+                MBLogger.input.debug(
+                    "Send keyUp: mac=\(snapshot.keyCode) win=\(key) flags=0x80")
                 self.compatibilityService?.sendKeyEvent(keyCode: key, flags: 0x80)
+            } else {
+                MBLogger.input.warning("Unknown mac keyUp: \(snapshot.keyCode)")
             }
         case .flagsChanged:
             let macKey = CGKeyCode(snapshot.keyCode)
-            guard let key = MBInputManager.shared.windowsKeyCode(for: macKey) else { break }
+            guard let key = MBInputManager.shared.windowsKeyCode(for: macKey) else {
+                MBLogger.input.warning("Unknown mac flagsChanged: \(snapshot.keyCode)")
+                break
+            }
             let isDown: Bool =
                 switch macKey {
                 case 56, 60:
@@ -1090,6 +1101,8 @@ public class MBNetworkManager: Observation.Observable {
                 default:
                     snapshot.flags.contains(.maskNonCoalesced)
                 }
+            MBLogger.input.debug(
+                "Send flagsChanged: mac=\(snapshot.keyCode) win=\(key) isDown=\(isDown)")
             self.compatibilityService?.sendKeyEvent(keyCode: key, flags: isDown ? 0 : 0x80)
         default:
             break
