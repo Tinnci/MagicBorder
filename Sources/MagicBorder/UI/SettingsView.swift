@@ -2,68 +2,57 @@ import MagicBorderKit
 import SwiftUI
 
 struct SettingsView: View {
-    @State private var selection = "general"
-    @State private var tabHeights: [String: CGFloat] = [:]
-
-    private let fixedWidth: CGFloat = 560
-    private let verticalPadding: CGFloat = 24
+    private let width: CGFloat = 500
 
     var body: some View {
-        TabView(selection: self.$selection) {
+        TabView {
             GeneralSettingsTab()
                 .tabItem {
                     Label("General", systemImage: "gear")
                 }
-                .tag("general")
-                .readTabHeight(tag: "general")
+                .frame(width: self.width)
+            // Remove explicit padding here as TabView content usually needs its own padding
+            // But generally, we want some padding inside the tab content.
 
             NetworkSettingsTab()
                 .tabItem {
                     Label("Network", systemImage: "antenna.radiowaves.left.and.right")
                 }
-                .tag("network")
-                .readTabHeight(tag: "network")
+                .frame(width: self.width)
 
             OverlaySettingsTab()
                 .tabItem {
                     Label("Overlay", systemImage: "macwindow.on.rectangle")
                 }
-                .tag("overlay")
-                .readTabHeight(tag: "overlay")
+                .frame(width: self.width)
         }
-        .tabViewStyle(.automatic)
-        .frame(
-            width: self.fixedWidth,
-            height: max((self.tabHeights[self.selection] ?? 0) + self.verticalPadding, 320))
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .animation(.spring(response: 0.32, dampingFraction: 0.88), value: self.selection)
-        .onPreferenceChange(TabHeightKey.self) { heights in
-            self.tabHeights.merge(heights, uniquingKeysWith: { _, new in new })
-        }
-        .onChange(of: self.selection) { _, newValue in
-            if let height = self.tabHeights[newValue] {
-                self.tabHeights[newValue] = height
+        .padding(20) // Global padding for visually pleasing layout
+    }
+}
+
+// MARK: - Components
+
+/// A container that mimics a Form Section but calculates its own height
+private struct SettingsSection<Content: View>: View {
+    let title: String
+    let content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(self.title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            VStack(alignment: .leading, spacing: 10) {
+                self.content
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-    }
-}
-
-private struct TabHeightKey: PreferenceKey {
-    static let defaultValue: [String: CGFloat] = [:]
-
-    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
-    }
-}
-
-extension View {
-    fileprivate func readTabHeight(tag: String) -> some View {
-        self.background(
-            GeometryReader { proxy in
-                Color.clear
-                    .preference(key: TabHeightKey.self, value: [tag: proxy.size.height])
-            })
     }
 }
 
@@ -85,40 +74,39 @@ private struct GeneralSettingsTab: View {
     var body: some View {
         @Bindable var networkManager = networkManager
 
-        Form {
-            Section("Clipboard & Files") {
+        VStack(alignment: .leading, spacing: 24) {
+            SettingsSection("Clipboard & Files") {
                 Toggle(
                     "Share Clipboard", isOn: $networkManager.compatibilitySettings.shareClipboard)
                 Toggle("Transfer Files", isOn: $networkManager.compatibilitySettings.transferFiles)
             }
 
-            Section("Cursor Control") {
+            Divider()
+
+            SettingsSection("Cursor Control") {
                 Toggle("Capture Local Input", isOn: self.$captureInput)
                     .disabled(!self.accessibilityService.isTrusted)
 
                 if !self.accessibilityService.isTrusted {
-                    GroupBox {
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                                .font(.title3)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Permission Required")
-                                    .font(.headline)
-                                Text(
-                                    "MagicBorder needs accessibility access to share mouse and keyboard input.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Button("Open System Settings") {
-                                    self.accessibilityService.openSystemSettings()
-                                }
-                                .controlSize(.small)
-                                .padding(.top, 4)
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .font(.title3)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Permission Required")
+                                .font(.headline)
+                            Text(
+                                "MagicBorder needs accessibility access to share mouse and keyboard input.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Button("Open System Settings") {
+                                self.accessibilityService.openSystemSettings()
                             }
+                            .controlSize(.small)
                         }
-                        .padding(4)
                     }
-                    .padding(.vertical, 4)
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.1)))
                 }
 
                 Toggle(
@@ -130,30 +118,37 @@ private struct GeneralSettingsTab: View {
                 Toggle(
                     "Center Cursor on Manual Switch",
                     isOn: $networkManager.compatibilitySettings.centerCursorOnManualSwitch)
-                LabeledContent("Edge Switch Lock") {
-                    HStack {
-                        Slider(
-                            value: $networkManager.compatibilitySettings.edgeSwitchLockSeconds,
-                            in: 0.1 ... 1.0,
-                            step: 0.05)
-                        Text(
-                            "\(networkManager.compatibilitySettings.edgeSwitchLockSeconds, specifier: "%.2fs")")
-                            .monospacedDigit()
-                            .frame(width: 64, alignment: .trailing)
+
+                Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 8) {
+                    GridRow {
+                        Text("Edge Switch Lock")
+                        HStack {
+                            Slider(
+                                value: $networkManager.compatibilitySettings.edgeSwitchLockSeconds,
+                                in: 0.1 ... 1.0)
+                                .frame(width: 120)
+                            Text(
+                                "\(networkManager.compatibilitySettings.edgeSwitchLockSeconds, specifier: "%.2fs")")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    GridRow {
+                        Text("Edge Safe Margin")
+                        HStack {
+                            Slider(
+                                value: $networkManager.compatibilitySettings.edgeSwitchSafeMargin,
+                                in: 4 ... 40, step: 2)
+                                .frame(width: 120)
+                            Text(
+                                "\(Int(networkManager.compatibilitySettings.edgeSwitchSafeMargin))px")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
-                LabeledContent("Edge Safe Margin") {
-                    HStack {
-                        Slider(
-                            value: $networkManager.compatibilitySettings.edgeSwitchSafeMargin,
-                            in: 4 ... 40,
-                            step: 2)
-                        Text(
-                            "\(Int(networkManager.compatibilitySettings.edgeSwitchSafeMargin))px")
-                            .monospacedDigit()
-                            .frame(width: 64, alignment: .trailing)
-                    }
-                }
+                .padding(.leading, 24) // Indent controls slightly
+
                 Toggle("Wrap Mouse at Screen Edge", isOn: self.$wrapMouse)
                 Toggle("Hide Mouse at Edge", isOn: self.$hideMouse)
                 Toggle(
@@ -161,28 +156,30 @@ private struct GeneralSettingsTab: View {
                     isOn: $networkManager.compatibilitySettings.moveMouseRelatively)
             }
 
-            Section {
+            Divider()
+
+            SettingsSection("Matrix Configuration") {
                 Picker("Layout Mode", selection: self.matrixModeBinding) {
-                    Label("Single Row", systemImage: "rectangle.grid.1x2").tag(0)
-                    Label("Grid (2 Rows)", systemImage: "square.grid.2x2").tag(1)
+                    Text("Single Row").tag(0)
+                    Text("Grid (2 Rows)").tag(1)
                 }
-                .pickerStyle(.inline)
-                .labelsHidden()
+                .pickerStyle(.segmented)
+                .labelsHidden() // Segmented picker shows labels inside
+                .frame(width: 200)
 
                 Toggle(
                     "Cycle Through Screens",
                     isOn: $networkManager.compatibilitySettings.matrixCircle)
-            } header: {
-                Text("Matrix Configuration")
-            } footer: {
-                if networkManager.compatibilitySettings.matrixOneRow {
-                    Text("Machines are arranged in a single horizontal line.")
-                } else {
-                    Text("Machines are arranged in a 2-row grid layout.")
-                }
+
+                Text(
+                    networkManager.compatibilitySettings.matrixOneRow
+                        ? "Machines are arranged in a single horizontal line."
+                        : "Machines are arranged in a 2-row grid layout.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
+        // .padding() // Padding is handled by parent TabView modifier
     }
 }
 
@@ -192,46 +189,53 @@ private struct NetworkSettingsTab: View {
     var body: some View {
         @Bindable var networkManager = networkManager
 
-        Form {
-            Section("Security") {
-                VStack(alignment: .leading) {
-                    SecureField(
-                        "Security Key", text: $networkManager.compatibilitySettings.securityKey)
-                        .textContentType(.password)
-                        .frame(maxWidth: 300)
+        VStack(alignment: .leading, spacing: 24) {
+            SettingsSection("Security") {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading) {
+                        SecureField(
+                            "Security Key", text: $networkManager.compatibilitySettings.securityKey)
+                            .textContentType(.password)
+                            .frame(width: 240)
 
-                    if let message = networkManager.compatibilitySettings.validationMessage {
-                        Text(message)
-                            .font(.caption)
-                            .foregroundStyle(message.contains("Success") ? .green : .red)
+                        if let message = networkManager.compatibilitySettings.validationMessage {
+                            Text(message)
+                                .font(.caption)
+                                .foregroundStyle(message.contains("Success") ? .green : .red)
+                        }
                     }
-                }
 
-                Button("Validate Key") {
-                    _ = networkManager.compatibilitySettings.validateSecurityKey()
+                    Button("Validate") {
+                        _ = networkManager.compatibilitySettings.validateSecurityKey()
+                    }
                 }
             }
 
-            Section("Ports") {
-                HStack {
-                    TextField(
-                        "Message Port", value: $networkManager.compatibilitySettings.messagePort,
-                        formatter: NumberFormatter())
-                        .monospacedDigit()
-                    Text("Default: 20000").font(.caption).foregroundStyle(.secondary)
-                }
+            Divider()
 
-                HStack {
-                    TextField(
-                        "Clipboard Port",
-                        value: $networkManager.compatibilitySettings.clipboardPort,
-                        formatter: NumberFormatter())
-                        .monospacedDigit()
-                    Text("Default: 20001").font(.caption).foregroundStyle(.secondary)
+            SettingsSection("Ports") {
+                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 12) {
+                    GridRow {
+                        Text("Message Port")
+                        TextField(
+                            "20000", value: $networkManager.compatibilitySettings.messagePort,
+                            formatter: NumberFormatter())
+                            .monospacedDigit()
+                            .frame(width: 80)
+                        Text("Default: 20000").font(.caption).foregroundStyle(.secondary)
+                    }
+                    GridRow {
+                        Text("Clipboard Port")
+                        TextField(
+                            "20001", value: $networkManager.compatibilitySettings.clipboardPort,
+                            formatter: NumberFormatter())
+                            .monospacedDigit()
+                            .frame(width: 80)
+                        Text("Default: 20001").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -248,62 +252,81 @@ private struct OverlaySettingsTab: View {
     @State private var selectedDevice: String = ""
 
     var body: some View {
-        Form {
-            Section("Global Defaults") {
+        VStack(alignment: .leading, spacing: 24) {
+            SettingsSection("Global Defaults") {
                 Toggle("Show Overlay", isOn: self.$dragDropOverlayEnabled)
 
-                Group {
+                VStack(alignment: .leading, spacing: 10) {
                     Toggle("Show Device Name", isOn: self.$dragDropOverlayShowDevice)
                     Toggle("Show Progress", isOn: self.$dragDropOverlayShowProgress)
 
-                    LabeledContent("Size") {
-                        HStack {
-                            Slider(value: self.$dragDropOverlayScale, in: 0.85 ... 1.3, step: 0.05)
-                            Text("\(Int(self.dragDropOverlayScale * 100))%")
-                                .monospacedDigit()
-                                .frame(width: 40, alignment: .trailing)
+                    Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
+                        GridRow {
+                            Text("Size")
+                            HStack {
+                                Slider(
+                                    value: self.$dragDropOverlayScale, in: 0.85 ... 1.3, step: 0.05)
+                                    .frame(width: 120)
+                                Text("\(Int(self.dragDropOverlayScale * 100))%")
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                    }
 
-                    Picker("Position", selection: self.$dragDropOverlayPosition) {
-                        Text("Top").tag("top")
-                        Text("Bottom").tag("bottom")
-                        Text("Top Left").tag("topLeading")
-                        Text("Top Right").tag("topTrailing")
-                        Text("Bottom Left").tag("bottomLeading")
-                        Text("Bottom Right").tag("bottomTrailing")
+                        GridRow {
+                            Text("Position")
+                            Picker("", selection: self.$dragDropOverlayPosition) {
+                                Text("Top").tag("top")
+                                Text("Bottom").tag("bottom")
+                                Text("Top Left").tag("topLeading")
+                                Text("Top Right").tag("topTrailing")
+                                Text("Bottom Left").tag("bottomLeading")
+                                Text("Bottom Right").tag("bottomTrailing")
+                            }
+                            .frame(width: 140)
+                        }
                     }
                 }
                 .disabled(!self.dragDropOverlayEnabled)
+                .padding(.leading, 20)
             }
 
-            Section("Per-Device Override") {
-                Picker("Target Device", selection: self.$selectedDevice) {
-                    ForEach(self.deviceOptions, id: \.self) { device in
-                        Text(device).tag(device)
+            Divider()
+
+            SettingsSection("Per-Device Override") {
+                HStack {
+                    Text("Target Device")
+                    Picker("", selection: self.$selectedDevice) {
+                        ForEach(self.deviceOptions, id: \.self) { device in
+                            Text(device).tag(device)
+                        }
                     }
+                    .frame(width: 200)
                 }
 
                 if !self.selectedDevice.isEmpty {
                     Toggle("Override Global Settings", isOn: self.useOverrideBinding)
+                        .padding(.top, 4)
 
                     if self.overlayPreferences.hasOverride(for: self.selectedDevice) {
-                        Toggle("Show Device Name", isOn: self.showDeviceBinding)
-                        Toggle("Show Progress", isOn: self.showProgressBinding)
+                        VStack(alignment: .leading, spacing: 10) {
+                            Toggle("Show Device Name", isOn: self.showDeviceBinding)
+                            Toggle("Show Progress", isOn: self.showProgressBinding)
 
-                        LabeledContent("Size") {
                             HStack {
+                                Text("Size")
                                 Slider(value: self.scaleBinding, in: 0.85 ... 1.3, step: 0.05)
+                                    .frame(width: 120)
                                 Text("\(Int(self.scaleBinding.wrappedValue * 100))%")
                                     .monospacedDigit()
-                                    .frame(width: 40, alignment: .trailing)
+                                    .foregroundStyle(.secondary)
                             }
                         }
+                        .padding(.leading, 20)
                     }
                 }
             }
         }
-        .formStyle(.grouped)
         .onAppear {
             if self.selectedDevice.isEmpty {
                 self.selectedDevice = self.networkManager.localDisplayName
