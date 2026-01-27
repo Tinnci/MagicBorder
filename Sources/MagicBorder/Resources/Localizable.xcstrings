@@ -216,6 +216,138 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Select an item from the sidebar" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "从侧边栏选择一项" } }
       }
+    },
+    "Release to drop" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Release to drop" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "松开以投递" } }
+      }
+    },
+    "Dragging files" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Dragging files" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在拖拽文件" } }
+      }
+    },
+    "Drag files here to send" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag files here to send" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "拖拽文件到此处发送" } }
+      }
+    },
+    "Supports files and folders" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Supports files and folders" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "支持文件与文件夹" } }
+      }
+    },
+    "Sent %@" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sent %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已发送 %@" } }
+      }
+    },
+    "No devices connected" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No devices connected" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未连接任何设备" } }
+      }
+    },
+    "Switch" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Switch" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "切换" } }
+      }
+    },
+    "Active Machine" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Active Machine" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前设备" } }
+      }
+    },
+    "State" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "State" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "状态" } }
+      }
+    },
+    "Layout Options" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Layout Options" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "布局选项" } }
+      }
+    },
+    "Pairing" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pairing" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "配对" } }
+      }
+    },
+    "Connected Devices" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected Devices" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已连接设备" } }
+      }
+    },
+    "Swap Order" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Swap Order" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "交换顺序" } }
+      }
+    },
+    "Single Row" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Single Row" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "单行" } }
+      }
+    },
+    "Grid (2 Rows)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Grid (2 Rows)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "网格 (双行)" } }
+      }
+    },
+    "Edge Safe Margin" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Edge Safe Margin" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "边缘安全边距" } }
+      }
+    },
+    "Top" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Top" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "顶部" } }
+      }
+    },
+    "Bottom" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Bottom" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "底部" } }
+      }
+    },
+    "Top Left" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Top Left" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "左上角" } }
+      }
+    },
+    "Top Right" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Top Right" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "右上角" } }
+      }
+    },
+    "Bottom Left" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Bottom Left" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "左下角" } }
+      }
+    },
+    "Bottom Right" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Bottom Right" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "右下角" } }
+      }
     }
   },
   "version" : "1.0"

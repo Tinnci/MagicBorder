@@ -74,7 +74,8 @@ public final class MWBCompatibilityService: ObservableObject {
         self.crypto.deriveKey(from: securityKey)
         self.startMessageListener()
         self.startClipboardListener()
-        self.onLog?("MWB service started. messagePort=\(self.messagePort) clipboardPort=\(self.clipboardPort)")
+        self.onLog?(
+            "MWB service started. messagePort=\(self.messagePort) clipboardPort=\(self.clipboardPort)")
     }
 
     public func stop() {
@@ -823,7 +824,8 @@ private final class MWBSession {
         packet.src = self.localId
         packet.des = 0
         packet.machineName = self.localName
-        self.handshakeChallenge = (packet.machine1, packet.machine2, packet.machine3, packet.machine4)
+        self.handshakeChallenge = (
+            packet.machine1, packet.machine2, packet.machine3, packet.machine4)
         self.handshakeAckFailures = 0
 
         self.onLog?("→ Sending handshake burst (10 packets)")
@@ -1005,7 +1007,7 @@ private final class MWBSession {
                 // For diagnosis, let's log it once or periodically.
                 if packet.magicHigh16 != 0 { // Don't log all zeros
                     self.onLog?(
-                        "Packet Reject: Magic \(String(format: "%04X", packet.magicHigh16)) != \(String(format: "%04X", expected))")
+                        "Packet Reject: Magic \(String(packet.magicHigh16, radix: 16, uppercase: true)) != \(String(expected, radix: 16, uppercase: true))")
                 }
                 continue
             }
@@ -1020,7 +1022,8 @@ private final class MWBSession {
                 .captureScreenCommand,
             ].contains(packet.type)
             let suppressHandshakeLog =
-                self.isHandshakeVerified && (packet.type == .handshake || packet.type == .handshakeAck)
+                self.isHandshakeVerified
+                    && (packet.type == .handshake || packet.type == .handshakeAck)
             if shouldLog, !suppressHandshakeLog {
                 self.onLog?("RX Packet: type=\(packet.type) src=\(packet.src) des=\(packet.des)")
             }

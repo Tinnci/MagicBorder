@@ -1,0 +1,24 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "CFBundleDisplayName" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "MagicBorder" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "MagicBorder" } }
+      }
+    },
+    "CFBundleName" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "MagicBorder" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "MagicBorder" } }
+      }
+    },
+    "NSLocalNetworkUsageDescription" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "MagicBorder uses the local network to connect and control other devices seamlessly." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "MagicBorder 使用本地网络无缝连接和控制其他设备。" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

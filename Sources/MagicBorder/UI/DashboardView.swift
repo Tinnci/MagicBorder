@@ -202,7 +202,7 @@ private struct DragDropOverlayView: View {
                 Image(systemName: self.state == .dropping ? "tray.and.arrow.down" : "hand.draw")
                     .font(.title3)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(self.state == .dropping ? "松开以投递" : "正在拖拽文件")
+                    Text(self.state == .dropping ? "Release to drop" : "Dragging files")
                         .font(.headline)
                     if self.showDevice, let sourceName, !sourceName.isEmpty {
                         Text(sourceName)
@@ -241,9 +241,9 @@ private struct FileDropZoneView: View {
             Image(systemName: "tray.and.arrow.up")
                 .font(.system(size: 36, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
-            Text("拖拽文件到此处发送")
+            Text("Drag files here to send")
                 .font(.headline)
-            Text("支持文件与文件夹")
+            Text("Supports files and folders")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -381,7 +381,7 @@ struct ArrangementDetailView: View {
             guard !urls.isEmpty else { return }
             self.networkManager.sendFileDrop(urls)
             self.networkManager.showToast(
-                message: "已发送\(self.fileSummary(urls))",
+                message: String(localized: "Sent \(self.fileSummary(urls))"),
                 systemImage: "tray.and.arrow.up")
         }
         return true

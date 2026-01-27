@@ -134,7 +134,7 @@ private struct GeneralSettingsTab: View {
                         }
                     }
                     GridRow {
-                        Text("Edge Safe Margin")
+                        Text("Edge Safe Margin", comment: "Label for edge margin slider settings")
                         HStack {
                             Slider(
                                 value: $networkManager.compatibilitySettings.edgeSwitchSafeMargin,
@@ -160,12 +160,12 @@ private struct GeneralSettingsTab: View {
 
             SettingsSection("Matrix Configuration") {
                 Picker("Layout Mode", selection: self.matrixModeBinding) {
-                    Text("Single Row").tag(0)
-                    Text("Grid (2 Rows)").tag(1)
+                    Text("Single Row", comment: "Layout mode where machines are in one line").tag(0)
+                    Text("Grid (2 Rows)", comment: "Layout mode with two rows").tag(1)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden() // Segmented picker shows labels inside
-                .frame(width: 200)
+                .frame(width: 250)
 
                 Toggle(
                     "Cycle Through Screens",
@@ -276,12 +276,14 @@ private struct OverlaySettingsTab: View {
                         GridRow {
                             Text("Position")
                             Picker("", selection: self.$dragDropOverlayPosition) {
-                                Text("Top").tag("top")
-                                Text("Bottom").tag("bottom")
-                                Text("Top Left").tag("topLeading")
-                                Text("Top Right").tag("topTrailing")
-                                Text("Bottom Left").tag("bottomLeading")
-                                Text("Bottom Right").tag("bottomTrailing")
+                                Text("Top", comment: "Overlay position").tag("top")
+                                Text("Bottom", comment: "Overlay position").tag("bottom")
+                                Text("Top Left", comment: "Overlay position").tag("topLeading")
+                                Text("Top Right", comment: "Overlay position").tag("topTrailing")
+                                Text("Bottom Left", comment: "Overlay position").tag(
+                                    "bottomLeading")
+                                Text("Bottom Right", comment: "Overlay position").tag(
+                                    "bottomTrailing")
                             }
                             .frame(width: 140)
                         }
