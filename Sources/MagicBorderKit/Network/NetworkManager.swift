@@ -1066,24 +1066,22 @@ public class MBNetworkManager: Observation.Observable {
                 x: normalizedX, y: normalizedY, wheel: deltaY, flags: 0x20A)
         case .keyDown:
             if let key = MBInputManager.shared.windowsKeyCode(for: CGKeyCode(snapshot.keyCode)) {
-                MBLogger.input.debug(
-                    "Send keyDown: mac=\(snapshot.keyCode) win=\(key) flags=0")
+                print("DEBUG: Send keyDown: mac=\(snapshot.keyCode) -> win=\(key)")
                 self.compatibilityService?.sendKeyEvent(keyCode: key, flags: 0)
             } else {
-                MBLogger.input.warning("Unknown mac keyDown: \(snapshot.keyCode)")
+                print("WARNING: Unknown mac keyDown: \(snapshot.keyCode)")
             }
         case .keyUp:
             if let key = MBInputManager.shared.windowsKeyCode(for: CGKeyCode(snapshot.keyCode)) {
-                MBLogger.input.debug(
-                    "Send keyUp: mac=\(snapshot.keyCode) win=\(key) flags=0x80")
+                print("DEBUG: Send keyUp: mac=\(snapshot.keyCode) -> win=\(key)")
                 self.compatibilityService?.sendKeyEvent(keyCode: key, flags: 0x80)
             } else {
-                MBLogger.input.warning("Unknown mac keyUp: \(snapshot.keyCode)")
+                print("WARNING: Unknown mac keyUp: \(snapshot.keyCode)")
             }
         case .flagsChanged:
             let macKey = CGKeyCode(snapshot.keyCode)
             guard let key = MBInputManager.shared.windowsKeyCode(for: macKey) else {
-                MBLogger.input.warning("Unknown mac flagsChanged: \(snapshot.keyCode)")
+                print("WARNING: Unknown mac flagsChanged: \(snapshot.keyCode)")
                 break
             }
             let isDown: Bool =
@@ -1101,8 +1099,7 @@ public class MBNetworkManager: Observation.Observable {
                 default:
                     snapshot.flags.contains(.maskNonCoalesced)
                 }
-            MBLogger.input.debug(
-                "Send flagsChanged: mac=\(snapshot.keyCode) win=\(key) isDown=\(isDown)")
+            print("DEBUG: Send flagsChanged: mac=\(snapshot.keyCode) -> win=\(key) isDown=\(isDown)")
             self.compatibilityService?.sendKeyEvent(keyCode: key, flags: isDown ? 0 : 0x80)
         default:
             break
@@ -1246,21 +1243,25 @@ public class MBNetworkManager: Observation.Observable {
                 }
             case .inputEvent(let event):
                 // Handle remote input
-                MBInputManager.shared.simulateRemoteEvent(event)
+                Task { @MainActor in
+                    MBInputManager.shared.simulateRemoteEvent(event)
+                }
             case .clipboardData(let payload):
-                MBInputManager.shared.ignoreNextClipboardChange()
-                switch payload.type {
-                case .text:
-                    if let text = String(data: payload.content, encoding: .utf8) {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(text, forType: .string)
-                        self.showToast(message: "收到剪贴板文本", systemImage: "doc.on.clipboard")
-                    }
-                case .image:
-                    if let image = NSImage(data: payload.content) {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.writeObjects([image])
-                        self.showToast(message: "收到剪贴板图片", systemImage: "photo")
+                Task { @MainActor in
+                    MBInputManager.shared.ignoreNextClipboardChange()
+                    switch payload.type {
+                    case .text:
+                        if let text = String(data: payload.content, encoding: .utf8) {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(text, forType: .string)
+                            self.showToast(message: "收到剪贴板文本", systemImage: "doc.on.clipboard")
+                        }
+                    case .image:
+                        if let image = NSImage(data: payload.content) {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.writeObjects([image])
+                            self.showToast(message: "收到剪贴板图片", systemImage: "photo")
+                        }
                     }
                 }
             default:
