@@ -22,7 +22,7 @@ struct SettingsView: View {
                 }
                 .tag("overlay")
         }
-        .frame(minWidth: 500, idealWidth: 550, maxHeight: .infinity)
+        .frame(width: 500)
         .padding()
     }
 }
