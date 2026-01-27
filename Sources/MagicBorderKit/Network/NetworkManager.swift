@@ -453,18 +453,32 @@ public class MBNetworkManager: Observation.Observable {
     }
 
     public func handleLocalMouseEvent(snapshot: EventSnapshot) {
-        guard self.compatibilitySettings.switchByMouse else { return }
-        guard self.activeMachineId == nil else { return }
-        guard let screen = NSScreen.main else { return }
+        guard self.compatibilitySettings.switchByMouse else {
+            MBLogger.network.debug("Edge check skipped: switchByMouse=false")
+            return
+        }
+        guard self.activeMachineId == nil else {
+            MBLogger.network.debug("Edge check skipped: activeMachineId != nil")
+            return
+        }
+        guard let mainScreen = NSScreen.main ?? NSScreen.screens.first else {
+            MBLogger.network.debug("Edge check skipped: no screen")
+            return
+        }
 
         let location = snapshot.location
-        let bounds = screen.frame
-        let threshold: CGFloat = 2
+        let threshold: CGFloat = 3
 
-        let nearLeft = location.x <= bounds.minX + threshold
-        let nearRight = location.x >= bounds.maxX - threshold
-        let nearBottom = location.y <= bounds.minY + threshold
-        let nearTop = location.y >= bounds.maxY - threshold
+        // Quartz location.y (top-down) -> CocoaY (bottom-up)
+        let cocoaY = mainScreen.frame.maxY - (location.y - mainScreen.frame.origin.y)
+        let edgeLocation = CGPoint(x: location.x, y: cocoaY)
+        let screen = NSScreen.screens.first(where: { $0.frame.contains(edgeLocation) }) ?? mainScreen
+        let bounds = screen.frame
+
+        let nearLeft = edgeLocation.x <= bounds.minX + threshold
+        let nearRight = edgeLocation.x >= bounds.maxX - threshold
+        let nearTop = edgeLocation.y >= bounds.maxY - threshold
+        let nearBottom = edgeLocation.y <= bounds.minY + threshold
 
         if self.compatibilitySettings.blockCorners {
             let nearCorner = (nearLeft || nearRight) && (nearBottom || nearTop)
@@ -486,42 +500,62 @@ public class MBNetworkManager: Observation.Observable {
 
         if self.edgeSwitchPendingRelease {
             if self.isAwayFromEdges(
-                location: location,
+                location: edgeLocation,
                 bounds: bounds,
                 margin: CGFloat(self.compatibilitySettings.edgeSwitchSafeMargin))
             {
                 self.edgeSwitchPendingRelease = false
             } else {
+                MBLogger.network.debug("Edge check skipped: pending release")
                 return
             }
         }
 
         let now = CFAbsoluteTimeGetCurrent()
-        if now < self.edgeSwitchLockedUntil { return }
+        if now < self.edgeSwitchLockedUntil {
+            MBLogger.network.debug("Edge check skipped: locked")
+            return
+        }
 
         guard let dir = direction, let target = nextMachineName(for: dir, from: self.localName)
-        else { return }
+        else {
+            if direction == nil {
+                MBLogger.network.debug("Edge check: not near edge")
+            } else {
+                MBLogger.network.debug("Edge check: no target for direction")
+            }
+            return
+        }
 
-        if now - self.lastEdgeSwitchTime < 0.1 { return }
+        if now - self.lastEdgeSwitchTime < 0.1 {
+            MBLogger.network.debug("Edge check skipped: throttled")
+            return
+        }
         self.lastEdgeSwitchTime = now
         self.setEdgeSwitchGuard()
 
+        MBLogger.network.info("Edge switch triggered: \(String(describing: dir)) towards \(target)")
         self.requestSwitch(toMachineNamed: target, reason: .edge)
     }
 
     public func handleRemoteMouseEvent(snapshot: EventSnapshot) {
         guard self.compatibilitySettings.switchByMouse else { return }
         guard self.activeMachineId != nil else { return }
-        guard let screen = NSScreen.main else { return }
+        guard let mainScreen = NSScreen.main ?? NSScreen.screens.first else { return }
 
         let location = snapshot.location
-        let bounds = screen.frame
-        let threshold: CGFloat = 2
+        let threshold: CGFloat = 3
 
-        let nearLeft = location.x <= bounds.minX + threshold
-        let nearRight = location.x >= bounds.maxX - threshold
-        let nearBottom = location.y <= bounds.minY + threshold
-        let nearTop = location.y >= bounds.maxY - threshold
+        // Quartz location.y (top-down) -> CocoaY (bottom-up)
+        let cocoaY = mainScreen.frame.maxY - (location.y - mainScreen.frame.origin.y)
+        let edgeLocation = CGPoint(x: location.x, y: cocoaY)
+        let screen = NSScreen.screens.first(where: { $0.frame.contains(edgeLocation) }) ?? mainScreen
+        let bounds = screen.frame
+
+        let nearLeft = edgeLocation.x <= bounds.minX + threshold
+        let nearRight = edgeLocation.x >= bounds.maxX - threshold
+        let nearTop = edgeLocation.y >= bounds.maxY - threshold
+        let nearBottom = edgeLocation.y <= bounds.minY + threshold
 
         if self.compatibilitySettings.blockCorners {
             let nearCorner = (nearLeft || nearRight) && (nearBottom || nearTop)
@@ -543,7 +577,7 @@ public class MBNetworkManager: Observation.Observable {
 
         if self.edgeSwitchPendingRelease {
             if self.isAwayFromEdges(
-                location: location,
+                location: edgeLocation,
                 bounds: bounds,
                 margin: CGFloat(self.compatibilitySettings.edgeSwitchSafeMargin))
             {
@@ -562,6 +596,8 @@ public class MBNetworkManager: Observation.Observable {
         if let dir = direction,
            let target = nextMachineName(for: dir, from: self.activeMachineName)
         {
+            MBLogger.network.info(
+                "Remote edge switch triggered: \(String(describing: dir)) towards \(target)")
             self.requestSwitch(toMachineNamed: target, reason: .edge)
             return
         }
