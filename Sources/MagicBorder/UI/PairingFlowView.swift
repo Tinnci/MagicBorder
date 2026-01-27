@@ -26,26 +26,26 @@ struct PairingFlowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("Windows Pairing", systemImage: "windowslogo")
+                Label(MBLocalized("Windows Pairing"), systemImage: "windowslogo")
                     .font(.headline)
                 Spacer()
                 if self.isConnecting {
-                    ConnectionStatusBadge(title: String(localized: "Connecting..."))
+                    ConnectionStatusBadge(title: MBLocalized("Connecting..."))
                 }
                 Button(action: { self.showGuide = true }) {
                     Image(systemName: "questionmark.circle")
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("Pairing Guide")
+                .help(MBLocalized("Pairing Guide"))
             }
 
-            DisclosureGroup("Pairing checklist", isExpanded: self.$showChecklist) {
+            DisclosureGroup(MBLocalized("Pairing checklist"), isExpanded: self.$showChecklist) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("1. Install Mouse Without Borders on Windows")
-                    Text("2. Use the same Security Key on both devices")
-                    Text("3. Allow ports 15100/15101 in Windows Firewall")
-                    Text("4. Make sure both devices are on the same subnet")
+                    Text(MBLocalized("1. Install Mouse Without Borders on Windows"))
+                    Text(MBLocalized("2. Use the same Security Key on both devices"))
+                    Text(MBLocalized("3. Allow ports 15100/15101 in Windows Firewall"))
+                    Text(MBLocalized("4. Make sure both devices are on the same subnet"))
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -56,7 +56,7 @@ struct PairingFlowView: View {
 
             Label(
                 self.isKeyValid
-                    ? String(localized: "Key Ready") : String(localized: "At least 16 characters"),
+                    ? MBLocalized("Key Ready") : MBLocalized("At least 16 characters"),
                 systemImage: self.isKeyValid
                     ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                 .font(.caption)
@@ -68,9 +68,9 @@ struct PairingFlowView: View {
                     .foregroundStyle(self.statusStyle.color)
             }
 
-            DisclosureGroup("Debug log", isExpanded: self.$showDebugLog) {
+            DisclosureGroup(MBLocalized("Debug log"), isExpanded: self.$showDebugLog) {
                 if self.networkManager.pairingDebugLog.isEmpty {
-                    Text("No logs yet")
+                    Text(MBLocalized("No logs yet"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -91,7 +91,7 @@ struct PairingFlowView: View {
                     .frame(maxHeight: 120)
 
                     HStack {
-                        Button("Copy Log") {
+                        Button(MBLocalized("Copy Log")) {
                             let pasteboard = NSPasteboard.general
                             pasteboard.clearContents()
                             pasteboard.setString(
@@ -105,15 +105,15 @@ struct PairingFlowView: View {
             }
 
             HStack {
-                Text("Windows IP")
+                Text(MBLocalized("Windows IP"))
                 Spacer()
-                TextField("192.168.1.5", text: self.$ipAddress)
+                TextField(MBLocalized("192.168.1.5"), text: self.$ipAddress)
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
                     .frame(width: 200)
             }
 
-            Button("Connect") {
+            Button(MBLocalized("Connect")) {
                 self.startConnecting()
             }
             .disabled(self.ipAddress.isEmpty || !self.isKeyValid)
@@ -123,23 +123,23 @@ struct PairingFlowView: View {
         }
         .onChange(of: self.networkManager.connectedMachines) { _, newValue in
             if newValue.isEmpty {
-                self.showStatus(text: String(localized: "Connection lost"), style: .warning)
+                self.showStatus(text: MBLocalized("Connection lost"), style: .warning)
             } else {
-                self.showStatus(text: String(localized: "Connected successfully"), style: .success)
+                self.showStatus(text: MBLocalized("Connected successfully"), style: .success)
             }
         }
         .alert(
-            "Pairing Error",
+            MBLocalized("Pairing Error"),
             isPresented: Binding(
                 get: { self.networkManager.pairingError != nil },
                 set: { if !$0 { self.networkManager.pairingError = nil } }))
         {
-            Button("Copy Details") {
+            Button(MBLocalized("Copy Details")) {
                 let pasteboard = NSPasteboard.general
                 pasteboard.clearContents()
                 pasteboard.setString(self.networkManager.pairingError ?? "", forType: .string)
             }
-            Button("OK", role: .cancel) {}
+            Button(MBLocalized("OK"), role: .cancel) {}
         } message: {
             Text(self.networkManager.pairingError ?? "")
         }
@@ -151,7 +151,7 @@ struct PairingFlowView: View {
         self.networkManager.appendPairingLog("User initiated connect")
         self.isConnecting = true
         self.networkManager.connectToHost(ip: self.ipAddress)
-        self.showStatus(text: String(localized: "Connection request sent"), style: .neutral)
+        self.showStatus(text: MBLocalized("Connection request sent"), style: .neutral)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             self.isConnecting = false
         }
@@ -179,18 +179,18 @@ private struct WindowsPairingGuideView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("1. Install Software")
+                        Text(MBLocalized("1. Install Software"))
                             .font(.headline)
                         Text(
-                            "Install Mouse Without Borders (included in PowerToys) on your Windows machine.")
+                            MBLocalized("Install Mouse Without Borders (included in PowerToys) on your Windows machine."))
                             .foregroundStyle(.secondary)
                             .font(.body)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("2. Verify Security Key")
+                        Text(MBLocalized("2. Verify Security Key"))
                             .font(.headline)
-                        Text("Open Settings → Security Key and ensure it matches:")
+                        Text(MBLocalized("Open Settings → Security Key and ensure it matches:"))
                             .foregroundStyle(.secondary)
 
                         HStack {
@@ -211,26 +211,26 @@ private struct WindowsPairingGuideView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("3. Check Firewall")
+                        Text(MBLocalized("3. Check Firewall"))
                             .font(.headline)
                         Text(
-                            "Ensure ports **15100** and **15101** are allowed in Windows Firewall.")
+                            MBLocalized("Ensure ports **15100** and **15101** are allowed in Windows Firewall."))
                             .foregroundStyle(.secondary)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("4. Network Check")
+                        Text(MBLocalized("4. Network Check"))
                             .font(.headline)
-                        Text("Both devices must be on the same local network subnet.")
+                        Text(MBLocalized("Both devices must be on the same local network subnet."))
                             .foregroundStyle(.secondary)
                     }
                 }
                 .padding()
             }
-            .navigationTitle("Windows Pairing Guide")
+            .navigationTitle(MBLocalized("Windows Pairing Guide"))
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
+                    Button(MBLocalized("Done")) {
                         self.dismiss()
                     }
                 }

@@ -30,7 +30,7 @@ struct MachineDetailView: View {
                             StatusDot(active: self.machine.isOnline)
                             Text(
                                 self.machine.isOnline
-                                    ? String(localized: "Online") : String(localized: "Offline"))
+                                    ? MBLocalized("Online") : MBLocalized("Offline"))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -45,7 +45,7 @@ struct MachineDetailView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     // Pinned Apps
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Pinned Apps", comment: "Section header for pinned applications")
+                        Text(MBLocalized("Pinned Apps"))
                             .font(.headline)
                             .padding(.horizontal)
 
@@ -65,7 +65,7 @@ struct MachineDetailView: View {
 
                     // Settings
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Settings", comment: "Section header for machine settings")
+                        Text(MBLocalized("Settings"))
                             .font(.headline)
                             .padding(.horizontal)
 
@@ -74,7 +74,7 @@ struct MachineDetailView: View {
                                 MachineDisplaySettingsView(machine: self.machine)
                             } label: {
                                 HStack {
-                                    Label("Display Settings", systemImage: "display")
+                                    Label(MBLocalized("Display Settings"), systemImage: "display")
                                         .foregroundStyle(.primary)
                                     Spacer()
                                     Image(systemName: "chevron.right")
@@ -93,7 +93,7 @@ struct MachineDetailView: View {
                                 MachineInputSettingsView(machine: self.machine)
                             } label: {
                                 HStack {
-                                    Label("Input Configuration", systemImage: "keyboard")
+                                    Label(MBLocalized("Input Configuration"), systemImage: "keyboard")
                                         .foregroundStyle(.primary)
                                     Spacer()
                                     Image(systemName: "chevron.right")
@@ -126,29 +126,29 @@ struct MachineDetailView: View {
                         self.isRefreshing = false
                     }
                 }) {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+                    Label(MBLocalized("Refresh"), systemImage: "arrow.clockwise")
                         .rotationEffect(.degrees(self.isRefreshing ? 360 : 0))
                 }
                 .disabled(self.isRefreshing)
-                .help("Refresh Status")
+                .help(MBLocalized("Refresh Status"))
             }
 
             ToolbarItem(placement: .status) {
                 Button(action: {
                     self.networkManager.reconnect(machineId: self.machine.id)
                 }) {
-                    Label("Restart Connection", systemImage: "restart")
+                    Label(MBLocalized("Restart Connection"), systemImage: "restart")
                 }
-                .help("Restart Connection")
+                .help(MBLocalized("Restart Connection"))
             }
 
             ToolbarItem(placement: .destructiveAction) {
                 Button(action: {
                     self.networkManager.disconnect(machineId: self.machine.id)
                 }) {
-                    Label("Disconnect", systemImage: "xmark.circle")
+                    Label(MBLocalized("Disconnect"), systemImage: "xmark.circle")
                 }
-                .help("Disconnect Machine")
+                .help(MBLocalized("Disconnect Machine"))
             }
         }
     }
@@ -165,32 +165,33 @@ private struct MachineDisplaySettingsView: View {
 
     var body: some View {
         Form {
-            Section("Display Info") {
-                LabeledContent("Name", value: String(localized: "Built-in Retina Display"))
+            Section(MBLocalized("Display Info")) {
+                LabeledContent(MBLocalized("Name"), value: MBLocalized("Built-in Retina Display"))
                 LabeledContent(
-                    "Connection",
-                    value: self.machine.isOnline ? "Thunderbolt / IP" : String(localized: "Offline"))
+                    MBLocalized("Connection"),
+                    value: self.machine.isOnline ? "Thunderbolt / IP" : MBLocalized("Offline"))
             }
 
-            Section("Settings") {
-                Picker("Resolution", selection: self.$resolution) {
-                    Text("1920 x 1080").tag("1920 x 1080")
-                    Text("2560 x 1440").tag("2560 x 1440")
-                    Text("3840 x 2160").tag("3840 x 2160")
+            Section(MBLocalized("Settings")) {
+                Picker(MBLocalized("Resolution"), selection: self.$resolution) {
+                    Text(MBLocalized("1920 x 1080")).tag("1920 x 1080")
+                    Text(MBLocalized("2560 x 1440")).tag("2560 x 1440")
+                    Text(MBLocalized("3840 x 2160")).tag("3840 x 2160")
                 }
 
-                Picker("Refresh Rate", selection: self.$refreshRate) {
-                    Text("60 Hz").tag("60 Hz")
-                    Text("120 Hz (ProMotion)").tag("120 Hz")
+                Picker(MBLocalized("Refresh Rate"), selection: self.$refreshRate) {
+                    Text(MBLocalized("60 Hz")).tag("60 Hz")
+                    Text(MBLocalized("120 Hz (ProMotion)"))
+                        .tag("120 Hz")
                 }
 
-                Toggle("Mirror Main Display", isOn: self.$isMirroring)
+                Toggle(MBLocalized("Mirror Main Display"), isOn: self.$isMirroring)
             }
 
-            Section("Scaling") {
+            Section(MBLocalized("Scaling")) {
                 VStack(alignment: .leading) {
                     Slider(value: self.$scale, in: 0.5 ... 2.0, step: 0.25) {
-                        Text("Display Scale")
+                        Text(MBLocalized("Display Scale"))
                     } minimumValueLabel: {
                         Image(systemName: "textformat.size.smaller")
                     } maximumValueLabel: {
@@ -203,7 +204,7 @@ private struct MachineDisplaySettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Display Settings")
+        .navigationTitle(MBLocalized("Display Settings"))
     }
 }
 
@@ -216,28 +217,28 @@ private struct MachineInputSettingsView: View {
 
     var body: some View {
         Form {
-            Section("Input Devices") {
+            Section(MBLocalized("Input Devices")) {
                 Toggle(isOn: self.$keyboardEnabled) {
-                    Label("Share Keyboard", systemImage: "keyboard")
+                    Label(MBLocalized("Share Keyboard"), systemImage: "keyboard")
                 }
                 Toggle(isOn: self.$mouseEnabled) {
-                    Label("Share Mouse / Trackpad", systemImage: "mouse")
+                    Label(MBLocalized("Share Mouse / Trackpad"), systemImage: "mouse")
                 }
             }
 
-            Section("Features") {
-                Toggle("Clipboard Synchronization", isOn: self.$clipboardSharing)
-                Toggle("Global Shortcuts", isOn: self.$shortcutsEnabled)
+            Section(MBLocalized("Features")) {
+                Toggle(MBLocalized("Clipboard Synchronization"), isOn: self.$clipboardSharing)
+                Toggle(MBLocalized("Global Shortcuts"), isOn: self.$shortcutsEnabled)
             }
 
-            Section("Shortcut Mapping") {
-                LabeledContent("Switch Screen") {
+            Section(MBLocalized("Shortcut Mapping")) {
+                LabeledContent(MBLocalized("Switch Screen")) {
                     Text("⌃ ⌥ →")
                         .monospaced()
                         .padding(4)
                         .background(.tertiary, in: RoundedRectangle(cornerRadius: 6))
                 }
-                LabeledContent("Lock Remote") {
+                LabeledContent(MBLocalized("Lock Remote")) {
                     Text("⌘ L")
                         .monospaced()
                         .padding(4)
@@ -246,7 +247,7 @@ private struct MachineInputSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Input Configuration")
+        .navigationTitle(MBLocalized("Input Configuration"))
     }
 }
 

@@ -12,23 +12,23 @@ struct MenuBarView: View {
     var body: some View {
         @Bindable var networkManager = networkManager
 
-        Button("Open MagicBorder") {
+        Button(MBLocalized("Open MagicBorder")) {
             self.openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)
         }
 
-        Button("Machine Arrangement...") {
+        Button(MBLocalized("Machine Arrangement...")) {
             self.openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)
         }
 
         Divider()
 
-        Text("Active: \(networkManager.activeMachineName)")
+        Text(MBLocalized("Active: %@", arguments: [networkManager.activeMachineName]))
             .font(.caption)
 
-        Menu("Switch Target") {
-            Button("Local") {
+        Menu(MBLocalized("Switch Target")) {
+            Button(MBLocalized("Local")) {
                 networkManager.activeMachineId = nil
             }
             ForEach(networkManager.connectedMachines) { machine in
@@ -38,23 +38,23 @@ struct MenuBarView: View {
             }
         }
 
-        Toggle("Capture Input", isOn: self.$captureInput)
+        Toggle(MBLocalized("Capture Input"), isOn: self.$captureInput)
             .disabled(!self.accessibilityService.isTrusted)
 
-        Toggle("Share Clipboard", isOn: $networkManager.compatibilitySettings.shareClipboard)
-        Toggle("Transfer Files", isOn: $networkManager.compatibilitySettings.transferFiles)
-        Toggle("Switch by Edge", isOn: $networkManager.compatibilitySettings.switchByMouse)
+        Toggle(MBLocalized("Share Clipboard"), isOn: $networkManager.compatibilitySettings.shareClipboard)
+        Toggle(MBLocalized("Transfer Files"), isOn: $networkManager.compatibilitySettings.transferFiles)
+        Toggle(MBLocalized("Switch by Edge"), isOn: $networkManager.compatibilitySettings.switchByMouse)
 
         Divider()
 
         SettingsLink {
-            Text("Settings...")
+            Text(MBLocalized("Settings..."))
         }
         .keyboardShortcut(",", modifiers: .command)
 
         Divider()
 
-        Button("Quit MagicBorder") {
+        Button(MBLocalized("Quit MagicBorder")) {
             NSApp.terminate(nil)
         }
     }

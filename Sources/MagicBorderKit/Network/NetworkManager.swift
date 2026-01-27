@@ -120,6 +120,8 @@ public class MBNetworkManager: Observation.Observable {
     private var lastEdgeSwitchTime: TimeInterval = 0
     private var edgeSwitchLockedUntil: TimeInterval = 0
     private var edgeSwitchPendingRelease = false
+    private var lastNoTargetDirection: EdgeDirection?
+    private var lastNoTargetLogTime: TimeInterval = 0
     private var lastMouseLocation: CGPoint?
     private var toastTask: Task<Void, Never>?
     public var dragDropState: MBDragDropState?
@@ -528,7 +530,14 @@ public class MBNetworkManager: Observation.Observable {
             if direction == nil {
                 MBLogger.network.debug("Edge check: not near edge")
             } else {
-                MBLogger.network.debug("Edge check: no target for direction")
+                let now = CFAbsoluteTimeGetCurrent()
+                let shouldLog = self.lastNoTargetDirection != direction
+                    || now - self.lastNoTargetLogTime > 1.0
+                if shouldLog {
+                    self.lastNoTargetDirection = direction
+                    self.lastNoTargetLogTime = now
+                    MBLogger.network.debug("Edge check: no target for direction")
+                }
             }
             return
         }

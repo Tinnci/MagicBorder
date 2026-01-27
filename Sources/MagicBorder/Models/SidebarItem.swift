@@ -8,8 +8,8 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .arrangement: "Arrangement"
-        case .machines: "Discovered Machines"
+        case .arrangement: MBLocalized("Arrangement")
+        case .machines: MBLocalized("Discovered Machines")
         }
     }
 
