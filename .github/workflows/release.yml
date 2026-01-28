@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 jobs:
   build-and-release:
@@ -14,16 +15,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Resolve dependencies
         run: swift package resolve
-      - name: Build (release)
-        run: swift build -c release
-      - name: Package binaries
+      - name: Package release artifacts
         run: |
-          mkdir -p dist
-          cp .build/release/MagicBorder dist/
-          cp .build/release/MagicBorderCLI dist/
-          cd dist
-          tar -czf MagicBorder-macos.tar.gz MagicBorder MagicBorderCLI
+          chmod +x scripts/release_package.sh
+          scripts/release_package.sh
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/MagicBorder-macos.tar.gz
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS.txt

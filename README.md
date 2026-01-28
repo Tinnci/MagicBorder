@@ -122,6 +122,46 @@ swift build --clean
 swift test
 ```
 
+## 📦 Release (非 App Store)
+
+### 本地打包
+
+使用脚本生成可分发包：
+
+```bash
+./scripts/release_package.sh
+```
+
+可选参数：
+
+- 生成 DMG：`CREATE_DMG=1 ./scripts/release_package.sh`
+- 生成 PKG：`CREATE_PKG=1 ./scripts/release_package.sh`
+- 签名：`SIGN_IDENTITY="Developer ID Application: <Name>" ./scripts/release_package.sh`
+- 公证：`NOTARY_PROFILE=<keychain-profile> ./scripts/release_package.sh`
+- PKG 签名：`PKG_SIGN_IDENTITY="Developer ID Installer: <Name>" ./scripts/release_package.sh`
+
+产物输出到 `dist/`：
+- `MagicBorder-macos-<version>.zip`
+- `MagicBorderCLI-macos-<version>.zip`
+- （可选）`MagicBorder-macos-<version>.dmg`
+- （可选）`MagicBorder-macos-<version>.pkg`
+- `SHA256SUMS.txt`
+
+### 没有开发者证书怎么办？
+
+可以发布**未签名**的 zip/dmg/pkg，但用户首次打开会被 Gatekeeper 拦截，需要在系统提示中手动允许（或在“系统设置 → 隐私与安全”中放行）。
+
+### GitHub Release
+
+推送带 `v` 前缀的 tag（例如 `v0.1.0`）会触发自动发布：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+你也可以在 Actions 页面或使用 `gh` 手动触发发布流程。
+
 ### Code Style
 
 - Follow Swift standard conventions
