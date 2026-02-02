@@ -49,8 +49,6 @@ struct MagicBorderApp: App {
                     NSApp.activate(ignoringOtherApps: true)
                     self.accessibilityService.startPolling()
                     self.syncInputCapture()
-                    // Run localization diagnostics when explicitly requested via env var
-                    self.logLocalizationDiagnosticsIfNeeded()
                 }
                 .onChange(of: self.accessibilityService.isTrusted) { _, _ in
                     self.syncInputCapture()
@@ -68,9 +66,7 @@ struct MagicBorderApp: App {
                     }
                 }
         }
-        .commands {
-            // Add any custom commands if needed, but Settings is standard
-        }
+        .commands {}
 
         Settings {
             SettingsView()
@@ -93,53 +89,5 @@ struct MagicBorderApp: App {
     private func syncInputCapture() {
         let shouldCapture = self.captureInput && self.accessibilityService.isTrusted
         self.inputManager.toggleInterception(shouldCapture)
-    }
-
-    private func logLocalizationDiagnosticsIfNeeded() {
-        guard ProcessInfo.processInfo.environment["MB_I18N_DEBUG"] == "1" else { return }
-        MBLogger.ui.debug("[locale] Preferred Languages: \(Locale.preferredLanguages)")
-        print("[locale] Preferred Languages: \(Locale.preferredLanguages)")
-
-        // Log Bundle.main info
-        MBLogger.ui.debug("--- Bundle.main ---")
-        print("--- Bundle.main ---")
-        let mainBundle = Bundle.main
-        MBLogger.ui.debug("Preferred Localizations: \(mainBundle.preferredLocalizations)")
-        print("Preferred Localizations: \(mainBundle.preferredLocalizations)")
-        MBLogger.ui.debug("Localizations in Bundle: \(mainBundle.localizations)")
-        print("Localizations in Bundle: \(mainBundle.localizations)")
-
-        let mainLocalizedStrings = mainBundle.paths(forResourcesOfType: "strings", inDirectory: nil)
-            .filter { $0.contains("Localizable") }
-        if mainLocalizedStrings.isEmpty {
-            MBLogger.ui.warning("No Localizable.strings found in main bundle.")
-            print("No Localizable.strings found in main bundle.")
-        } else {
-            MBLogger.ui.debug("Localizable.strings paths: \(mainLocalizedStrings)")
-            print("Localizable.strings paths: \(mainLocalizedStrings)")
-        }
-
-        // Log Bundle.module info
-        MBLogger.ui.debug("--- Bundle.module ---")
-        print("--- Bundle.module ---")
-        let moduleBundle = Bundle.module
-        MBLogger.ui.debug("Preferred Localizations: \(moduleBundle.preferredLocalizations)")
-        print("Preferred Localizations: \(moduleBundle.preferredLocalizations)")
-        MBLogger.ui.debug("Localizations in Bundle: \(moduleBundle.localizations)")
-        print("Localizations in Bundle: \(moduleBundle.localizations)")
-        let moduleStrings = moduleBundle.paths(forResourcesOfType: "strings", inDirectory: nil)
-            .filter { $0.contains("Localizable") }
-        if moduleStrings.isEmpty {
-            MBLogger.ui.warning("No Localizable.strings found in module bundle.")
-            print("No Localizable.strings found in module bundle.")
-        } else {
-            MBLogger.ui.debug("Localizable.strings paths: \(moduleStrings)")
-            print("Localizable.strings paths: \(moduleStrings)")
-        }
-
-        let sampleKey = "Settings"
-        let sampleValue = MBLocalized(sampleKey)
-        MBLogger.ui.debug("[module] Sample \"\(sampleKey)\": \(sampleValue)")
-        print("[module] Sample \"\(sampleKey)\": \(sampleValue)")
     }
 }

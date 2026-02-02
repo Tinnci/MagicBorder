@@ -37,9 +37,6 @@ struct DashboardView: View {
     @AppStorage("dragDropOverlayScale") private var dragDropOverlayScale = 1.0
     @AppStorage("dragDropOverlayPosition") private var dragDropOverlayPosition = "top"
 
-    // Stable ID for local machine to avoid list flashes
-    private let localMachineId = UUID()
-
     @State private var machines: [Machine] = []
 
     var filteredMachines: [Machine] {
@@ -123,10 +120,10 @@ struct DashboardView: View {
         .onAppear {
             self.networkManager.applyCompatibilitySettings()
 
-            // Ensure local machine has stable ID on start
             self.machines = [
                 Machine(
-                    id: self.localMachineId, name: Host.current().localizedName ?? "Local Mac",
+                    id: MagicBorderKit.MBNetworkManager.localMachineUUID,
+                    name: Host.current().localizedName ?? "Local Mac",
                     isOnline: true),
             ]
         }
@@ -141,7 +138,8 @@ struct DashboardView: View {
     private func updateMachines(from connected: [MBNetworkManager.ConnectedMachine]) {
         var newMachines = [
             Machine(
-                id: localMachineId, name: Host.current().localizedName ?? "Local Mac",
+                id: MagicBorderKit.MBNetworkManager.localMachineUUID,
+                name: Host.current().localizedName ?? "Local Mac",
                 isOnline: true),
         ]
 
@@ -184,84 +182,10 @@ extension MBOverlayPosition {
     fileprivate var padding: EdgeInsets {
         switch self {
         case .bottom, .bottomLeading, .bottomTrailing:
-            EdgeInsets(top: 0, leading: 16, bottom: 16, trailing: 16)
+            EdgeInsets(top: 0, leading: AppTheme.Layout.overlayPadding, bottom: AppTheme.Layout.overlayPadding, trailing: AppTheme.Layout.overlayPadding)
         default:
-            EdgeInsets(top: 16, leading: 16, bottom: 0, trailing: 16)
+            EdgeInsets(top: AppTheme.Layout.overlayPadding, leading: AppTheme.Layout.overlayPadding, bottom: 0, trailing: AppTheme.Layout.overlayPadding)
         }
-    }
-}
-
-private struct DragDropOverlayView: View {
-    let state: MBDragDropState
-    let sourceName: String?
-    let fileSummary: String?
-    let progress: Double?
-    let showDevice: Bool
-    let showProgress: Bool
-
-    var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 12) {
-                Image(systemName: self.state == .dropping ? "tray.and.arrow.down" : "hand.draw")
-                    .font(.title3)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(
-                        self.state == .dropping
-                            ? MBLocalized("Release to drop") : MBLocalized("Dragging files"))
-                        .font(.headline)
-                    if self.showDevice, let sourceName, !sourceName.isEmpty {
-                        Text(sourceName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-            }
-
-            if let summary = fileSummary {
-                Text(summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if self.showProgress {
-                if let progress {
-                    ProgressView(value: progress)
-                        .progressViewStyle(.linear)
-                } else {
-                    ProgressView()
-                        .progressViewStyle(.linear)
-                }
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: 360)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
-    }
-}
-
-private struct FileDropZoneView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "tray.and.arrow.up")
-                .font(.system(size: 36, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-            Text(MBLocalized("Drag files here to send"))
-                .font(.headline)
-            Text(MBLocalized("Supports files and folders"))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(28)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(
-                            Color.accentColor.opacity(0.35), lineWidth: 2)))
-        .shadow(radius: 12)
-        .padding(24)
     }
 }
 
@@ -338,13 +262,7 @@ struct ArrangementDetailView: View {
 
             ToolbarItem {
                 Button(action: {
-                    let panel = NSOpenPanel()
-                    panel.canChooseFiles = true
-                    panel.canChooseDirectories = true
-                    panel.allowsMultipleSelection = true
-                    if panel.runModal() == .OK {
-                        networkManager.sendFileDrop(panel.urls)
-                    }
+                    networkManager.presentFilePickerAndSend()
                 }) {
                     Label(MBLocalized("Send Files"), systemImage: "square.and.arrow.up")
                 }

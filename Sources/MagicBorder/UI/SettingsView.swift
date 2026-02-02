@@ -2,7 +2,7 @@ import MagicBorderKit
 import SwiftUI
 
 struct SettingsView: View {
-    private let width: CGFloat = 500
+    private let settingsWindowWidth: CGFloat = 500
 
     var body: some View {
         TabView {
@@ -10,21 +10,19 @@ struct SettingsView: View {
                 .tabItem {
                     Label(MBLocalized("General"), systemImage: "gear")
                 }
-                .frame(width: self.width)
-            // Remove explicit padding here as TabView content usually needs its own padding
-            // But generally, we want some padding inside the tab content.
+                .frame(width: self.settingsWindowWidth)
 
             NetworkSettingsTab()
                 .tabItem {
                     Label(MBLocalized("Network"), systemImage: "antenna.radiowaves.left.and.right")
                 }
-                .frame(width: self.width)
+                .frame(width: self.settingsWindowWidth)
 
             OverlaySettingsTab()
                 .tabItem {
                     Label(MBLocalized("Overlay"), systemImage: "macwindow.on.rectangle")
                 }
-                .frame(width: self.width)
+                .frame(width: self.settingsWindowWidth)
         }
         .padding(20) // Global padding for visually pleasing layout
     }
@@ -182,7 +180,6 @@ private struct GeneralSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
         }
-        // .padding() // Padding is handled by parent TabView modifier
     }
 }
 

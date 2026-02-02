@@ -27,7 +27,11 @@ let package = Package(
         .executableTarget(
             name: "MagicBorder",
             dependencies: ["MagicBorderKit"],
-            resources: [.process("Resources")],
+            resources: [
+                .process("Resources/en.lproj"),
+                .process("Resources/zh-Hans.lproj"),
+                .process("Resources/Assets.xcassets"),
+            ],
             linkerSettings: []),
         .executableTarget(
             name: "MagicBorderCLI",

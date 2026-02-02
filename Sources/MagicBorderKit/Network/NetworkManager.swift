@@ -9,6 +9,7 @@ import OSLog
 @Observable
 public class MBNetworkManager: Observation.Observable {
     public static let shared = MBNetworkManager()
+    public static let localMachineUUID = UUID(uuidString: "00000000-0000-0000-0000-000000000001") ?? UUID()
 
     public struct MBToastState: Equatable {
         public let message: String
@@ -446,6 +447,20 @@ public class MBNetworkManager: Observation.Observable {
     public func sendFileDrop(_ urls: [URL]) {
         guard self.protocolMode != .modern else { return }
         self.compatibilityService?.sendFileDrop(urls)
+    }
+
+    public func presentFilePickerAndSend() {
+        guard self.protocolMode != .modern else { return }
+
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+
+        let response = panel.runModal()
+        if response == .OK {
+            self.sendFileDrop(panel.urls)
+        }
     }
 
     public func updateLocalMatrix(names: [String]) {
