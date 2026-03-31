@@ -1,3 +1,4 @@
+import MagicBorderKit
 import SwiftUI
 import UniformTypeIdentifiers
 

@@ -105,7 +105,7 @@ public class MBNetworkManager: Observation.Observable {
     public var lastSwitchTimestamp: Date?
     public var toast: MBToastState?
 
-    public var protocolMode: MBProtocolMode = .dual
+    public var protocolMode: MBProtocolMode = .mwbCompatibility
     public var securityKey: String = "" {
         didSet {
             self.compatibilityService?.updateSecurityKey(self.securityKey)
@@ -1010,11 +1010,6 @@ public class MBNetworkManager: Observation.Observable {
                 self.sendRemoteEvent(remoteEvent)
             }
         case .mwbCompatibility:
-            self.sendCompatibilityInput(snapshot: snapshot)
-        case .dual:
-            if let remoteEvent = MBInputManager.shared.convertToRemoteEvent(snapshot: snapshot) {
-                self.sendRemoteEvent(remoteEvent)
-            }
             self.sendCompatibilityInput(snapshot: snapshot)
         }
     }

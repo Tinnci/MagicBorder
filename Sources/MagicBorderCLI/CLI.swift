@@ -18,16 +18,20 @@ struct CLI {
         print("Target: \(ip)")
         print("Key: \(String(repeating: "*", count: key.count))")
 
-        let client = MWBClient()
-        client.connect(ip: ip, key: key)
+        await MainActor.run {
+            let service = MWBCompatibilityService(
+                localName: Host.current().localizedName ?? "Mac",
+                localId: Int32.random(in: 1000 ... 999999))
+            service.start(securityKey: key)
+            service.connectToHost(ip: ip)
+        }
 
-        // Keep running to listen
+        print("Connecting to \(ip)…")
+
+        // Keep running to receive events
         while true {
             await Task.yield()
             try? await Task.sleep(nanoseconds: 1000000000)
-            if client.isConnected {
-                // print("Heartbeat...")
-            }
         }
     }
 }

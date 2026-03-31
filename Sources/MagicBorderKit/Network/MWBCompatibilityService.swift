@@ -2,10 +2,12 @@ import AppKit
 import Foundation
 import Network
 
+/// Selects which wire protocol the network stack uses.
+/// Use `.mwbCompatibility` to interoperate with Windows Mouse Without Borders.
+/// Use `.modern` for Mac-to-Mac connections using the native JSON/Bonjour protocol.
 public enum MBProtocolMode: String {
     case modern
     case mwbCompatibility
-    case dual
 }
 
 public struct MWBPeer: Equatable, Hashable {
