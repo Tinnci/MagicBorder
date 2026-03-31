@@ -11,6 +11,7 @@ struct MenuBarView: View {
 
     var body: some View {
         @Bindable var networkManager = networkManager
+        @Bindable var sessionCoordinator = networkManager.sessionCoordinator
 
         Button(MBLocalized("Open MagicBorder")) {
             self.openWindow(id: "main")
@@ -24,12 +25,12 @@ struct MenuBarView: View {
 
         Divider()
 
-        Text(MBLocalized("Active: %@", arguments: [networkManager.activeMachineName]))
+        Text(MBLocalized("Active: %@", arguments: [sessionCoordinator.activeMachineName]))
             .font(.caption)
 
         Menu(MBLocalized("Switch Target")) {
             Button(MBLocalized("Local")) {
-                networkManager.activeMachineId = nil
+                networkManager.forceReturnToLocal(reason: "menu")
             }
             ForEach(networkManager.connectedMachines) { machine in
                 Button(machine.name) {

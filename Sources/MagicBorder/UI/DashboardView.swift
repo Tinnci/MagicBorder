@@ -405,14 +405,16 @@ struct ArrangementInspector: View {
     var matrixSwapBinding: Binding<Bool>
 
     var body: some View {
+        @Bindable var sessionCoordinator = self.networkManager.sessionCoordinator
+
         Form {
             Section(MBLocalized("Status")) {
                 LabeledContent(
                     MBLocalized("Active Machine"),
-                    value: self.networkManager.activeMachineName)
+                    value: sessionCoordinator.activeMachineName)
                 LabeledContent(
                     MBLocalized("State"),
-                    value: self.networkManager.switchState.rawValue.capitalized)
+                    value: sessionCoordinator.switchState.rawValue.capitalized)
             }
 
             Section(MBLocalized("Layout Options")) {
