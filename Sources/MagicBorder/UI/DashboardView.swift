@@ -48,6 +48,8 @@ struct DashboardView: View {
     }
 
     var body: some View {
+        @Bindable var clipboardBridge = self.networkManager.clipboardBridge
+
         NavigationSplitView {
             List(selection: self.$selection) {
                 Section {
@@ -104,12 +106,12 @@ struct DashboardView: View {
             }
         }
         .overlay(alignment: self.effectiveOverlayPreferences.position.alignment) {
-            if self.dragDropOverlayEnabled, let state = networkManager.dragDropState {
+            if self.dragDropOverlayEnabled, let state = clipboardBridge.dragDropState {
                 DragDropOverlayView(
                     state: state,
-                    sourceName: self.networkManager.dragDropSourceName,
-                    fileSummary: self.networkManager.dragDropFileSummary,
-                    progress: self.networkManager.dragDropProgress,
+                    sourceName: clipboardBridge.dragDropSourceName,
+                    fileSummary: clipboardBridge.dragDropFileSummary,
+                    progress: clipboardBridge.dragDropProgress,
                     showDevice: self.effectiveOverlayPreferences.showDevice,
                     showProgress: self.effectiveOverlayPreferences.showProgress)
                     .scaleEffect(self.effectiveOverlayPreferences.scale)
@@ -171,7 +173,7 @@ struct DashboardView: View {
 
     private var effectiveOverlayPreferences: MBOverlayPreferences {
         let deviceName =
-            self.networkManager.dragDropSourceName ?? self.networkManager.localDisplayName
+            self.networkManager.clipboardBridge.dragDropSourceName ?? self.networkManager.localDisplayName
         return self.overlayPreferences.preferences(
             for: deviceName, default: self.defaultOverlayPreferences)
     }

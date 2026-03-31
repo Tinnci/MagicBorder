@@ -65,10 +65,7 @@ public class MBNetworkManager: Observation.Observable {
     /// Spatial arrangement of machines in the grid.
     public var arrangement: MachineArrangement = .init()
     private var toastTask: Task<Void, Never>?
-    public var dragDropState: MBDragDropState?
-    public var dragDropSourceName: String?
-    public var dragDropFileSummary: String?
-    public var dragDropProgress: Double?
+    public private(set) var clipboardBridge: MBClipboardBridge!
 
     private var modernTransport: MBModernTransport!
     private var compatibilityTransport: MBMWBTransport!
@@ -85,10 +82,6 @@ public class MBNetworkManager: Observation.Observable {
         self.pairingDebugLog = []
         self.pairingError = nil
         self.arrangement = .init()
-        self.dragDropState = nil
-        self.dragDropSourceName = nil
-        self.dragDropFileSummary = nil
-        self.dragDropProgress = nil
 
         self.modernTransport = MBModernTransport(
             serviceType: self.serviceType,
@@ -115,6 +108,13 @@ public class MBNetworkManager: Observation.Observable {
                 self?.compatibilityTransport.activate(machine: machine)
             },
             centerRemoteCursor: { [weak self] in self?.compatibilityTransport.centerRemoteCursor() })
+        self.clipboardBridge = MBClipboardBridge(
+            showToast: { [weak self] message, systemImage in
+                self?.showToast(message: message, systemImage: systemImage)
+            },
+            sendClipboardText: { [weak self] text in self?.sendClipboardText(text) },
+            sendClipboardImage: { [weak self] data in self?.sendClipboardImage(data) },
+            sendFileDrop: { [weak self] urls in self?.sendFileDrop(urls) })
 
         // Pull persisted compatibility key instead of overwriting it with a placeholder.
         self.securityKey = settings.securityKey
@@ -148,6 +148,9 @@ public class MBNetworkManager: Observation.Observable {
     private func consumeTransportEvents(_ transport: MBTransport?) async {
         guard let transport else { return }
         for await event in transport.events {
+            if self.clipboardBridge.handleTransportEvent(event) {
+                continue
+            }
             switch event {
             case .machineConnected(let machine):
                 if let index = self.connectedMachines.firstIndex(where: { $0.id == machine.id }) {
@@ -177,41 +180,8 @@ public class MBNetworkManager: Observation.Observable {
                 MBInputManager.shared.simulateMouseEvent(event)
             case .mwbKey(let event):
                 MBInputManager.shared.simulateKeyEvent(event)
-            case .clipboardText(let text):
-                MBInputManager.shared.ignoreNextClipboardChange()
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(text, forType: .string)
-                self.showToast(message: "收到剪贴板文本", systemImage: "doc.on.clipboard")
-            case .clipboardImage(let data):
-                MBInputManager.shared.ignoreNextClipboardChange()
-                if let image = NSImage(data: data) {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.writeObjects([image])
-                    self.showToast(message: "收到剪贴板图片", systemImage: "photo")
-                }
-            case .clipboardFiles(let urls):
-                MBInputManager.shared.ignoreNextClipboardChange()
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.writeObjects(urls as [NSURL])
-                self.dragDropFileSummary = self.makeFileSummary(urls)
-                self.dragDropProgress = 1.0
-                self.showToast(message: "收到剪贴板文件", systemImage: "tray.and.arrow.down")
-                Task { @MainActor [weak self] in
-                    try? await Task.sleep(nanoseconds: 1500000000)
-                    self?.dragDropState = nil
-                    self?.dragDropSourceName = nil
-                    self?.dragDropFileSummary = nil
-                    self?.dragDropProgress = nil
-                }
-            case .dragDropStateChanged(let state, let sourceName):
-                self.dragDropState = state
-                self.dragDropSourceName = sourceName
-                if state == nil {
-                    self.dragDropFileSummary = nil
-                    self.dragDropProgress = nil
-                } else {
-                    self.dragDropProgress = nil
-                }
+            case .clipboardText, .clipboardImage, .clipboardFiles, .dragDropStateChanged:
+                break
             case .hideMouse:
                 NSCursor.hide()
             case .screenCaptureRequested(let sourceID):
@@ -257,28 +227,7 @@ public class MBNetworkManager: Observation.Observable {
     }
 
     public func handleLocalPasteboard(_ content: MBPasteboardContent) {
-        guard self.compatibilitySettings.shareClipboard else { return }
-
-        switch content {
-        case .text(let text):
-            self.sendClipboardText(text)
-            self.showToast(message: "已同步剪贴板文本", systemImage: "doc.on.clipboard")
-        case .image(let data):
-            self.sendClipboardImage(data)
-            self.showToast(message: "已同步剪贴板图片", systemImage: "photo")
-        case .files(let urls):
-            guard self.compatibilitySettings.transferFiles else { return }
-            self.sendFileDrop(urls)
-            self.showToast(message: "已同步剪贴板文件", systemImage: "tray.and.arrow.up")
-        }
-    }
-
-    private func makeFileSummary(_ urls: [URL]) -> String? {
-        guard !urls.isEmpty else { return nil }
-        if urls.count == 1 {
-            return urls[0].lastPathComponent
-        }
-        return "\(urls[0].lastPathComponent) +\(urls.count - 1)"
+        self.clipboardBridge.handleLocalPasteboard(content, settings: self.compatibilitySettings)
     }
 
     private func sendScreenCapture(to sourceId: Int32?) {
