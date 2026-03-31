@@ -8,7 +8,7 @@ public enum MBConnectionEvent: Sendable {
     /// A TCP connection became ready to exchange application-layer packets.
     case connectionReady(NWConnection)
     /// A connection was lost (failed or cancelled).
-    case connectionLost(NWConnection)
+    case connectionLost(NWConnection, machineId: UUID?)
 }
 
 // MARK: - MBConnectionRegistry
@@ -151,11 +151,13 @@ public final class MBConnectionRegistry {
                 case .failed(let error):
                     MBLogger.network.error(
                         "[Registry] Connection failed: \(error.localizedDescription)")
+                    let machineId = self?.machineId(for: connection)
                     self?.remove(connection)
-                    self?.continuation?.yield(.connectionLost(connection))
+                    self?.continuation?.yield(.connectionLost(connection, machineId: machineId))
                 case .cancelled:
+                    let machineId = self?.machineId(for: connection)
                     self?.remove(connection)
-                    self?.continuation?.yield(.connectionLost(connection))
+                    self?.continuation?.yield(.connectionLost(connection, machineId: machineId))
                 default:
                     break
                 }
