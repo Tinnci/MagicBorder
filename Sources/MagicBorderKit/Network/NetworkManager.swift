@@ -186,10 +186,9 @@ public class MBNetworkManager: Observation.Observable {
         }
         service.onDisconnected = { [weak self] peer in
             guard let self else { return }
+            let disconnectedId = self.connectedMachines.first(where: { $0.mwbPeerID == peer.id })?.id
             self.connectedMachines.removeAll { $0.mwbPeerID == peer.id }
-            if let id = self.connectedMachines.first(where: { $0.mwbPeerID == peer.id })?.id,
-               self.activeMachineId == id
-            {
+            if let id = disconnectedId, self.activeMachineId == id {
                 self.forceReturnToLocal(reason: "disconnect")
             }
             self.showToast(message: "已断开 \(peer.name)", systemImage: "link.slash")
