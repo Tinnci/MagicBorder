@@ -119,6 +119,9 @@ public class MBNetworkManager: Observation.Observable {
         svc.startSubnetScanning()
         Task { @MainActor [weak self] in await self?.consumeDiscoveryEvents(svc) }
 
+        // Break circular dep: InputManager calls back through MBInputRoutingDelegate.
+        MBInputManager.shared.routingDelegate = self
+
         self.configureCompatibility()
         self.setupPasteboardMonitoring()
         // Ensure coalescer is initialized
@@ -1096,6 +1099,10 @@ public class MBNetworkManager: Observation.Observable {
         }
     }
 }
+
+// MARK: - MBInputRoutingDelegate
+
+extension MBNetworkManager: MBInputRoutingDelegate {}
 
 private final class MouseCoalescer: @unchecked Sendable {
     private let queue = DispatchQueue(

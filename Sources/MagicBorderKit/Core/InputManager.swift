@@ -25,6 +25,9 @@ public class MBInputManager: Observation.Observable {
         self._remoteID.withLock { $0 }
     }
 
+    /// Injected by `MBNetworkManager` during startup to break the circular singleton dependency.
+    public weak var routingDelegate: (any MBInputRoutingDelegate)?
+
     public init() {
         self._isAppActive.withLock { $0 = NSRunningApplication.current.isActive }
         self.setupAppStateObservers()
@@ -34,9 +37,9 @@ public class MBInputManager: Observation.Observable {
     public func startClipboardSync() {
         guard self.clipboardMonitor == nil else { return }
         let monitor = MBPasteboardMonitor()
-        monitor.onChange = { content in
+        monitor.onChange = { [weak self] content in
             Task { @MainActor in
-                MBNetworkManager.shared.handleLocalPasteboard(content)
+                self?.routingDelegate?.handleLocalPasteboard(content)
             }
         }
         self.clipboardMonitor = monitor
@@ -141,7 +144,7 @@ public class MBInputManager: Observation.Observable {
         let isRemoteActive = self._remoteID.withLock { $0 != nil }
         if isRemoteActive, type == .keyDown, snapshot.keyCode == 53 {
             Task { @MainActor in
-                MBNetworkManager.shared.forceReturnToLocal(reason: "escape")
+                self.routingDelegate?.forceReturnToLocal(reason: "escape")
             }
             return nil
         }
@@ -150,7 +153,7 @@ public class MBInputManager: Observation.Observable {
         guard self._remoteID.withLock({ $0 }) != nil else {
             if type == .mouseMoved || type == .leftMouseDragged || type == .rightMouseDragged {
                 Task { @MainActor in
-                    MBNetworkManager.shared.handleLocalMouseEvent(snapshot: snapshot)
+                    self.routingDelegate?.handleLocalMouseEvent(snapshot: snapshot)
                 }
             }
             // Local mode: pass-through
@@ -165,7 +168,7 @@ public class MBInputManager: Observation.Observable {
 
         // Virtual Cursor Logic
         Task { @MainActor in
-            let settings = MBNetworkManager.shared.compatibilitySettings
+            let settings = self.routingDelegate?.compatibilitySettings
 
             if type == .mouseMoved || type == .leftMouseDragged || type == .rightMouseDragged {
                 // Use captured properties
@@ -202,16 +205,16 @@ public class MBInputManager: Observation.Observable {
                 }
 
                 // Cursor Warping (Barrier-style)
-                if settings.wrapCursor, let screen = NSScreen.main {
+                if settings?.wrapCursor == true, let screen = NSScreen.main {
                     let center = CGPoint(x: screen.frame.midX, y: screen.frame.midY)
                     CGWarpMouseCursorPosition(center)
                 }
             }
 
             if type == .mouseMoved || type == .leftMouseDragged || type == .rightMouseDragged {
-                MBNetworkManager.shared.handleRemoteMouseEvent(snapshot: snapshot)
+                self.routingDelegate?.handleRemoteMouseEvent(snapshot: snapshot)
             }
-            MBNetworkManager.shared.sendRemoteInput(snapshot: snapshot)
+            self.routingDelegate?.sendRemoteInput(snapshot: snapshot)
         }
 
         return nil
