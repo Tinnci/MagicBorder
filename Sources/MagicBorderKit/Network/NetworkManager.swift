@@ -26,9 +26,8 @@ public class MBNetworkManager: Observation.Observable {
     let port: NWEndpoint.Port = 12345
     let serviceType = "_magicborder._tcp"
 
-    // Browser & Listener
+    // Listener (inbound TCP acceptance; stays here until MBConnectionRegistry is extracted)
     private var listener: NWListener?
-    private var browser: NWBrowser?
 
     // Connections
     public var peers: [NWConnection] = []
@@ -39,32 +38,11 @@ public class MBNetworkManager: Observation.Observable {
 
     public var connectedMachines: [Machine] = []
 
-    public var availablePeers: [NWBrowser.Result] = []
+    // MARK: - Discovery (delegated to MBDiscoveryService)
 
-    // Unified Discovery
-    public struct DiscoveredPeer: Identifiable, Equatable, Hashable {
-        public let id = UUID()
-        public let name: String
-        public let endpoint: NWEndpoint
-        public let type: PeerType
+    private var discoveryService: MBDiscoveryService?
 
-        public enum PeerType {
-            case bonjour
-            case manual
-            case scanned
-        }
-
-        // Manual conformance if needed, but synthesis should work for simple types
-        public static func == (lhs: DiscoveredPeer, rhs: DiscoveredPeer) -> Bool {
-            lhs.name == rhs.name && lhs.endpoint == rhs.endpoint
-        }
-
-        public func hash(into hasher: inout Hasher) {
-            hasher.combine(self.name)
-            hasher.combine(self.endpoint)
-        }
-    }
-
+    /// Mirror of `MBDiscoveryService.discoveredPeers` — kept as observable for the UI.
     public var discoveredPeers: [DiscoveredPeer] = []
 
     // Identity
@@ -133,12 +111,26 @@ public class MBNetworkManager: Observation.Observable {
         // Pull persisted compatibility key instead of overwriting it with a placeholder.
         self.securityKey = self.compatibilitySettings.securityKey
         self.startAdvertising()
-        self.startBrowsing()
-        self.startSubnetScanning()
+
+        let svc = MBDiscoveryService(serviceType: serviceType, localName: localName)
+        self.discoveryService = svc
+        svc.startBrowsing()
+        svc.startSubnetScanning()
+        Task { @MainActor [weak self] in await self?.consumeDiscoveryEvents(svc) }
+
         self.configureCompatibility()
         self.setupPasteboardMonitoring()
         // Ensure coalescer is initialized
         self.mouseCoalescer = MouseCoalescer(manager: self)
+    }
+
+    private func consumeDiscoveryEvents(_ svc: MBDiscoveryService) async {
+        for await event in svc.events {
+            switch event {
+            case .found: self.discoveredPeers = svc.discoveredPeers
+            case .lost: self.discoveredPeers = svc.discoveredPeers
+            }
+        }
     }
 
     public func appendPairingLog(_ message: String) {
@@ -740,35 +732,7 @@ public class MBNetworkManager: Observation.Observable {
         }
     }
 
-    // MARK: - Browsing (Client Discovery)
-
-    func startBrowsing() {
-        let browser = NWBrowser(for: .bonjour(type: serviceType, domain: nil), using: .tcp)
-        self.browser = browser
-
-        browser.browseResultsChangedHandler = { [weak self] results, _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-
-                // Keep manual/scanned peers, replace bonjour ones
-                let otherPeers = self.discoveredPeers.filter { $0.type != .bonjour }
-
-                let bonjourPeers = results.compactMap { result -> DiscoveredPeer? in
-                    if case .service(let name, _, _, _) = result.endpoint {
-                        if name == self.localName { return nil }
-                        return DiscoveredPeer(name: name, endpoint: result.endpoint, type: .bonjour)
-                    }
-                    return nil
-                }
-
-                self.discoveredPeers = otherPeers + bonjourPeers
-                // Legacy support (optional)
-                self.availablePeers = Array(results)
-            }
-        }
-
-        browser.start(queue: .main)
-    }
+    // MARK: - Connection Handling
 
     public func connect(to result: NWBrowser.Result) {
         let connection = NWConnection(to: result.endpoint, using: .tcp)
@@ -812,94 +776,7 @@ public class MBNetworkManager: Observation.Observable {
             clipboardPort: self.compatibilitySettings.clipboardPort)
     }
 
-    // MARK: - Subnet Scanning
-
-    public func startSubnetScanning() {
-        MBLogger.network.info("Starting Subnet Scan...")
-        let prefixes = self.getLocalIPPrefixes()
-        guard !prefixes.isEmpty else {
-            MBLogger.network.info("No local IP found for scanning.")
-            return
-        }
-
-        // Scan typical /24 subnets for found local IPs
-        let group = DispatchGroup()
-        let queue = DispatchQueue(label: "com.magicborder.scanner", attributes: .concurrent)
-
-        for prefix in prefixes {
-            MBLogger.network.debug("Scanning subnet: \(prefix).1-254")
-            for i in 1 ... 254 {
-                let ip = "\(prefix).\(i)"
-                queue.async(group: group) {
-                    self.probe(ip: ip)
-                }
-            }
-        }
-    }
-
-    private func getLocalIPPrefixes() -> [String] {
-        // Simple heuristic: Get all IPv4 addresses, take first 3 octets
-        let addresses = Host.current().addresses
-        let ipv4s = addresses.filter { $0.contains(".") && !$0.starts(with: "127.") }
-        let prefixes = ipv4s.compactMap { ip -> String? in
-            let components = ip.split(separator: ".")
-            if components.count == 4 {
-                return components.prefix(3).joined(separator: ".")
-            }
-            return nil
-        }
-        return Array(Set(prefixes)) // Unique
-    }
-
-    private nonisolated func probe(ip: String) {
-        let host = NWEndpoint.Host(ip)
-        let port = NWEndpoint.Port(integerLiteral: 15101) // MWB Data Port
-
-        let connection = NWConnection(to: .hostPort(host: host, port: port), using: .tcp)
-
-        connection.stateUpdateHandler = { [weak self] state in
-            switch state {
-            case .ready:
-                MBLogger.network.info("Found Open Port at \(ip)!")
-                Task { @MainActor [weak self] in
-                    self?.addScannedPeer(ip: ip)
-                }
-                connection.cancel()
-            default:
-                break
-            }
-        }
-
-        // Timeout
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
-            if connection.state != .ready {
-                connection.cancel()
-            }
-        }
-
-        connection.start(queue: .global())
-    }
-
-    private func addScannedPeer(ip: String) {
-        // Deduplicate
-        if !self.discoveredPeers.contains(where: { peer in
-            if case .hostPort(let h, _) = peer.endpoint, case .ipv4(let ipv4) = h {
-                return String(describing: ipv4) == ip
-            }
-            return false
-        }) {
-            // MWB Windows name resolution requires separate handshake or DNS lookup
-            // For now, use IP as name or "PC (IP)"
-            // Try reverse DNS? Dns.GetHostEntry equivalent?
-            // Host.current().name(for: ip) might block.
-            let name = "PC (\(ip))"
-            let peer = DiscoveredPeer(
-                name: name, endpoint: .hostPort(host: .init(ip), port: 15101), type: .scanned)
-            self.discoveredPeers.append(peer)
-        }
-    }
-
-    // MARK: - Connection Handling
+    // MARK: - Connection Handling (TCP accept + outbound)
 
     private func handleNewConnection(_ connection: NWConnection) {
         self.peers.append(connection)
