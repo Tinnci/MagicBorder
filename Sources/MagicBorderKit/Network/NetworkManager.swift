@@ -86,7 +86,8 @@ public class MBNetworkManager: Observation.Observable {
     public var pairingDebugLog: [String] = []
     public var pairingError: String?
 
-    private var localMatrix: [String] = []
+    /// Spatial arrangement of machines in the grid.
+    public var arrangement: MachineArrangement = .init()
     private var lastEdgeSwitchTime: TimeInterval = 0
     private var edgeSwitchLockedUntil: TimeInterval = 0
     private var edgeSwitchPendingRelease = false
@@ -463,9 +464,18 @@ public class MBNetworkManager: Observation.Observable {
     }
 
     public func updateLocalMatrix(names: [String]) {
-        self.localMatrix = names.map {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let normalized = names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
+        let uuids: [UUID] = normalized.compactMap { name in
+            if name == self.localName.uppercased() { return MBNetworkManager.localMachineUUID }
+            return self.connectedMachines.first(where: { $0.name.uppercased() == name })?.id
         }
+        self.updateArrangement(machineIDs: uuids)
+    }
+
+    public func updateArrangement(machineIDs: [UUID]) {
+        self.arrangement = MachineArrangement(
+            slots: machineIDs,
+            columns: self.compatibilitySettings.matrixOneRow ? max(1, machineIDs.count) : 2)
     }
 
     public func handleLocalMouseEvent(_ event: CGEvent, type: CGEventType) {
@@ -539,19 +549,26 @@ public class MBNetworkManager: Observation.Observable {
             return
         }
 
-        guard let dir = direction, let target = nextMachineName(for: dir, from: self.localName)
+        guard let dir = direction else {
+            MBLogger.network.debug("Edge check: not near edge")
+            return
+        }
+
+        let effectiveArrangement = self.effectiveArrangement()
+        let arDir = self.arrangementDirection(for: dir)
+
+        guard let targetId = effectiveArrangement.next(
+            from: MBNetworkManager.localMachineUUID,
+            direction: arDir,
+            wraps: compatibilitySettings.matrixCircle,
+            oneRow: compatibilitySettings.matrixOneRow)
         else {
-            if direction == nil {
-                MBLogger.network.debug("Edge check: not near edge")
-            } else {
-                let now = CFAbsoluteTimeGetCurrent()
-                let shouldLog = self.lastNoTargetDirection != direction
-                    || now - self.lastNoTargetLogTime > 1.0
-                if shouldLog {
-                    self.lastNoTargetDirection = direction
-                    self.lastNoTargetLogTime = now
-                    MBLogger.network.debug("Edge check: no target for direction")
-                }
+            let now2 = CFAbsoluteTimeGetCurrent()
+            let shouldLog = self.lastNoTargetDirection != dir || now2 - self.lastNoTargetLogTime > 1.0
+            if shouldLog {
+                self.lastNoTargetDirection = dir
+                self.lastNoTargetLogTime = now2
+                MBLogger.network.debug("Edge check: no target for direction")
             }
             return
         }
@@ -563,8 +580,12 @@ public class MBNetworkManager: Observation.Observable {
         self.lastEdgeSwitchTime = now
         self.setEdgeSwitchGuard()
 
-        MBLogger.network.info("Edge switch triggered: \(String(describing: dir)) towards \(target)")
-        self.requestSwitch(toMachineNamed: target, reason: .edge)
+        MBLogger.network.info("Edge switch triggered: \(String(describing: dir)) towards \(targetId)")
+        if targetId == MBNetworkManager.localMachineUUID {
+            self.forceReturnToLocal(reason: "edge")
+        } else {
+            self.requestSwitch(to: targetId, reason: .edge)
+        }
     }
 
     public func handleRemoteMouseEvent(snapshot: EventSnapshot) {
@@ -623,13 +644,23 @@ public class MBNetworkManager: Observation.Observable {
         self.lastEdgeSwitchTime = now
         self.setEdgeSwitchGuard()
 
-        if let dir = direction,
-           let target = nextMachineName(for: dir, from: self.activeMachineName)
-        {
-            MBLogger.network.info(
-                "Remote edge switch triggered: \(String(describing: dir)) towards \(target)")
-            self.requestSwitch(toMachineNamed: target, reason: .edge)
-            return
+        if let dir = direction, let activeId = activeMachineId {
+            let effectiveArrangement = self.effectiveArrangement()
+            let arDir = self.arrangementDirection(for: dir)
+            if let targetId = effectiveArrangement.next(
+                from: activeId, direction: arDir,
+                wraps: compatibilitySettings.matrixCircle,
+                oneRow: compatibilitySettings.matrixOneRow)
+            {
+                MBLogger.network.info(
+                    "Remote edge switch: \(String(describing: dir)) → \(targetId)")
+                if targetId == MBNetworkManager.localMachineUUID {
+                    self.forceReturnToLocal(reason: "edge")
+                } else {
+                    self.requestSwitch(to: targetId, reason: .edge)
+                }
+                return
+            }
         }
 
         if direction != nil {
@@ -671,59 +702,32 @@ public class MBNetworkManager: Observation.Observable {
         self.compatibilityService?.sendMouseEvent(x: 32767, y: 32767, wheel: 0, flags: 0x200)
     }
 
-    private func nextMachineName(for direction: EdgeDirection, from currentName: String) -> String? {
-        var matrix = self.localMatrix
-        if matrix.isEmpty {
-            matrix =
-                [self.localName.uppercased()] + self.connectedMachines.map { $0.name.uppercased() }
-        }
-
-        guard let currentIndex = matrix.firstIndex(of: currentName.uppercased()) else { return nil }
-
-        if self.compatibilitySettings.matrixOneRow {
-            switch direction {
-            case .left:
-                let next = currentIndex - 1
-                if next >= 0 { return matrix[next] }
-                return self.compatibilitySettings.matrixCircle ? matrix.last : nil
-            case .right:
-                let next = currentIndex + 1
-                if next < matrix.count { return matrix[next] }
-                return self.compatibilitySettings.matrixCircle ? matrix.first : nil
-            default:
-                return nil
-            }
-        }
-
-        let columns = 2
-        let row = currentIndex / columns
-        let col = currentIndex % columns
-        let rows = Int(ceil(Double(matrix.count) / Double(columns)))
-
-        var newRow = row
-        var newCol = col
-
+    private func arrangementDirection(for direction: EdgeDirection) -> ArrangementDirection {
         switch direction {
         case .left:
-            newCol -= 1
+            .left
         case .right:
-            newCol += 1
+            .right
         case .up:
-            newRow -= 1
+            .up
         case .down:
-            newRow += 1
+            .down
+        }
+    }
+
+    private func effectiveArrangement() -> MachineArrangement {
+        let validIDs = Set([MBNetworkManager.localMachineUUID] + self.connectedMachines.map(\.id))
+
+        var slots = self.arrangement.slots.filter { validIDs.contains($0) }
+        for id in [MBNetworkManager.localMachineUUID] + self.connectedMachines.map(\.id) where !slots
+            .contains(id)
+        {
+            slots.append(id)
         }
 
-        if self.compatibilitySettings.matrixCircle {
-            if newCol < 0 { newCol = columns - 1 }
-            if newCol >= columns { newCol = 0 }
-            if newRow < 0 { newRow = rows - 1 }
-            if newRow >= rows { newRow = 0 }
-        }
-
-        let newIndex = newRow * columns + newCol
-        guard newIndex >= 0, newIndex < matrix.count else { return nil }
-        return matrix[newIndex]
+        return MachineArrangement(
+            slots: slots,
+            columns: self.compatibilitySettings.matrixOneRow ? max(1, slots.count) : max(1, self.arrangement.columns))
     }
 
     // MARK: - Connection Handling
