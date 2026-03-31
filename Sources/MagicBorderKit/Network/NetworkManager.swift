@@ -26,15 +26,12 @@ public class MBNetworkManager: Observation.Observable {
     let port: NWEndpoint.Port = 12345
     let serviceType = "_magicborder._tcp"
 
-    // Listener (inbound TCP acceptance; stays here until MBConnectionRegistry is extracted)
-    private var listener: NWListener?
+    // MARK: - Connection Registry
 
-    // Connections
-    public var peers: [NWConnection] = []
+    private var registry: MBConnectionRegistry?
 
-    /// Live connections keyed by machine UUID (modern protocol only).
-    /// MWB-protocol machines are managed entirely by MWBCompatibilityService.
-    private var machineConnections: [UUID: NWConnection] = [:]
+    /// Forwarded from registry — observable for the UI and for sending.
+    public var peers: [NWConnection] { self.registry?.peers ?? [] }
 
     public var connectedMachines: [Machine] = []
 
@@ -110,7 +107,11 @@ public class MBNetworkManager: Observation.Observable {
     init() {
         // Pull persisted compatibility key instead of overwriting it with a placeholder.
         self.securityKey = self.compatibilitySettings.securityKey
-        self.startAdvertising()
+
+        let reg = MBConnectionRegistry(serviceType: serviceType, localName: localName)
+        self.registry = reg
+        reg.startListening()
+        Task { @MainActor [weak self] in await self?.consumeConnectionEvents(reg) }
 
         let svc = MBDiscoveryService(serviceType: serviceType, localName: localName)
         self.discoveryService = svc
@@ -129,6 +130,23 @@ public class MBNetworkManager: Observation.Observable {
             switch event {
             case .found: self.discoveredPeers = svc.discoveredPeers
             case .lost: self.discoveredPeers = svc.discoveredPeers
+            }
+        }
+    }
+
+    private func consumeConnectionEvents(_ reg: MBConnectionRegistry) async {
+        for await event in reg.events {
+            switch event {
+            case .connectionReady(let conn):
+                Task {
+                    self.sendHandshake(connection: conn)
+                    self.receiveLoop(connection: conn)
+                }
+            case .connectionLost(let conn):
+                if let id = reg.machineId(for: conn) {
+                    self.connectedMachines.removeAll { $0.id == id }
+                    if self.activeMachineId == id { self.activeMachineId = nil }
+                }
             }
         }
     }
@@ -705,43 +723,14 @@ public class MBNetworkManager: Observation.Observable {
         return matrix[newIndex]
     }
 
-    // MARK: - Hosting (Server)
-
-    func startAdvertising() {
-        do {
-            let listener = try NWListener(using: .tcp)
-            self.listener = listener
-
-            listener.service = NWListener.Service(name: self.localName, type: self.serviceType)
-
-            listener.newConnectionHandler = { [weak self] connection in
-                MBLogger.network.info(
-                    "New connection received from \(String(describing: connection.endpoint))")
-                Task {
-                    await self?.handleNewConnection(connection)
-                }
-            }
-
-            listener.stateUpdateHandler = { newState in
-                MBLogger.network.info("Listener state: \(String(describing: newState))")
-            }
-
-            listener.start(queue: .main)
-        } catch {
-            MBLogger.network.error("Failed to create listener: \(error.localizedDescription)")
-        }
-    }
-
     // MARK: - Connection Handling
 
     public func connect(to result: NWBrowser.Result) {
-        let connection = NWConnection(to: result.endpoint, using: .tcp)
-        self.handleNewConnection(connection)
+        self.registry?.connect(to: result)
     }
 
     public func connect(to endpoint: NWEndpoint) {
-        let connection = NWConnection(to: endpoint, using: .tcp)
-        self.handleNewConnection(connection)
+        self.registry?.connect(to: endpoint)
     }
 
     public func connectToHost(ip: String, port: UInt16 = 15101) {
@@ -754,12 +743,19 @@ public class MBNetworkManager: Observation.Observable {
                 clipboardPort: self.compatibilitySettings.clipboardPort)
             return
         }
-
-        guard let nwPort = NWEndpoint.Port(rawValue: port) else { return }
-        let host = NWEndpoint.Host(ip)
         self.showToast(message: "正在连接 \(ip)", systemImage: "arrow.right.circle")
-        let connection = NWConnection(to: .hostPort(host: host, port: nwPort), using: .tcp)
-        self.handleNewConnection(connection)
+        self.registry?.connectToHost(ip, port: port)
+    }
+
+    public func disconnect(machineId: UUID) {
+        self.registry?.disconnect(machineId: machineId)
+        self.connectedMachines.removeAll { $0.id == machineId }
+        if self.activeMachineId == machineId { self.activeMachineId = nil }
+    }
+
+    public func reconnect(machineId: UUID) {
+        self.connectedMachines.removeAll { $0.id == machineId }
+        self.registry?.reconnect(machineId: machineId)
     }
 
     public func applyCompatibilitySettings() {
@@ -774,70 +770,6 @@ public class MBNetworkManager: Observation.Observable {
         self.compatibilityService?.updatePorts(
             messagePort: self.compatibilitySettings.messagePort,
             clipboardPort: self.compatibilitySettings.clipboardPort)
-    }
-
-    // MARK: - Connection Handling (TCP accept + outbound)
-
-    private func handleNewConnection(_ connection: NWConnection) {
-        self.peers.append(connection)
-
-        connection.stateUpdateHandler = { [weak self] state in
-            switch state {
-            case .ready:
-                MBLogger.network.info(
-                    "Connection ready: \(String(describing: connection.endpoint))")
-                Task {
-                    await self?.sendHandshake(connection: connection)
-                    await self?.receiveLoop(connection: connection)
-                }
-            case .failed(let error):
-                MBLogger.network.error("Connection failed: \(error.localizedDescription)")
-                Task {
-                    await self?.removeConnection(connection)
-                }
-            case .cancelled:
-                Task {
-                    await self?.removeConnection(connection)
-                }
-            default:
-                break
-            }
-        }
-
-        connection.start(queue: .main)
-    }
-
-    private func removeConnection(_ connection: NWConnection) {
-        if let index = peers.firstIndex(where: { $0 === connection }) {
-            self.peers.remove(at: index)
-        }
-        if let id = machineConnections.first(where: { $0.value === connection })?.key {
-            self.machineConnections.removeValue(forKey: id)
-            self.connectedMachines.removeAll { $0.id == id }
-        }
-    }
-
-    public func disconnect(machineId: UUID) {
-        if let conn = machineConnections[machineId] {
-            conn.cancel()
-        }
-        self.removeConnection(self.machineConnections[machineId] ?? NWConnection(
-            to: .hostPort(host: .ipv4(.any), port: 0), using: .tcp))
-        self.machineConnections.removeValue(forKey: machineId)
-        self.connectedMachines.removeAll { $0.id == machineId }
-        if self.activeMachineId == machineId {
-            self.activeMachineId = nil
-        }
-    }
-
-    public func reconnect(machineId: UUID) {
-        guard let conn = machineConnections[machineId] else { return }
-        let endpoint = conn.endpoint
-        conn.cancel()
-        self.machineConnections.removeValue(forKey: machineId)
-        self.connectedMachines.removeAll { $0.id == machineId }
-        let connection = NWConnection(to: endpoint, using: .tcp)
-        self.handleNewConnection(connection)
     }
 
     // MARK: - Sending
@@ -895,8 +827,7 @@ public class MBNetworkManager: Observation.Observable {
     }
 
     private func activeConnection() -> NWConnection? {
-        guard let activeId = activeMachineId else { return nil }
-        return self.machineConnections[activeId]
+        self.registry?.activeConnection(activeMachineId: self.activeMachineId)
     }
 
     private func sendCompatibilityInput(event: CGEvent, type: CGEventType) {
@@ -1132,7 +1063,7 @@ public class MBNetworkManager: Observation.Observable {
                         state: .connected,
                         screenSize: CGSize(width: info.screenWidth, height: info.screenHeight))
                     self.connectedMachines.append(machine)
-                    self.machineConnections[info.id] = connection
+                    self.registry?.register(connection, for: info.id)
                 }
             case .inputEvent(let event):
                 // Handle remote input
