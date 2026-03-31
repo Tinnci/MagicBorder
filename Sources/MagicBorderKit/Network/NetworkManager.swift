@@ -33,17 +33,11 @@ public class MBNetworkManager: Observation.Observable {
     // Connections
     public var peers: [NWConnection] = []
 
-    public struct ConnectedMachine: Identifiable, Equatable {
-        public let id: UUID
-        public let name: String
-        public let connection: NWConnection
+    /// Live connections keyed by machine UUID (modern protocol only).
+    /// MWB-protocol machines are managed entirely by MWBCompatibilityService.
+    private var machineConnections: [UUID: NWConnection] = [:]
 
-        public static func == (lhs: ConnectedMachine, rhs: ConnectedMachine) -> Bool {
-            lhs.id == rhs.id
-        }
-    }
-
-    public var connectedMachines: [ConnectedMachine] = []
+    public var connectedMachines: [Machine] = []
 
     public var availablePeers: [NWBrowser.Result] = []
 
@@ -131,8 +125,6 @@ public class MBNetworkManager: Observation.Observable {
     public var dragDropProgress: Double?
 
     private var compatibilityService: MWBCompatibilityService?
-    private var mwbIdToUuid: [Int32: UUID] = [:]
-    private var uuidToMwbId: [UUID: Int32] = [:]
 
     // Mouse Coalescing
     private var mouseCoalescer: MouseCoalescer?
@@ -182,21 +174,22 @@ public class MBNetworkManager: Observation.Observable {
         }
         service.onConnected = { [weak self] peer in
             guard let self else { return }
-            let id = self.uuid(for: peer.id)
-            if !self.connectedMachines.contains(where: { $0.id == id }) {
-                let machine = ConnectedMachine(
-                    id: id, name: peer.name,
-                    connection: NWConnection(
-                        to: .hostPort(host: .ipv4(.any), port: 15101), using: .tcp))
+            if !self.connectedMachines.contains(where: { $0.mwbPeerID == peer.id }) {
+                let machine = Machine(
+                    id: UUID(),
+                    name: peer.name,
+                    state: .connected,
+                    mwbPeerID: peer.id)
                 self.connectedMachines.append(machine)
             }
             self.showToast(message: "已连接 \(peer.name)", systemImage: "link")
         }
         service.onDisconnected = { [weak self] peer in
             guard let self else { return }
-            let id = self.uuid(for: peer.id)
-            self.connectedMachines.removeAll { $0.id == id }
-            if self.activeMachineId == id {
+            self.connectedMachines.removeAll { $0.mwbPeerID == peer.id }
+            if let id = self.connectedMachines.first(where: { $0.mwbPeerID == peer.id })?.id,
+               self.activeMachineId == id
+            {
                 self.forceReturnToLocal(reason: "disconnect")
             }
             self.showToast(message: "已断开 \(peer.name)", systemImage: "link.slash")
@@ -344,21 +337,15 @@ public class MBNetworkManager: Observation.Observable {
         return rep.representation(using: .png, properties: [:])
     }
 
-    private func uuid(for id: Int32) -> UUID {
-        if let existing = mwbIdToUuid[id] {
-            return existing
+    private func uuid(for mwbID: Int32) -> UUID {
+        if let existing = connectedMachines.first(where: { $0.mwbPeerID == mwbID }) {
+            return existing.id
         }
-        let newId = UUID()
-        self.mwbIdToUuid[id] = newId
-        self.uuidToMwbId[newId] = id
-        return newId
+        return UUID()
     }
 
     private func mwbId(for name: String) -> Int32? {
-        guard let machine = connectedMachines.first(where: { $0.name.uppercased() == name }) else {
-            return nil
-        }
-        return self.uuidToMwbId[machine.id]
+        self.connectedMachines.first(where: { $0.name.uppercased() == name })?.mwbPeerID
     }
 
     public func requestSwitch(to machineId: UUID, reason: SwitchReason = .manual) {
@@ -368,7 +355,7 @@ public class MBNetworkManager: Observation.Observable {
             return
         }
 
-        guard let mwbId = uuidToMwbId[machineId] else { return }
+        guard let mwbId = connectedMachines.first(where: { $0.id == machineId })?.mwbPeerID else { return }
         self.switchState = .switching
         if let machine = connectedMachines.first(where: { $0.id == machineId }) {
             self.showToast(
@@ -948,25 +935,31 @@ public class MBNetworkManager: Observation.Observable {
         if let index = peers.firstIndex(where: { $0 === connection }) {
             self.peers.remove(at: index)
         }
-        if let index = connectedMachines.firstIndex(where: { $0.connection === connection }) {
-            self.connectedMachines.remove(at: index)
+        if let id = machineConnections.first(where: { $0.value === connection })?.key {
+            self.machineConnections.removeValue(forKey: id)
+            self.connectedMachines.removeAll { $0.id == id }
         }
     }
 
     public func disconnect(machineId: UUID) {
-        guard let machine = connectedMachines.first(where: { $0.id == machineId }) else { return }
-        machine.connection.cancel()
-        self.removeConnection(machine.connection)
+        if let conn = machineConnections[machineId] {
+            conn.cancel()
+        }
+        self.removeConnection(self.machineConnections[machineId] ?? NWConnection(
+            to: .hostPort(host: .ipv4(.any), port: 0), using: .tcp))
+        self.machineConnections.removeValue(forKey: machineId)
+        self.connectedMachines.removeAll { $0.id == machineId }
         if self.activeMachineId == machineId {
             self.activeMachineId = nil
         }
     }
 
     public func reconnect(machineId: UUID) {
-        guard let machine = connectedMachines.first(where: { $0.id == machineId }) else { return }
-        let endpoint = machine.connection.endpoint
-        machine.connection.cancel()
-        self.removeConnection(machine.connection)
+        guard let conn = machineConnections[machineId] else { return }
+        let endpoint = conn.endpoint
+        conn.cancel()
+        self.machineConnections.removeValue(forKey: machineId)
+        self.connectedMachines.removeAll { $0.id == machineId }
         let connection = NWConnection(to: endpoint, using: .tcp)
         self.handleNewConnection(connection)
     }
@@ -1027,7 +1020,7 @@ public class MBNetworkManager: Observation.Observable {
 
     private func activeConnection() -> NWConnection? {
         guard let activeId = activeMachineId else { return nil }
-        return self.connectedMachines.first(where: { $0.id == activeId })?.connection
+        return self.machineConnections[activeId]
     }
 
     private func sendCompatibilityInput(event: CGEvent, type: CGEventType) {
@@ -1257,9 +1250,13 @@ public class MBNetworkManager: Observation.Observable {
                 }
 
                 if !self.connectedMachines.contains(where: { $0.id == info.id }) {
-                    let machine = ConnectedMachine(
-                        id: info.id, name: info.name, connection: connection)
+                    let machine = Machine(
+                        id: info.id,
+                        name: info.name,
+                        state: .connected,
+                        screenSize: CGSize(width: info.screenWidth, height: info.screenHeight))
                     self.connectedMachines.append(machine)
+                    self.machineConnections[info.id] = connection
                 }
             case .inputEvent(let event):
                 // Handle remote input

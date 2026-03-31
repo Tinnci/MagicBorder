@@ -103,9 +103,9 @@ struct MachineDropDelegate: DropDelegate {
 // Preview
 #Preview {
     @Previewable @State var demoMachines = [
-        Machine(id: UUID(), name: "MacBook Pro", isOnline: true),
-        Machine(id: UUID(), name: "Windows PC", isOnline: false),
-        Machine(id: UUID(), name: "Linux Server", isOnline: false),
+        Machine(id: UUID(), name: "MacBook Pro", state: .active),
+        Machine(id: UUID(), name: "Windows PC", state: .connected),
+        Machine(id: UUID(), name: "Linux Server", state: .discovered),
     ]
     MachineMatrixView(machines: $demoMachines)
         .padding()

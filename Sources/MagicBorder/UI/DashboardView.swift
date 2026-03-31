@@ -124,7 +124,7 @@ struct DashboardView: View {
                 Machine(
                     id: MagicBorderKit.MBNetworkManager.localMachineUUID,
                     name: Host.current().localizedName ?? "Local Mac",
-                    isOnline: true),
+                    state: .local),
             ]
         }
         .onChange(of: self.networkManager.compatibilitySettings.securityKey) { _, _ in
@@ -135,18 +135,16 @@ struct DashboardView: View {
         }
     }
 
-    private func updateMachines(from connected: [MBNetworkManager.ConnectedMachine]) {
+    private func updateMachines(from connected: [Machine]) {
         var newMachines = [
             Machine(
                 id: MagicBorderKit.MBNetworkManager.localMachineUUID,
                 name: Host.current().localizedName ?? "Local Mac",
-                isOnline: true),
+                state: .local),
         ]
-
         for peer in connected {
-            newMachines.append(Machine(id: peer.id, name: peer.name, isOnline: true))
+            newMachines.append(peer)
         }
-
         self.machines = newMachines
     }
 
