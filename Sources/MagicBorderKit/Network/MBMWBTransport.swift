@@ -10,6 +10,7 @@ public final class MBMWBTransport: MBTransport {
     private let localName: String
     private var settings: MBCompatibilitySettings
     private var continuation: AsyncStream<MBTransportEvent>.Continuation?
+    private var serviceEventsTask: Task<Void, Never>?
     private var peerIDs: [Int32: UUID] = [:]
     private var lastMouseLocation: CGPoint?
     private var mouseCoalescer: MouseCoalescer?
@@ -31,10 +32,13 @@ public final class MBMWBTransport: MBTransport {
         self.events = AsyncStream { continuation = $0 }
         self.continuation = continuation
         self.mouseCoalescer = MouseCoalescer(transport: self)
-        self.bindCallbacks()
+        self.serviceEventsTask = Task { @MainActor [weak self] in
+            await self?.consumeServiceEvents()
+        }
     }
 
     deinit {
+        self.serviceEventsTask?.cancel()
         self.continuation?.finish()
     }
 
@@ -189,69 +193,51 @@ public final class MBMWBTransport: MBTransport {
         }
     }
 
-    private func bindCallbacks() {
-        self.service.onConnected = { [weak self] peer in
-            guard let self else { return }
-            let id = self.uuid(for: peer.id)
-            self.continuation?.yield(
-                .machineConnected(Machine(id: id, name: peer.name, state: .connected, mwbPeerID: peer.id)))
-        }
-        self.service.onDisconnected = { [weak self] peer in
-            guard let self, let id = self.peerIDs[peer.id] else { return }
-            self.continuation?.yield(.machineDisconnected(id))
-        }
-        self.service.onRemoteMouse = { [weak self] event in
-            self?.continuation?.yield(.mwbMouse(event))
-        }
-        self.service.onRemoteKey = { [weak self] event in
-            self?.continuation?.yield(.mwbKey(event))
-        }
-        self.service.onMachineSwitched = { [weak self] peer in
-            guard let self else { return }
-            let id = peer.map { self.uuid(for: $0.id) }
-            self.continuation?.yield(.activeMachineChanged(id, peer?.name))
-        }
-        self.service.onMachineMatrix = { [weak self] matrix in
-            self?.continuation?.yield(.arrangementReceived(matrix))
-        }
-        self.service.onMatrixOptions = { [weak self] twoRow, swap in
-            self?.continuation?.yield(.arrangementOptionsUpdated(twoRow: twoRow, swap: swap))
-        }
-        self.service.onClipboardText = { [weak self] text in
-            self?.continuation?.yield(.clipboardText(text))
-        }
-        self.service.onClipboardImage = { [weak self] data in
-            self?.continuation?.yield(.clipboardImage(data))
-        }
-        self.service.onClipboardFiles = { [weak self] urls in
-            self?.continuation?.yield(.clipboardFiles(urls))
-        }
-        self.service.onHideMouse = { [weak self] in
-            self?.continuation?.yield(.hideMouse)
-        }
-        self.service.onDragDropBegin = { [weak self] sourceName in
-            self?.continuation?.yield(.dragDropStateChanged(.dragging, sourceName: sourceName))
-        }
-        self.service.onDragDropOperation = { [weak self] sourceName in
-            self?.continuation?.yield(.dragDropStateChanged(.dropping, sourceName: sourceName))
-        }
-        self.service.onDragDropEnd = { [weak self] in
-            self?.continuation?.yield(.dragDropStateChanged(nil, sourceName: nil))
-        }
-        self.service.onCaptureScreen = { [weak self] sourceId in
-            self?.continuation?.yield(.screenCaptureRequested(sourceId))
-        }
-        self.service.onReconnectAttempt = { [weak self] host in
-            self?.continuation?.yield(.reconnectAttempt(host))
-        }
-        self.service.onReconnectStopped = { [weak self] host in
-            self?.continuation?.yield(.reconnectStopped(host))
-        }
-        self.service.onLog = { [weak self] message in
-            self?.continuation?.yield(.log(message))
-        }
-        self.service.onError = { [weak self] message in
-            self?.continuation?.yield(.error(message))
+    private func consumeServiceEvents() async {
+        for await event in self.service.events {
+            switch event {
+            case .connected(let peer):
+                let id = self.uuid(for: peer.id)
+                self.continuation?.yield(.machineConnected(Machine(id: id, name: peer.name, state: .connected, mwbPeerID: peer.id)))
+            case .disconnected(let peer):
+                guard let id = self.peerIDs[peer.id] else { continue }
+                self.continuation?.yield(.machineDisconnected(id))
+            case .remoteMouse(let event):
+                self.continuation?.yield(.mwbMouse(event))
+            case .remoteKey(let event):
+                self.continuation?.yield(.mwbKey(event))
+            case .machineSwitched(let peer):
+                let id = peer.map { self.uuid(for: $0.id) }
+                self.continuation?.yield(.activeMachineChanged(id, peer?.name))
+            case .machineMatrix(let matrix):
+                self.continuation?.yield(.arrangementReceived(matrix))
+            case .matrixOptionsUpdated(let twoRow, let swap):
+                self.continuation?.yield(.arrangementOptionsUpdated(twoRow: twoRow, swap: swap))
+            case .clipboardText(let text):
+                self.continuation?.yield(.clipboardText(text))
+            case .clipboardImage(let data):
+                self.continuation?.yield(.clipboardImage(data))
+            case .clipboardFiles(let urls):
+                self.continuation?.yield(.clipboardFiles(urls))
+            case .hideMouse:
+                self.continuation?.yield(.hideMouse)
+            case .dragDropOperation(let sourceName):
+                self.continuation?.yield(.dragDropStateChanged(.dropping, sourceName: sourceName))
+            case .dragDropBegin(let sourceName):
+                self.continuation?.yield(.dragDropStateChanged(.dragging, sourceName: sourceName))
+            case .dragDropEnd:
+                self.continuation?.yield(.dragDropStateChanged(nil, sourceName: nil))
+            case .captureScreen(let sourceId):
+                self.continuation?.yield(.screenCaptureRequested(sourceId))
+            case .reconnectAttempt(let host):
+                self.continuation?.yield(.reconnectAttempt(host))
+            case .reconnectStopped(let host):
+                self.continuation?.yield(.reconnectStopped(host))
+            case .log(let message):
+                self.continuation?.yield(.log(message))
+            case .error(let message):
+                self.continuation?.yield(.error(message))
+            }
         }
     }
 

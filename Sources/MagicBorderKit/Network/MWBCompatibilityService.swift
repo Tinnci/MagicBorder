@@ -10,9 +10,31 @@ public enum MBProtocolMode: String {
     case mwbCompatibility
 }
 
-public struct MWBPeer: Equatable, Hashable {
+public struct MWBPeer: Equatable, Hashable, Sendable {
     public let id: Int32
     public let name: String
+}
+
+public enum MWBCompatibilityEvent: Sendable {
+    case connected(MWBPeer)
+    case disconnected(MWBPeer)
+    case remoteMouse(MWBMouseEvent)
+    case remoteKey(MWBKeyEvent)
+    case machineSwitched(MWBPeer?)
+    case machineMatrix([String])
+    case matrixOptionsUpdated(twoRow: Bool, swap: Bool)
+    case clipboardText(String)
+    case clipboardImage(Data)
+    case clipboardFiles([URL])
+    case hideMouse
+    case dragDropOperation(String?)
+    case dragDropBegin(String?)
+    case dragDropEnd
+    case captureScreen(Int32?)
+    case reconnectAttempt(String)
+    case reconnectStopped(String)
+    case log(String)
+    case error(String)
 }
 
 @MainActor
@@ -36,48 +58,42 @@ public final class MWBCompatibilityService: ObservableObject {
     private var reconnectAttempts: Int = 0
     private let maxReconnectAttempts: Int = 3
 
-    public var onConnected: ((MWBPeer) -> Void)?
-    public var onDisconnected: ((MWBPeer) -> Void)?
-    public var onRemoteMouse: ((MWBMouseEvent) -> Void)?
-    public var onRemoteKey: ((MWBKeyEvent) -> Void)?
-    public var onMachineSwitched: ((MWBPeer?) -> Void)?
-    public var onMachineMatrix: (([String]) -> Void)?
-    public var onMatrixOptions: ((Bool, Bool) -> Void)?
-    public var onClipboardText: ((String) -> Void)?
-    public var onClipboardImage: ((Data) -> Void)?
-    public var onClipboardFiles: (([URL]) -> Void)?
-    public var onHideMouse: (() -> Void)?
-    public var onDragDropOperation: ((String?) -> Void)?
-    public var onDragDropBegin: ((String?) -> Void)?
-    public var onDragDropEnd: (() -> Void)?
-    public var onCaptureScreen: ((Int32?) -> Void)?
-    public var onReconnectAttempt: ((String) -> Void)?
-    public var onReconnectStopped: ((String) -> Void)?
-    public var onLog: ((String) -> Void)?
-    public var onError: ((String) -> Void)?
+    public let events: AsyncStream<MWBCompatibilityEvent>
+    private let continuation: AsyncStream<MWBCompatibilityEvent>.Continuation
 
     public init(
         localName: String, localId: Int32, messagePort: UInt16 = 15101,
         clipboardPort: UInt16 = 15100)
     {
+        let stream = AsyncStream<MWBCompatibilityEvent>.makeStream()
+        self.events = stream.stream
+        self.continuation = stream.continuation
         self.localName = localName
         self.localId = localId
         self.messagePort = messagePort
         self.clipboardPort = clipboardPort
     }
 
+    deinit {
+        self.continuation.finish()
+    }
+
+    private func emit(_ event: MWBCompatibilityEvent) {
+        self.continuation.yield(event)
+    }
+
     public func start(securityKey: String) {
         let trimmed = securityKey.replacingOccurrences(of: " ", with: "")
         guard trimmed.count >= 16 else {
-            self.onLog?("MWB service not started: security key too short")
+            self.emit(.log("MWB service not started: security key too short"))
             return
         }
         self.currentSecurityKey = securityKey
         self.crypto.deriveKey(from: securityKey)
         self.startMessageListener()
         self.startClipboardListener()
-        self.onLog?(
-            "MWB service started. messagePort=\(self.messagePort) clipboardPort=\(self.clipboardPort)")
+        self.emit(.log(
+            "MWB service started. messagePort=\(self.messagePort) clipboardPort=\(self.clipboardPort)"))
     }
 
     public func stop() {
@@ -98,7 +114,7 @@ public final class MWBCompatibilityService: ObservableObject {
         let trimmed = key.replacingOccurrences(of: " ", with: "")
         guard trimmed.count >= 16 else {
             self.stop()
-            self.onLog?("MWB service stopped: security key too short")
+            self.emit(.log("MWB service stopped: security key too short"))
             return
         }
         self.currentSecurityKey = key
@@ -119,13 +135,13 @@ public final class MWBCompatibilityService: ObservableObject {
         guard !ip.isEmpty else { return }
         let trimmedKey = self.currentSecurityKey.replacingOccurrences(of: " ", with: "")
         guard trimmedKey.count >= 16 else {
-            self.onError?("Cannot connect: security key is invalid or empty")
+            self.emit(.error("Cannot connect: security key is invalid or empty"))
             return
         }
         let host = NWEndpoint.Host(ip)
 
-        self.onLog?(
-            "Connecting to \(ip):\(messagePort ?? self.messagePort) and \(ip):\(clipboardPort ?? self.clipboardPort)")
+        self.emit(.log(
+            "Connecting to \(ip):\(messagePort ?? self.messagePort) and \(ip):\(clipboardPort ?? self.clipboardPort)"))
 
         self.lastConnectHost = ip
         self.lastConnectMessagePort = messagePort ?? self.messagePort
@@ -279,8 +295,8 @@ public final class MWBCompatibilityService: ObservableObject {
         do {
             guard let port = NWEndpoint.Port(rawValue: messagePort) else {
                 let message = "MWB invalid message port: \(messagePort)"
-                self.onError?(message)
-                self.onLog?(message)
+                self.emit(.error(message))
+                self.emit(.log(message))
                 return
             }
             let listener = try NWListener(using: .tcp, on: port)
@@ -293,8 +309,8 @@ public final class MWBCompatibilityService: ObservableObject {
             listener.start(queue: DispatchQueue.main)
         } catch {
             let message = "MWB message listener failed: \(error.localizedDescription)"
-            self.onError?(message)
-            self.onLog?(message)
+            self.emit(.error(message))
+            self.emit(.log(message))
         }
     }
 
@@ -302,8 +318,8 @@ public final class MWBCompatibilityService: ObservableObject {
         do {
             guard let port = NWEndpoint.Port(rawValue: clipboardPort) else {
                 let message = "MWB invalid clipboard port: \(clipboardPort)"
-                self.onError?(message)
-                self.onLog?(message)
+                self.emit(.error(message))
+                self.emit(.log(message))
                 return
             }
             let listener = try NWListener(using: .tcp, on: port)
@@ -316,8 +332,8 @@ public final class MWBCompatibilityService: ObservableObject {
             listener.start(queue: DispatchQueue.main)
         } catch {
             let message = "MWB clipboard listener failed: \(error.localizedDescription)"
-            self.onError?(message)
-            self.onLog?(message)
+            self.emit(.error(message))
+            self.emit(.log(message))
         }
     }
 
@@ -345,12 +361,12 @@ public final class MWBCompatibilityService: ObservableObject {
         }
 
         session.onError = { [weak self] message in
-            self?.onError?(message)
-            self?.onLog?(message)
+            self?.emit(.error(message))
+            self?.emit(.log(message))
         }
 
         session.onLog = { [weak self] message in
-            self?.onLog?(message)
+            self?.emit(.log(message))
         }
 
         session.onDisconnected = { [weak self, weak session] in
@@ -377,8 +393,8 @@ public final class MWBCompatibilityService: ObservableObject {
         self.clipboardSessions.removeAll { $0 === session }
 
         if let peer = session.peer {
-            self.onLog?("⚠ Connection lost from '\(peer.name)' (ID=\(peer.id))")
-            self.onDisconnected?(peer)
+            self.emit(.log("⚠ Connection lost from '\(peer.name)' (ID=\(peer.id))"))
+            self.emit(.disconnected(peer))
         }
 
         if session.kind == .message {
@@ -423,8 +439,8 @@ public final class MWBCompatibilityService: ObservableObject {
         else { return }
 
         if self.reconnectAttempts >= self.maxReconnectAttempts {
-            self.onLog?("⏹ Auto-reconnect stopped after \(self.maxReconnectAttempts) attempts")
-            self.onReconnectStopped?(host)
+            self.emit(.log("⏹ Auto-reconnect stopped after \(self.maxReconnectAttempts) attempts"))
+            self.emit(.reconnectStopped(host))
             return
         }
 
@@ -433,8 +449,8 @@ public final class MWBCompatibilityService: ObservableObject {
         self.reconnectTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.5))
             await MainActor.run { [weak self] in
-                self?.onLog?("⟳ Reconnecting to \(host)...")
-                self?.onReconnectAttempt?(host)
+                self?.emit(.log("⟳ Reconnecting to \(host)..."))
+                self?.emit(.reconnectAttempt(host))
                 self?.connectToHost(ip: host, messagePort: msgPort, clipboardPort: clipPort)
             }
         }
@@ -460,7 +476,7 @@ public final class MWBCompatibilityService: ObservableObject {
         case .handshake:
             if session.pendingPeerName == nil {
                 session.pendingPeerName = packet.machineName
-                self.onLog?("Handshake received from '\(packet.machineName)' (pending)")
+                self.emit(.log("Handshake received from '\(packet.machineName)' (pending)"))
             }
 
             var ack = packet
@@ -489,8 +505,8 @@ public final class MWBCompatibilityService: ObservableObject {
                 self.reconnectTask?.cancel()
 
                 if let peer = session.peer {
-                    self.onLog?("✓ HandshakeAck VERIFIED from '\(peer.name)' (ID=\(peer.id))")
-                    self.onConnected?(peer)
+                    self.emit(.log("✓ HandshakeAck VERIFIED from '\(peer.name)' (ID=\(peer.id))"))
+                    self.emit(.connected(peer))
                     self.dedupeSessions(using: session)
                     session.startHeartbeat(initial: true)
                     if session.kind == .message {
@@ -501,7 +517,7 @@ public final class MWBCompatibilityService: ObservableObject {
             } else if session.handshakeChallenge != nil {
                 session.handshakeAckFailures += 1
                 if session.handshakeAckFailures == 1 {
-                    self.onLog?("✗ HandshakeAck FAILED verification")
+                    self.emit(.log("✗ HandshakeAck FAILED verification"))
                 }
             }
         case .hello:
@@ -509,7 +525,7 @@ public final class MWBCompatibilityService: ObservableObject {
                 session.peer = MWBPeer(id: packet.src, name: packet.machineName)
             }
             if let peer = session.peer {
-                self.onConnected?(peer)
+                self.emit(.connected(peer))
             }
             session.sendHeartbeatAck()
         case .hi, .awake, .heartbeat, .heartbeatEx:
@@ -517,7 +533,7 @@ public final class MWBCompatibilityService: ObservableObject {
                 session.peer = MWBPeer(id: packet.src, name: packet.machineName)
             }
             if let peer = session.peer {
-                self.onConnected?(peer)
+                self.emit(.connected(peer))
             }
         case .heartbeatExL2:
             session.sendHeartbeatExL3()
@@ -525,14 +541,14 @@ public final class MWBCompatibilityService: ObservableObject {
             break
         case .byeBye:
             if let peer = session.peer {
-                self.onDisconnected?(peer)
+                self.emit(.disconnected(peer))
             }
         case .clipboard, .clipboardPush:
             if session.kind == .clipboard {
                 session.peer = MWBPeer(id: packet.src, name: packet.machineName)
                 if let peer = session.peer {
-                    self.onLog?("Clipboard handshake received from '\(peer.name)' (ID=\(peer.id))")
-                    self.onConnected?(peer)
+                    self.emit(.log("Clipboard handshake received from '\(peer.name)' (ID=\(peer.id))"))
+                    self.emit(.connected(peer))
                 }
                 session.sendClipboardHandshake(push: packet.type == .clipboardPush)
             }
@@ -540,10 +556,10 @@ public final class MWBCompatibilityService: ObservableObject {
             let event = MWBMouseEvent(
                 x: packet.mouseX, y: packet.mouseY, wheel: packet.mouseWheel,
                 flags: packet.mouseFlags)
-            self.onRemoteMouse?(event)
+            self.emit(.remoteMouse(event))
         case .keyboard:
             let event = MWBKeyEvent(keyCode: packet.keyCode, flags: packet.keyFlags)
-            self.onRemoteKey?(event)
+            self.emit(.remoteKey(event))
         case .clipboardText:
             session.appendClipboardChunk(packet.clipboardPayload, isImage: false)
         case .clipboardImage:
@@ -551,9 +567,9 @@ public final class MWBCompatibilityService: ObservableObject {
         case .clipboardDataEnd:
             if let payload = session.consumeClipboardPayload() {
                 if payload.isImage {
-                    self.onClipboardImage?(payload.data)
+                    self.emit(.clipboardImage(payload.data))
                 } else if let text = decodeClipboardText(payload.data) {
-                    self.onClipboardText?(text)
+                    self.emit(.clipboardText(text))
                 }
             }
         case .clipboardAsk:
@@ -562,36 +578,36 @@ public final class MWBCompatibilityService: ObservableObject {
             self.sendClipboardFromPasteboard()
         case .clipboardDragDrop, .explorerDragDrop:
             session.appendDragDropChunk(packet.clipboardPayload)
-            self.onDragDropBegin?(session.peer?.name)
+            self.emit(.dragDropBegin(session.peer?.name))
         case .clipboardDragDropOperation:
-            self.onDragDropOperation?(session.peer?.name)
+            self.emit(.dragDropOperation(session.peer?.name))
         case .clipboardDragDropEnd:
             if let payload = session.consumeDragDropPayload(),
                let urls = decodeFileDrop(payload)
             {
-                self.onClipboardFiles?(urls)
+                self.emit(.clipboardFiles(urls))
             }
-            self.onDragDropEnd?()
+            self.emit(.dragDropEnd)
         case .machineSwitched:
-            self.onMachineSwitched?(session.peer)
+            self.emit(.machineSwitched(session.peer))
         case .nextMachine:
-            self.onMachineSwitched?(session.peer)
+            self.emit(.machineSwitched(session.peer))
         case .hideMouse:
-            self.onHideMouse?()
+            self.emit(.hideMouse)
         case .captureScreenCommand:
-            self.onCaptureScreen?(packet.src)
+            self.emit(.captureScreen(packet.src))
         case .matrix:
             // Basic matrix info: machineName field contains a CSV on some builds
             let matrix = packet.machineName.split(separator: ",").map {
                 $0.trimmingCharacters(in: .whitespaces)
             }
             if !matrix.isEmpty {
-                self.onMachineMatrix?(matrix)
+                self.emit(.machineMatrix(matrix))
             }
             let flags = packet.rawType & 0x0F
             let swap = (flags & 0x02) != 0
             let twoRow = (flags & 0x04) != 0
-            self.onMatrixOptions?(twoRow, swap)
+            self.emit(.matrixOptionsUpdated(twoRow: twoRow, swap: swap))
         default:
             break
         }
@@ -660,14 +676,14 @@ public final class MWBCompatibilityService: ObservableObject {
     }
 }
 
-public struct MWBMouseEvent {
+public struct MWBMouseEvent: Sendable {
     public let x: Int32
     public let y: Int32
     public let wheel: Int32
     public let flags: Int32
 }
 
-public struct MWBKeyEvent {
+public struct MWBKeyEvent: Sendable {
     public let keyCode: Int32
     public let flags: Int32
 }
