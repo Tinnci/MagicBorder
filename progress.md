@@ -25,3 +25,12 @@
 - 重写机器详情页，移除未实现的固定应用、显示设置、输入设置和假刷新。
 - 机器矩阵拖拽改为 drop 时一次性重排，避免 hover 期间反复同步矩阵。
 - 验证：`swiftformat --lint` 针对改动 UI 文件通过；`swift test` 通过 7 个测试；`swift build` 通过。
+- 提交 UI/功能对齐改动：`1920dd5 fix: align UI controls with implemented behavior`。
+- 完成第二轮 10 项功能缺陷排序。
+- 修复 MWB 发现设备连接时 host 字符串转换不可靠的问题。
+- 文件发送和文件拖放现在尊重 `transferFiles`。
+- 远端剪贴板/文件事件现在尊重 `shareClipboard` 和 `transferFiles`。
+- `MBModernTransport` registry 事件任务现在可取消。
+- 兼容设置端口读取现在防御无效持久化值。
+- 安全密钥校验现在会显示成功状态；重新生成密钥改为无连字符 32 字符 UUID 内容。
+- 新增 `ClipboardBridgeTests` 和 `MWBTransportTests`，覆盖传输开关与 MWB host 字符串转换。

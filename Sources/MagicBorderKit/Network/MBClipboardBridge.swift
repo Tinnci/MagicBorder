@@ -47,15 +47,17 @@ public final class MBClipboardBridge: Observation.Observable {
         }
     }
 
-    public func handleTransportEvent(_ event: MBTransportEvent) -> Bool {
+    public func handleTransportEvent(_ event: MBTransportEvent, settings: MBCompatibilitySettings) -> Bool {
         switch event {
         case .clipboardText(let text):
+            guard settings.shareClipboard else { return true }
             MBInputManager.shared.ignoreNextClipboardChange()
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
             self.showToast("收到剪贴板文本", "doc.on.clipboard")
             return true
         case .clipboardImage(let data):
+            guard settings.shareClipboard else { return true }
             MBInputManager.shared.ignoreNextClipboardChange()
             if let image = NSImage(data: data) {
                 NSPasteboard.general.clearContents()
@@ -64,6 +66,7 @@ public final class MBClipboardBridge: Observation.Observable {
             }
             return true
         case .clipboardFiles(let urls):
+            guard settings.shareClipboard, settings.transferFiles else { return true }
             MBInputManager.shared.ignoreNextClipboardChange()
             NSPasteboard.general.clearContents()
             NSPasteboard.general.writeObjects(urls as [NSURL])
@@ -76,6 +79,7 @@ public final class MBClipboardBridge: Observation.Observable {
             }
             return true
         case .dragDropStateChanged(let state, let sourceName):
+            guard settings.transferFiles else { return true }
             self.dragDropState = state
             self.dragDropSourceName = sourceName
             if state == nil {

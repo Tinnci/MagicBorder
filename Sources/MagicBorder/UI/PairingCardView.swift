@@ -43,7 +43,7 @@ struct PairingCardView: View {
                 .buttonStyle(.bordered)
 
                 Button(MBLocalized("Regenerate")) {
-                    self.securityKey = String(UUID().uuidString.prefix(16))
+                    self.securityKey = Self.generatedSecurityKey()
                     self.showCopyMessage(MBLocalized("New key generated"))
                 }
                 .buttonStyle(.bordered)
@@ -57,6 +57,10 @@ struct PairingCardView: View {
                 Spacer()
             }
         }
+    }
+
+    private static func generatedSecurityKey() -> String {
+        String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(32))
     }
 
     private func showCopyMessage(_ text: String) {

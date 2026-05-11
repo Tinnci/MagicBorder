@@ -66,8 +66,8 @@ public final class MBMWBTransport: MBTransport {
     }
 
     public func connect(to endpoint: NWEndpoint) {
-        if case .hostPort(let host, _) = endpoint {
-            self.connectToHost(ip: host.debugDescription, port: self.settings.messagePort)
+        if case .hostPort(let host, let port) = endpoint {
+            self.connectToHost(ip: Self.hostString(host), port: port.rawValue)
         }
     }
 
@@ -75,11 +75,24 @@ public final class MBMWBTransport: MBTransport {
         self.connect(to: result.endpoint)
     }
 
-    public func connectToHost(ip: String, port _: UInt16) {
+    public func connectToHost(ip: String, port: UInt16) {
         self.service.connectToHost(
             ip: ip,
-            messagePort: self.settings.messagePort,
+            messagePort: port,
             clipboardPort: self.settings.clipboardPort)
+    }
+
+    static func hostString(_ host: NWEndpoint.Host) -> String {
+        switch host {
+        case .name(let name, _):
+            return name
+        case .ipv4(let address):
+            return "\(address)"
+        case .ipv6(let address):
+            return "\(address)"
+        @unknown default:
+            return "\(host)"
+        }
     }
 
     public func disconnect(machine _: Machine) {}

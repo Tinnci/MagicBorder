@@ -24,3 +24,18 @@ Ranked by severity:
 8. Several visible status labels in machine cards/details were hard-coded or under-localized.
 9. `DispatchQueue.main.asyncAfter` is used for transient UI messages and can update view state after the originating view is no longer relevant.
 10. Some SwiftUI APIs still use older styling patterns such as `cornerRadius`, and a few icon-only buttons rely on help text rather than explicit labels.
+
+## Second UI and Function Implementation Review
+
+Ranked by severity:
+
+1. `MBMWBTransport.connect(to:)` converted `NWEndpoint.Host` with `debugDescription`, which can produce a non-connectable host string from discovered peers.
+2. Manual file sending and drag/drop file sending ignored `transferFiles`, so users could send files even when the feature was disabled.
+3. Incoming clipboard and file events ignored `shareClipboard` / `transferFiles`, so disabled settings only applied to local outgoing changes.
+4. `MBModernTransport.start()` created an untracked task that could keep consuming registry events after stop/deinit.
+5. Persisted invalid port values could trap during `UInt16(...)` initialization.
+6. Security key validation never surfaced a success state even though the UI checked for one.
+7. Generated security keys used a UUID prefix that could include hyphens, reducing useful key material.
+8. Direct MWB endpoint connect ignored the endpoint port and always used configured message port.
+9. File-drop overlay accepted remote drag/drop state even when file transfer was disabled.
+10. Remaining transient UI messages use `DispatchQueue.main.asyncAfter`; they work, but cancellable `Task` state would be cleaner.

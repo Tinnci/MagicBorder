@@ -288,10 +288,11 @@ struct ArrangementDetailView: View {
         Task { @MainActor in
             let urls = await self.extractFileURLs(from: providers)
             guard !urls.isEmpty else { return }
-            self.networkManager.sendFileDrop(urls)
-            self.networkManager.showToast(
-                message: MBLocalized("Sent %@", arguments: [self.fileSummary(urls)]),
-                systemImage: "tray.and.arrow.up")
+            if self.networkManager.sendFileDrop(urls) {
+                self.networkManager.showToast(
+                    message: MBLocalized("Sent %@", arguments: [self.fileSummary(urls)]),
+                    systemImage: "tray.and.arrow.up")
+            }
         }
         return true
     }

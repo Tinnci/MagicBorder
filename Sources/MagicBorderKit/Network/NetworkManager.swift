@@ -148,7 +148,7 @@ public class MBNetworkManager: Observation.Observable {
     private func consumeTransportEvents(_ transport: MBTransport?) async {
         guard let transport else { return }
         for await event in transport.events {
-            if self.clipboardBridge.handleTransportEvent(event) {
+            if self.clipboardBridge.handleTransportEvent(event, settings: self.compatibilitySettings) {
                 continue
             }
             switch event {
@@ -284,8 +284,15 @@ public class MBNetworkManager: Observation.Observable {
         self.currentTransport.sendMachineMatrix(names: names, twoRow: twoRow, swap: swap)
     }
 
-    public func sendFileDrop(_ urls: [URL]) {
+    @discardableResult
+    public func sendFileDrop(_ urls: [URL]) -> Bool {
+        guard self.compatibilitySettings.transferFiles else {
+            self.showToast(message: "文件传输已关闭", systemImage: "nosign")
+            return false
+        }
+        guard !urls.isEmpty else { return false }
         self.currentTransport.sendFileDrop(urls)
+        return true
     }
 
     public func presentFilePickerAndSend() {

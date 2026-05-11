@@ -13,6 +13,7 @@ public final class MBModernTransport: MBTransport {
     private let localName: String
     private var securityKey: String
     private var continuation: AsyncStream<MBTransportEvent>.Continuation?
+    private var registryEventsTask: Task<Void, Never>?
 
     public init(
         serviceType: String,
@@ -31,12 +32,13 @@ public final class MBModernTransport: MBTransport {
     }
 
     deinit {
+        self.registryEventsTask?.cancel()
         self.continuation?.finish()
     }
 
     public func start() {
         self.registry.startListening()
-        Task { @MainActor [weak self] in
+        self.registryEventsTask = Task { @MainActor [weak self] in
             guard let self else { return }
             for await event in self.registry.events {
                 switch event {
@@ -53,6 +55,8 @@ public final class MBModernTransport: MBTransport {
     }
 
     public func stop() {
+        self.registryEventsTask?.cancel()
+        self.registryEventsTask = nil
         self.registry.stopListening()
     }
 

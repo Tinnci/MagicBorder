@@ -104,16 +104,8 @@ public final class MBCompatibilitySettings {
             self.defaults.object(forKey: Keys.edgeSwitchSafeMargin) as? Double ?? 16
         self.matrixOneRow = self.defaults.object(forKey: Keys.matrixOneRow) as? Bool ?? true
         self.matrixCircle = self.defaults.object(forKey: Keys.matrixCircle) as? Bool ?? false
-        if self.defaults.object(forKey: Keys.messagePort) != nil {
-            self.messagePort = UInt16(self.defaults.integer(forKey: Keys.messagePort))
-        } else {
-            self.messagePort = 15101
-        }
-        if self.defaults.object(forKey: Keys.clipboardPort) != nil {
-            self.clipboardPort = UInt16(self.defaults.integer(forKey: Keys.clipboardPort))
-        } else {
-            self.clipboardPort = 15100
-        }
+        self.messagePort = Self.portValue(forKey: Keys.messagePort, defaultValue: 15101)
+        self.clipboardPort = Self.portValue(forKey: Keys.clipboardPort, defaultValue: 15100)
         self.securityKey = self.defaults.string(forKey: Keys.securityKey) ?? ""
         self.wrapCursor = self.defaults.object(forKey: Keys.wrapCursor) as? Bool ?? true
     }
@@ -124,7 +116,16 @@ public final class MBCompatibilitySettings {
             self.validationMessage = "Security Key 至少 16 位"
             return false
         }
-        self.validationMessage = nil
+        self.validationMessage = "Success"
         return true
+    }
+
+    private static func portValue(forKey key: String, defaultValue: UInt16) -> UInt16 {
+        let value = UserDefaults.standard.integer(forKey: key)
+        guard UserDefaults.standard.object(forKey: key) != nil,
+              value >= Int(UInt16.min),
+              value <= Int(UInt16.max)
+        else { return defaultValue }
+        return UInt16(value)
     }
 }
