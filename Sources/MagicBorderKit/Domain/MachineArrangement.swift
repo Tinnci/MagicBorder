@@ -87,9 +87,10 @@ public struct MachineArrangement: Codable, Equatable, Sendable {
             }
         }
 
-        let row = currentIndex / self.columns
-        let col = currentIndex % self.columns
-        let rowCount = Int((slots.count + self.columns - 1) / self.columns)
+        let columnCount = max(1, self.columns)
+        let row = currentIndex / columnCount
+        let col = currentIndex % columnCount
+        let rowCount = Int((slots.count + columnCount - 1) / columnCount)
 
         var newRow = row
         var newCol = col
@@ -102,13 +103,13 @@ public struct MachineArrangement: Codable, Equatable, Sendable {
         }
 
         if wraps {
-            if newCol < 0 { newCol = self.columns - 1 }
-            if newCol >= self.columns { newCol = 0 }
+            if newCol < 0 { newCol = columnCount - 1 }
+            if newCol >= columnCount { newCol = 0 }
             if newRow < 0 { newRow = rowCount - 1 }
             if newRow >= rowCount { newRow = 0 }
         }
 
-        let newIndex = newRow * self.columns + newCol
+        let newIndex = newRow * columnCount + newCol
         guard newIndex >= 0, newIndex < self.slots.count else { return nil }
         return self.slots[newIndex]
     }

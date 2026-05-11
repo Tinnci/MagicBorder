@@ -278,6 +278,12 @@ public class MBNetworkManager: Observation.Observable {
         self.currentTransport.sendMachineMatrix(names: uppercased, twoRow: twoRow, swap: swap)
     }
 
+    public func syncArrangement(machineIDs: [UUID], twoRow: Bool, swap: Bool) {
+        self.updateArrangement(machineIDs: machineIDs)
+        let names = self.visibleMachines().map { $0.name.uppercased() }
+        self.currentTransport.sendMachineMatrix(names: names, twoRow: twoRow, swap: swap)
+    }
+
     public func sendFileDrop(_ urls: [URL]) {
         self.currentTransport.sendFileDrop(urls)
     }
@@ -307,6 +313,14 @@ public class MBNetworkManager: Observation.Observable {
         self.arrangement = MachineArrangement(
             slots: machineIDs,
             columns: self.compatibilitySettings.matrixOneRow ? max(1, machineIDs.count) : 2)
+    }
+
+    public func visibleMachines() -> [Machine] {
+        MachineListResolver.visibleMachines(
+            localMachineID: MBNetworkManager.localMachineUUID,
+            localMachineName: self.localName,
+            connectedMachines: self.connectedMachines,
+            arrangement: self.arrangement)
     }
 
     public func handleLocalMouseEvent(_ event: CGEvent, type: CGEventType) {

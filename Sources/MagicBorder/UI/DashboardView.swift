@@ -121,45 +121,21 @@ struct DashboardView: View {
         .frame(minWidth: 800, minHeight: 600)
         .onAppear {
             self.networkManager.applyCompatibilitySettings()
-
-            self.machines = [
-                Machine(
-                    id: MagicBorderKit.MBNetworkManager.localMachineUUID,
-                    name: Host.current().localizedName ?? "Local Mac",
-                    state: .local),
-            ]
+            self.updateMachines()
         }
         .onChange(of: self.networkManager.compatibilitySettings.securityKey) { _, _ in
             self.networkManager.applyCompatibilitySettings()
         }
-        .onChange(of: self.networkManager.connectedMachines, initial: true) { _, connected in
-            self.updateMachines(from: connected)
+        .onChange(of: self.networkManager.connectedMachines, initial: true) { _, _ in
+            self.updateMachines()
         }
         .onChange(of: self.networkManager.arrangement) { _, _ in
-            self.updateMachines(from: self.networkManager.connectedMachines)
+            self.updateMachines()
         }
     }
 
-    private func updateMachines(from connected: [Machine]) {
-        let localMachine = Machine(
-            id: MagicBorderKit.MBNetworkManager.localMachineUUID,
-            name: Host.current().localizedName ?? "Local Mac",
-            state: .local)
-        let allMachines = [localMachine] + connected
-        let machineByID = Dictionary(uniqueKeysWithValues: allMachines.map { ($0.id, $0) })
-
-        var ordered: [Machine] = []
-        for id in self.networkManager.arrangement.slots {
-            if let machine = machineByID[id] {
-                ordered.append(machine)
-            }
-        }
-
-        for machine in allMachines where !ordered.contains(where: { $0.id == machine.id }) {
-            ordered.append(machine)
-        }
-
-        self.machines = ordered
+    private func updateMachines() {
+        self.machines = self.networkManager.visibleMachines()
     }
 
     private var defaultOverlayPreferences: MBOverlayPreferences {
@@ -288,9 +264,8 @@ struct ArrangementDetailView: View {
             }
         }
         .onChange(of: self.machines) { _, newValue in
-            networkManager.updateArrangement(machineIDs: newValue.map(\.id))
-            networkManager.sendMachineMatrix(
-                names: newValue.map(\.name),
+            networkManager.syncArrangement(
+                machineIDs: newValue.map(\.id),
                 twoRow: self.matrixTwoRowBinding.wrappedValue,
                 swap: self.matrixSwapBinding.wrappedValue)
         }
@@ -303,9 +278,8 @@ struct ArrangementDetailView: View {
     }
 
     private func syncMatrix() {
-        self.networkManager.updateArrangement(machineIDs: self.machines.map(\.id))
-        self.networkManager.sendMachineMatrix(
-            names: self.machines.map(\.name),
+        self.networkManager.syncArrangement(
+            machineIDs: self.machines.map(\.id),
             twoRow: self.matrixTwoRowBinding.wrappedValue,
             swap: self.matrixSwapBinding.wrappedValue)
     }
