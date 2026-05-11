@@ -2,6 +2,7 @@ import MagicBorderKit
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
     private let settingsWindowWidth: CGFloat = 500
 
     var body: some View {
@@ -25,6 +26,15 @@ struct SettingsView: View {
                 .frame(width: self.settingsWindowWidth)
         }
         .padding(20) // Global padding for visually pleasing layout
+        .onChange(of: self.networkManager.compatibilitySettings.securityKey) { _, _ in
+            self.networkManager.applyCompatibilitySettings()
+        }
+        .onChange(of: self.networkManager.compatibilitySettings.messagePort) { _, _ in
+            self.networkManager.applyCompatibilitySettings()
+        }
+        .onChange(of: self.networkManager.compatibilitySettings.clipboardPort) { _, _ in
+            self.networkManager.applyCompatibilitySettings()
+        }
     }
 }
 
@@ -59,8 +69,6 @@ private struct SettingsSection<Content: View>: View {
 private struct GeneralSettingsTab: View {
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
     @Environment(MBAccessibilityService.self) private var accessibilityService
-    @AppStorage("wrapMouse") private var wrapMouse = false
-    @AppStorage("hideMouse") private var hideMouse = true
     @AppStorage("captureInput") private var captureInput = true
 
     private var matrixModeBinding: Binding<Int> {
@@ -150,8 +158,9 @@ private struct GeneralSettingsTab: View {
                 }
                 .padding(.leading, 24) // Indent controls slightly
 
-                Toggle(MBLocalized("Wrap Mouse at Screen Edge"), isOn: self.$wrapMouse)
-                Toggle(MBLocalized("Hide Mouse at Edge"), isOn: self.$hideMouse)
+                Toggle(
+                    MBLocalized("Wrap Mouse at Screen Edge"),
+                    isOn: $networkManager.compatibilitySettings.wrapCursor)
                 Toggle(
                     MBLocalized("Relative Mouse Movement"),
                     isOn: $networkManager.compatibilitySettings.moveMouseRelatively)
@@ -219,24 +228,24 @@ private struct NetworkSettingsTab: View {
                     GridRow {
                         Text(MBLocalized("Message Port"))
                         TextField(
-                            MBLocalized("20000"),
+                            MBLocalized("15101"),
                             value: $networkManager.compatibilitySettings.messagePort,
                             formatter: NumberFormatter())
                             .monospacedDigit()
                             .frame(width: 80)
-                        Text(MBLocalized("Default: 20000"))
+                        Text(MBLocalized("Default: 15101"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     GridRow {
                         Text(MBLocalized("Clipboard Port"))
                         TextField(
-                            MBLocalized("20001"),
+                            MBLocalized("15100"),
                             value: $networkManager.compatibilitySettings.clipboardPort,
                             formatter: NumberFormatter())
                             .monospacedDigit()
                             .frame(width: 80)
-                        Text(MBLocalized("Default: 20001"))
+                        Text(MBLocalized("Default: 15100"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

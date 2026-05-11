@@ -146,11 +146,14 @@ struct PairingFlowView: View {
     }
 
     private func startConnecting() {
-        guard !self.ipAddress.isEmpty, self.isKeyValid else { return }
+        let trimmedIP = self.ipAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedIP.isEmpty, self.isKeyValid else { return }
+        self.ipAddress = trimmedIP
+        self.networkManager.applyCompatibilitySettings()
         self.networkManager.clearPairingDiagnostics()
         self.networkManager.appendPairingLog("User initiated connect")
         self.isConnecting = true
-        self.networkManager.connectToHost(ip: self.ipAddress)
+        self.networkManager.connectToHost(ip: trimmedIP)
         self.showStatus(text: MBLocalized("Connection request sent"), style: .neutral)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             self.isConnecting = false
@@ -197,8 +200,9 @@ private struct WindowsPairingGuideView: View {
                             Text(self.securityKey)
                                 .font(.system(.body, design: .monospaced))
                                 .padding(6)
-                                .background(Color.primary.opacity(0.05))
-                                .cornerRadius(4)
+                                .background(
+                                    Color.primary.opacity(0.05),
+                                    in: RoundedRectangle(cornerRadius: 4))
                                 .textSelection(.enabled)
 
                             if self.isKeyValid {
@@ -254,7 +258,7 @@ private struct ConnectionStatusBadge: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(Material.thin)
-        .cornerRadius(8)
+        .clipShape(.rect(cornerRadius: 8))
     }
 }
 

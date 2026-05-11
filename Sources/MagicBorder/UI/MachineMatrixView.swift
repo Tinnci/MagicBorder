@@ -79,22 +79,17 @@ struct MachineDropDelegate: DropDelegate {
     @Binding var machines: [Machine]
     @Binding var draggingItem: Machine?
 
-    func dropEntered(info _: DropInfo) {
-        guard let draggingItem else { return }
-
-        if self.item != draggingItem {
-            if let from = machines.firstIndex(of: draggingItem),
-               let to = machines.firstIndex(of: item)
-            {
-                withAnimation {
-                    self.machines.move(
-                        fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
-                }
+    func performDrop(info _: DropInfo) -> Bool {
+        if let draggingItem, self.item != draggingItem,
+           let from = machines.firstIndex(of: draggingItem),
+           let to = machines.firstIndex(of: item)
+        {
+            withAnimation {
+                self.machines.move(
+                    fromOffsets: IndexSet(integer: from),
+                    toOffset: to > from ? to + 1 : to)
             }
         }
-    }
-
-    func performDrop(info _: DropInfo) -> Bool {
         self.draggingItem = nil
         return true
     }
