@@ -405,10 +405,18 @@ public class MBNetworkManager: Observation.Observable {
         self.currentTransport.connect(to: endpoint)
     }
 
-    public func connectToHost(ip: String, port: UInt16 = 15101) {
+    public func connectToHost(ip: String, port: UInt16? = nil) {
         guard !ip.isEmpty else { return }
+        let resolvedPort = port ?? {
+            switch self.protocolMode {
+            case .modern:
+                15101
+            case .mwbCompatibility:
+                self.compatibilitySettings.messagePort
+            }
+        }()
         self.showToast(message: "正在连接 \(ip)", systemImage: "arrow.right.circle")
-        self.currentTransport.connectToHost(ip: ip, port: port)
+        self.currentTransport.connectToHost(ip: ip, port: resolvedPort)
     }
 
     public func disconnect(machineId: UUID) {

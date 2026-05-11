@@ -138,6 +138,19 @@ final class NetworkManagerTests: XCTestCase {
         XCTAssertTrue(compatibility.calls.contains(.connectHost("192.168.1.10", 15101)))
     }
 
+    func testConnectToHostUsesConfiguredCompatibilityPortByDefault() {
+        let compatibility = FakeTransport()
+        let settings = MBCompatibilitySettings(defaults: UserDefaults(suiteName: "MagicBorderTests.\(UUID().uuidString)")!)
+        settings.messagePort = 15111
+        let manager = MBNetworkManager.testing(
+            compatibilitySettings: settings,
+            compatibilityTransport: compatibility)
+
+        manager.connectToHost(ip: "192.168.1.10")
+
+        XCTAssertTrue(compatibility.calls.contains(.connectHost("192.168.1.10", 15111)))
+    }
+
     private func waitUntil(
         timeout: TimeInterval = 1,
         condition: @escaping @MainActor () -> Bool)

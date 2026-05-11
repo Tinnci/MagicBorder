@@ -38,7 +38,29 @@ public enum MWBCompatibilityEvent: Sendable {
 }
 
 @MainActor
-public final class MWBCompatibilityService: ObservableObject {
+public protocol MWBCompatibilityServicing: AnyObject {
+    var events: AsyncStream<MWBCompatibilityEvent> { get }
+    func start(securityKey: String)
+    func stop()
+    func updateSecurityKey(_ key: String)
+    func updatePorts(messagePort: UInt16, clipboardPort: UInt16)
+    func connectToHost(ip: String, messagePort: UInt16?, clipboardPort: UInt16?)
+    func disconnect(peerId: Int32)
+    func reconnect(peerId: Int32)
+    func sendMachineMatrix(_ machines: [String], twoRow: Bool, swap: Bool)
+    func sendNextMachine(targetId: Int32?)
+    func stopAutoReconnect()
+    func sendMouseEvent(x: Int32, y: Int32, wheel: Int32, flags: Int32)
+    func sendKeyEvent(keyCode: Int32, flags: Int32)
+    func sendHideMouse()
+    func sendClipboardText(_ text: String)
+    func sendClipboardImage(_ data: Data)
+    func sendClipboardImage(_ data: Data, to peerId: Int32?)
+    func sendFileDrop(_ urls: [URL])
+}
+
+@MainActor
+public final class MWBCompatibilityService: ObservableObject, MWBCompatibilityServicing {
     private let crypto = MWBCrypto.shared
     private var messageListener: NWListener?
     private var clipboardListener: NWListener?
@@ -57,6 +79,7 @@ public final class MWBCompatibilityService: ObservableObject {
     private var reconnectTask: Task<Void, Never>?
     private var reconnectAttempts: Int = 0
     private let maxReconnectAttempts: Int = 3
+    private var reconnectSuppressedSessions: Set<ObjectIdentifier> = []
 
     public let events: AsyncStream<MWBCompatibilityEvent>
     private let continuation: AsyncStream<MWBCompatibilityEvent>.Continuation
@@ -153,6 +176,37 @@ public final class MWBCompatibilityService: ObservableObject {
             let connection = NWConnection(to: .hostPort(host: host, port: port), using: .tcp)
             self.handleNewConnection(connection, kind: .message, isOutbound: true)
         }
+    }
+
+    public func disconnect(peerId: Int32) {
+        let sessions = self.sessions(for: peerId)
+        guard !sessions.isEmpty else { return }
+        self.stopAutoReconnect()
+        for session in sessions where session.kind == .message {
+            self.reconnectSuppressedSessions.insert(ObjectIdentifier(session))
+        }
+        for session in sessions {
+            session.close()
+        }
+    }
+
+    public func reconnect(peerId: Int32) {
+        let sessions = self.sessions(for: peerId)
+        guard let messageSession = sessions.first(where: { $0.kind == .message }),
+              let (host, messagePort) = Self.hostPort(from: messageSession.connection.endpoint)
+        else { return }
+
+        for session in sessions where session.kind == .message {
+            self.reconnectSuppressedSessions.insert(ObjectIdentifier(session))
+        }
+        for session in sessions {
+            session.close()
+        }
+
+        self.connectToHost(
+            ip: host,
+            messagePort: messagePort,
+            clipboardPort: self.lastConnectClipboardPort ?? self.clipboardPort)
     }
 
     private func connectClipboardIfNeeded() {
@@ -432,6 +486,9 @@ public final class MWBCompatibilityService: ObservableObject {
 
     private func scheduleReconnectIfNeeded(for session: MWBSession) {
         guard session.isOutbound, session.kind == .message else { return }
+        if self.reconnectSuppressedSessions.remove(ObjectIdentifier(session)) != nil {
+            return
+        }
         guard self.messageSessions.isEmpty else { return }
         guard let host = lastConnectHost,
               let msgPort = lastConnectMessagePort,
@@ -463,6 +520,28 @@ public final class MWBCompatibilityService: ObservableObject {
         self.lastConnectHost = nil
         self.lastConnectMessagePort = nil
         self.lastConnectClipboardPort = nil
+    }
+
+    private func sessions(for peerId: Int32) -> [MWBSession] {
+        (self.messageSessions + self.clipboardSessions).filter { $0.peer?.id == peerId }
+    }
+
+    private static func hostPort(from endpoint: NWEndpoint) -> (String, UInt16)? {
+        guard case .hostPort(let host, let port) = endpoint else { return nil }
+        return (Self.hostString(host), port.rawValue)
+    }
+
+    private static func hostString(_ host: NWEndpoint.Host) -> String {
+        switch host {
+        case .name(let name, _):
+            return name
+        case .ipv4(let address):
+            return "\(address)"
+        case .ipv6(let address):
+            return "\(address)"
+        @unknown default:
+            return "\(host)"
+        }
     }
 
     private func handlePacket(_ packet: MWBPacket, from session: MWBSession) {

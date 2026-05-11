@@ -6,7 +6,7 @@ import Network
 public final class MBMWBTransport: MBTransport {
     public var events: AsyncStream<MBTransportEvent>
 
-    private let service: MWBCompatibilityService
+    private let service: any MWBCompatibilityServicing
     private let localName: String
     private var settings: MBCompatibilitySettings
     private var continuation: AsyncStream<MBTransportEvent>.Continuation?
@@ -18,15 +18,20 @@ public final class MBMWBTransport: MBTransport {
     public init(
         localName: String,
         localID: Int32,
-        settings: MBCompatibilitySettings)
+        settings: MBCompatibilitySettings,
+        service: (any MWBCompatibilityServicing)? = nil)
     {
         self.localName = localName
         self.settings = settings
-        self.service = MWBCompatibilityService(
-            localName: localName,
-            localId: localID,
-            messagePort: settings.messagePort,
-            clipboardPort: settings.clipboardPort)
+        if let service {
+            self.service = service
+        } else {
+            self.service = MWBCompatibilityService(
+                localName: localName,
+                localId: localID,
+                messagePort: settings.messagePort,
+                clipboardPort: settings.clipboardPort)
+        }
 
         var continuation: AsyncStream<MBTransportEvent>.Continuation?
         self.events = AsyncStream { continuation = $0 }
@@ -95,9 +100,15 @@ public final class MBMWBTransport: MBTransport {
         }
     }
 
-    public func disconnect(machine _: Machine) {}
+    public func disconnect(machine: Machine) {
+        guard let peerID = machine.mwbPeerID else { return }
+        self.service.disconnect(peerId: peerID)
+    }
 
-    public func reconnect(machine _: Machine) {}
+    public func reconnect(machine: Machine) {
+        guard let peerID = machine.mwbPeerID else { return }
+        self.service.reconnect(peerId: peerID)
+    }
 
     public func activate(machine: Machine?) {
         self.service.sendNextMachine(targetId: machine?.mwbPeerID)

@@ -14,5 +14,10 @@ Package.resolved
 .idea/
 .gemini/
 
+# Agent session artifacts
+/task_plan.md
+/findings.md
+/progress.md
+
 # Examples (Reference code)
 examples_MouseWithoutBorders/
