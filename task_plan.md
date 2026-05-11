@@ -13,7 +13,7 @@
 - [complete] 7. 建立 fake transport / test settings 支撑层
 - [complete] 8. 补齐核心功能自动化验收测试与修复
 - [complete] 9. 运行格式、测试、构建验证
-- [in_progress] 10. 直接提交并推送 main
+- [complete] 10. 直接提交并推送 main
 
 ## Constraints
 - 尽量保持现有行为不变，避免无关重构
