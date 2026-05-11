@@ -34,3 +34,11 @@
 - 兼容设置端口读取现在防御无效持久化值。
 - 安全密钥校验现在会显示成功状态；重新生成密钥改为无连字符 32 字符 UUID 内容。
 - 新增 `ClipboardBridgeTests` 和 `MWBTransportTests`，覆盖传输开关与 MWB host 字符串转换。
+- 开始执行全功能五层验收与缺陷补全计划；用户要求直接在 `main` 上提交并推送。
+- 新增 `docs/quality/feature-acceptance.md`，按 State/Effect/Protocol/Remote/Recovery 标注核心功能验收状态。
+- 新增 `docs/quality/manual-e2e-checklist.md`，覆盖 macOS 权限、同网段发现、Windows MWB、输入、剪贴板、文件、断线、错误端口和错误 key。
+- 新增 fake transport 测试支撑，并为 `MBNetworkManager` 增加 internal 测试注入入口。
+- 修复 `MBNetworkManager.securityKey` 初始化期访问未初始化 transport 的崩溃风险。
+- 修复兼容设置接受端口 `0` 的配置缺陷。
+- 新增 `CompatibilitySettingsTests`、`NetworkManagerTests`、`SessionCoordinatorTests`、`InputManagerTests`，扩展 `MachineArrangementTests` 和 `ClipboardBridgeTests`，测试总数提升到 49。
+- 验证：`swiftformat --lint` 通过；`swift test` 通过 49 个测试；`swift build` 通过。

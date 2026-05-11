@@ -39,3 +39,18 @@ Ranked by severity:
 8. Direct MWB endpoint connect ignored the endpoint port and always used configured message port.
 9. File-drop overlay accepted remote drag/drop state even when file transfer was disabled.
 10. Remaining transient UI messages use `DispatchQueue.main.asyncAfter`; they work, but cancellable `Task` state would be cleaner.
+
+## Five-Layer Acceptance Review
+
+Ranked by severity:
+
+1. Real Windows/MWB protocol compatibility cannot be fully proven locally; it is now tracked as `Manual Required` in `docs/quality/manual-e2e-checklist.md`.
+2. `MBNetworkManager` construction started side effects immediately and was not injectable, blocking reliable transport/session tests.
+3. `securityKey` could trigger transport reconfiguration before transports were initialized, causing a crash in isolated construction.
+4. Persisted port value `0` was accepted even though it cannot be used as a remote MWB connection port.
+5. Network connection, disconnect, active-machine, settings apply, file-drop, matrix sync, and diagnostics behavior lacked fake-transport tests.
+6. Session switching had insufficient tests for manual local fallback, unknown targets, relative mouse center suppression, and transport-driven nil active machine.
+7. Input event protocol conversion had no direct tests for mouse, click, scroll, key, flagsChanged, or Mac-to-Windows key mapping.
+8. Machine arrangement mutation had limited coverage for move, insert, remove, and two-row navigation.
+9. Modern transport file and matrix remote behavior is still partial because `MBModernTransport.sendFileDrop` is empty.
+10. Menu bar and system-permission flows remain manual UI verification items because they depend on macOS UI/TCC behavior.

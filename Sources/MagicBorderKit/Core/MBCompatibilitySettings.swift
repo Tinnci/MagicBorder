@@ -21,7 +21,7 @@ public final class MBCompatibilitySettings {
         static let wrapCursor = "compat.wrapCursor"
     }
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
 
     public var shareClipboard: Bool {
         didSet { self.defaults.set(self.shareClipboard, forKey: Keys.shareClipboard) }
@@ -89,7 +89,8 @@ public final class MBCompatibilitySettings {
 
     public var validationMessage: String?
 
-    public init() {
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         self.shareClipboard = self.defaults.object(forKey: Keys.shareClipboard) as? Bool ?? true
         self.transferFiles = self.defaults.object(forKey: Keys.transferFiles) as? Bool ?? false
         self.switchByMouse = self.defaults.object(forKey: Keys.switchByMouse) as? Bool ?? true
@@ -104,8 +105,14 @@ public final class MBCompatibilitySettings {
             self.defaults.object(forKey: Keys.edgeSwitchSafeMargin) as? Double ?? 16
         self.matrixOneRow = self.defaults.object(forKey: Keys.matrixOneRow) as? Bool ?? true
         self.matrixCircle = self.defaults.object(forKey: Keys.matrixCircle) as? Bool ?? false
-        self.messagePort = Self.portValue(forKey: Keys.messagePort, defaultValue: 15101)
-        self.clipboardPort = Self.portValue(forKey: Keys.clipboardPort, defaultValue: 15100)
+        self.messagePort = Self.portValue(
+            forKey: Keys.messagePort,
+            defaultValue: 15101,
+            defaults: defaults)
+        self.clipboardPort = Self.portValue(
+            forKey: Keys.clipboardPort,
+            defaultValue: 15100,
+            defaults: defaults)
         self.securityKey = self.defaults.string(forKey: Keys.securityKey) ?? ""
         self.wrapCursor = self.defaults.object(forKey: Keys.wrapCursor) as? Bool ?? true
     }
@@ -120,10 +127,15 @@ public final class MBCompatibilitySettings {
         return true
     }
 
-    private static func portValue(forKey key: String, defaultValue: UInt16) -> UInt16 {
-        let value = UserDefaults.standard.integer(forKey: key)
-        guard UserDefaults.standard.object(forKey: key) != nil,
-              value >= Int(UInt16.min),
+    private static func portValue(
+        forKey key: String,
+        defaultValue: UInt16,
+        defaults: UserDefaults)
+        -> UInt16
+    {
+        let value = defaults.integer(forKey: key)
+        guard defaults.object(forKey: key) != nil,
+              value > 0,
               value <= Int(UInt16.max)
         else { return defaultValue }
         return UInt16(value)

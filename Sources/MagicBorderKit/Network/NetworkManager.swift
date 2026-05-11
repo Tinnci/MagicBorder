@@ -32,9 +32,9 @@ public class MBNetworkManager: Observation.Observable {
     public var discoveredPeers: [DiscoveredPeer] = []
 
     // Identity
-    let localID = UUID()
-    let localName = Host.current().localizedName ?? "Unknown Mac"
-    let localNumericID: Int32 = .random(in: 1000 ... 999999)
+    let localID: UUID
+    let localName: String
+    let localNumericID: Int32
     public var localDisplayName: String { self.localName }
 
     public private(set) var sessionCoordinator: MBSessionCoordinator!
@@ -51,7 +51,7 @@ public class MBNetworkManager: Observation.Observable {
     public var protocolMode: MBProtocolMode = .mwbCompatibility
     public var securityKey: String = "" {
         didSet {
-            self.currentTransport.updateConfiguration(
+            self.currentTransportIfAvailable?.updateConfiguration(
                 securityKey: self.securityKey,
                 settings: self.compatibilitySettings)
         }
@@ -67,14 +67,41 @@ public class MBNetworkManager: Observation.Observable {
     private var toastTask: Task<Void, Never>?
     public private(set) var clipboardBridge: MBClipboardBridge!
 
-    private var modernTransport: MBModernTransport!
-    private var compatibilityTransport: MBMWBTransport!
-    private var currentTransport: MBTransport {
+    private var modernTransport: (any MBTransport)!
+    private var compatibilityTransport: (any MBTransport)!
+    private var currentTransportIfAvailable: (any MBTransport)? {
         self.protocolMode == .modern ? self.modernTransport : self.compatibilityTransport
     }
 
-    init() {
-        let settings = MBCompatibilitySettings()
+    private var currentTransport: any MBTransport {
+        self.protocolMode == .modern ? self.modernTransport : self.compatibilityTransport
+    }
+
+    convenience init() {
+        self.init(
+            localName: Host.current().localizedName ?? "Unknown Mac",
+            localID: UUID(),
+            localNumericID: .random(in: 1000 ... 999999),
+            compatibilitySettings: MBCompatibilitySettings(),
+            startDiscovery: true,
+            startTransports: true,
+            startClipboardMonitoring: true)
+    }
+
+    init(
+        localName: String,
+        localID: UUID,
+        localNumericID: Int32,
+        compatibilitySettings settings: MBCompatibilitySettings,
+        modernTransport: (any MBTransport)? = nil,
+        compatibilityTransport: (any MBTransport)? = nil,
+        startDiscovery: Bool,
+        startTransports: Bool,
+        startClipboardMonitoring: Bool)
+    {
+        self.localName = localName
+        self.localID = localID
+        self.localNumericID = localNumericID
         self.compatibilitySettings = settings
         self.securityKey = ""
         self.connectedMachines = []
@@ -83,12 +110,12 @@ public class MBNetworkManager: Observation.Observable {
         self.pairingError = nil
         self.arrangement = .init()
 
-        self.modernTransport = MBModernTransport(
+        self.modernTransport = modernTransport ?? MBModernTransport(
             serviceType: self.serviceType,
             localName: self.localName,
             localID: self.localID,
             securityKey: settings.securityKey)
-        self.compatibilityTransport = MBMWBTransport(
+        self.compatibilityTransport = compatibilityTransport ?? MBMWBTransport(
             localName: self.localName,
             localID: self.localNumericID,
             settings: settings)
@@ -119,21 +146,46 @@ public class MBNetworkManager: Observation.Observable {
         // Pull persisted compatibility key instead of overwriting it with a placeholder.
         self.securityKey = settings.securityKey
 
-        let svc = MBDiscoveryService(serviceType: serviceType, localName: localName)
-        self.discoveryService = svc
-        svc.startBrowsing()
-        svc.startSubnetScanning()
-        Task { @MainActor [weak self] in await self?.consumeDiscoveryEvents(svc) }
+        if startDiscovery {
+            let svc = MBDiscoveryService(serviceType: serviceType, localName: localName)
+            self.discoveryService = svc
+            svc.startBrowsing()
+            svc.startSubnetScanning()
+            Task { @MainActor [weak self] in await self?.consumeDiscoveryEvents(svc) }
+        }
 
         // Break circular dep: InputManager calls back through MBInputRoutingDelegate.
         MBInputManager.shared.routingDelegate = self
 
-        self.modernTransport.start()
-        self.compatibilityTransport.start()
+        if startTransports {
+            self.modernTransport.start()
+            self.compatibilityTransport.start()
+        }
         Task { @MainActor [weak self] in await self?.consumeTransportEvents(self?.modernTransport) }
         Task { @MainActor [weak self] in await self?.consumeTransportEvents(self?.compatibilityTransport) }
         self.configureCompatibility()
-        self.setupPasteboardMonitoring()
+        if startClipboardMonitoring {
+            self.setupPasteboardMonitoring()
+        }
+    }
+
+    static func testing(
+        localName: String = "Test Mac",
+        compatibilitySettings: MBCompatibilitySettings = MBCompatibilitySettings(),
+        modernTransport: (any MBTransport)? = nil,
+        compatibilityTransport: (any MBTransport)? = nil)
+        -> MBNetworkManager
+    {
+        MBNetworkManager(
+            localName: localName,
+            localID: UUID(),
+            localNumericID: 1234,
+            compatibilitySettings: compatibilitySettings,
+            modernTransport: modernTransport,
+            compatibilityTransport: compatibilityTransport,
+            startDiscovery: false,
+            startTransports: false,
+            startClipboardMonitoring: false)
     }
 
     private func consumeDiscoveryEvents(_ svc: MBDiscoveryService) async {
