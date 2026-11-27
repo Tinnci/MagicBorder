@@ -3,7 +3,7 @@ public import Foundation
 /// Selects which wire protocol the network stack uses.
 /// Use `.mwbCompatibility` to interoperate with Windows Mouse Without Borders.
 /// Use `.modern` for Mac-to-Mac connections using the native JSON/Bonjour protocol.
-public enum MBProtocolMode: String, Sendable {
+public enum MBProtocolMode: String, CaseIterable, Codable, Sendable {
     case modern
     case mwbCompatibility
 }

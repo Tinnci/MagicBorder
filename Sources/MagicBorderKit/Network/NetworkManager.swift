@@ -16,6 +16,9 @@ public final class MBNetworkManager: Observation.Observable {
         let securityKey: String
         let messagePort: UInt16
         let clipboardPort: UInt16
+        let modifierRemapMode: MBModifierRemapMode
+        let invertRemoteScroll: Bool
+        let remoteScrollSpeed: Double
     }
 
     public let port: NWEndpoint.Port = 12345
@@ -46,19 +49,23 @@ public final class MBNetworkManager: Observation.Observable {
     public var protocolMode: MBProtocolMode = .mwbCompatibility
     public var securityKey: String = ""
     public var compatibilitySettings: MBCompatibilitySettings
+    public let savedHosts: MBSavedHostStore
 
+    public var isConnectingHost: String?
     public var pairingDebugLog: [String] = []
     public var pairingError: String?
 
     /// Spatial arrangement of machines in the grid.
     public var arrangement: MachineArrangement = .init()
 
-    private var discoveryService: MBDiscoveryService?
+    var discoveryService: MBDiscoveryService?
     private let discoveryEventsTask = CancellableTaskSlot()
     private let modernEventsTask = CancellableTaskSlot()
     private let compatibilityEventsTask = CancellableTaskSlot()
     private let toastTask = CancellableTaskSlot()
+    private let connectingTimeoutTask = CancellableTaskSlot()
     private var lastAppliedConfiguration: AppliedConfiguration?
+    private var pendingManualHost: String?
 
     private let modernTransport: any MBTransport
     private let compatibilityTransport: any MBTransport
@@ -97,6 +104,8 @@ public final class MBNetworkManager: Observation.Observable {
         clock: any ClockProviding = SystemClock(),
         cursorController: any CursorControlling = SystemCursorController(),
         screenCapturer: any ScreenCapturing = CGScreenCapturer(),
+        savedHosts: MBSavedHostStore? = nil,
+        isFrontmostAppFullscreen: @escaping () -> Bool = { false },
         startDiscovery: Bool,
         startTransports: Bool,
         startClipboardMonitoring: Bool
@@ -105,7 +114,9 @@ public final class MBNetworkManager: Observation.Observable {
         self.localID = localID
         self.localNumericID = localNumericID
         self.compatibilitySettings = settings
+        self.protocolMode = settings.protocolMode
         self.securityKey = settings.securityKey
+        self.savedHosts = savedHosts ?? MBSavedHostStore()
         self.inputManager = inputManager
         self.screenCapturer = screenCapturer
         self.cursorController = cursorController
@@ -153,7 +164,8 @@ public final class MBNetworkManager: Observation.Observable {
                     let remoteTransport = owner.currentTransport as? any MBRemoteActivationTransport
                 else { return }
                 remoteTransport.centerRemoteCursor()
-            })
+            },
+            isFrontmostAppFullscreen: isFrontmostAppFullscreen)
 
         self.sessionCoordinator = MBSessionCoordinator(
             localMachineID: MBNetworkManager.localMachineUUID,
@@ -217,6 +229,7 @@ public final class MBNetworkManager: Observation.Observable {
         self.modernEventsTask.cancel()
         self.compatibilityEventsTask.cancel()
         self.toastTask.cancel()
+        self.connectingTimeoutTask.cancel()
     }
 
     static func testing(
@@ -231,7 +244,9 @@ public final class MBNetworkManager: Observation.Observable {
         cursorController: any CursorControlling,
         screenCapturer: any ScreenCapturing
     ) -> MBNetworkManager {
-        MBNetworkManager(
+        let suiteName = "MagicBorderTests.hosts.\(UUID().uuidString)"
+        let hostDefaults = UserDefaults(suiteName: suiteName) ?? .standard
+        return MBNetworkManager(
             localName: localName,
             localID: UUID(),
             localNumericID: 1234,
@@ -244,6 +259,7 @@ public final class MBNetworkManager: Observation.Observable {
             clock: clock,
             cursorController: cursorController,
             screenCapturer: screenCapturer,
+            savedHosts: MBSavedHostStore(defaults: hostDefaults),
             startDiscovery: false,
             startTransports: false,
             startClipboardMonitoring: false)
@@ -269,6 +285,17 @@ public final class MBNetworkManager: Observation.Observable {
     private func handleNonClipboardEvent(_ event: MBTransportEvent) {
         switch event {
         case .machineConnected(let machine):
+            self.connectingTimeoutTask.cancel()
+            self.isConnectingHost = nil
+            if let host = self.pendingManualHost {
+                self.pendingManualHost = nil
+                self.savedHosts.recordConnection(
+                    address: host,
+                    name: machine.name,
+                    protocolMode: self.protocolMode,
+                    messagePort: self.compatibilitySettings.messagePort,
+                    clipboardPort: self.compatibilitySettings.clipboardPort)
+            }
             if let index = self.connectedMachines.firstIndex(where: { $0.id == machine.id }) {
                 self.connectedMachines[index] = machine
             } else {
@@ -309,6 +336,8 @@ public final class MBNetworkManager: Observation.Observable {
         case .log(let message):
             self.appendPairingLog(message)
         case .error(let message):
+            self.connectingTimeoutTask.cancel()
+            self.isConnectingHost = nil
             self.setPairingError(message)
         }
     }
@@ -439,7 +468,8 @@ public final class MBNetworkManager: Observation.Observable {
     }
 
     public func connectToHost(ip: String, port: UInt16? = nil) {
-        guard !ip.isEmpty else { return }
+        let trimmed = ip.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
         let resolvedPort =
             port
             ?? {
@@ -450,8 +480,18 @@ public final class MBNetworkManager: Observation.Observable {
                     self.compatibilitySettings.messagePort
                 }
             }()
-        self.showToast(.connecting(ip))
-        self.currentTransport.connectToHost(ip: ip, port: resolvedPort)
+        self.pendingManualHost = trimmed
+        self.isConnectingHost = trimmed
+        let timeoutTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(6))
+            guard !Task.isCancelled, let self else { return }
+            if self.isConnectingHost == trimmed {
+                self.isConnectingHost = nil
+            }
+        }
+        self.connectingTimeoutTask.replace(with: timeoutTask)
+        self.showToast(.connecting(trimmed))
+        self.currentTransport.connectToHost(ip: trimmed, port: resolvedPort)
     }
 
     public func disconnect(machineId: UUID) {
@@ -465,16 +505,26 @@ public final class MBNetworkManager: Observation.Observable {
     }
 
     public func applyCompatibilitySettings() {
-        self.inputManager.syncTapConfiguration(wrapCursor: self.compatibilitySettings.wrapCursor)
+        self.inputManager.syncTapConfiguration(
+            MBTapConfiguration(
+                wrapCursor: self.compatibilitySettings.wrapCursor,
+                escapeMode: self.compatibilitySettings.escapeMode,
+                globalHotkeysEnabled: self.compatibilitySettings.globalHotkeysEnabled))
+        self.inputManager.setIgnoreConcealedClipboard(
+            self.compatibilitySettings.ignoreConcealedClipboard)
 
         let nextConfig = AppliedConfiguration(
-            protocolMode: self.protocolMode,
+            protocolMode: self.compatibilitySettings.protocolMode,
             securityKey: self.compatibilitySettings.securityKey,
             messagePort: self.compatibilitySettings.messagePort,
-            clipboardPort: self.compatibilitySettings.clipboardPort)
+            clipboardPort: self.compatibilitySettings.clipboardPort,
+            modifierRemapMode: self.compatibilitySettings.modifierRemapMode,
+            invertRemoteScroll: self.compatibilitySettings.invertRemoteScroll,
+            remoteScrollSpeed: self.compatibilitySettings.remoteScrollSpeed)
         guard nextConfig != self.lastAppliedConfiguration else { return }
         self.lastAppliedConfiguration = nextConfig
 
+        self.protocolMode = nextConfig.protocolMode
         self.securityKey = nextConfig.securityKey
         self.currentTransport.updateConfiguration(
             securityKey: nextConfig.securityKey,

@@ -2,7 +2,11 @@ import CoreGraphics
 
 /// Converts local `EventSnapshot` instances into Modern-protocol `RemoteEvent` payloads.
 public enum MBRemoteEventConverter: Sendable {
-    public static func convert(snapshot: EventSnapshot) -> RemoteEvent? {
+    public static func convert(
+        snapshot: EventSnapshot,
+        invertScroll: Bool = false,
+        scrollSpeed: Double = 1.0
+    ) -> RemoteEvent? {
         switch snapshot.type {
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
             RemoteEvent.mouseMove(at: snapshot.location)
@@ -19,8 +23,8 @@ public enum MBRemoteEventConverter: Sendable {
                 type: .scrollWheel,
                 point: nil,
                 keyCode: nil,
-                deltaX: Int(snapshot.scrollDeltaX),
-                deltaY: Int(snapshot.scrollDeltaY))
+                deltaX: Self.scaledScroll(snapshot.scrollDeltaX, invert: invertScroll, speed: scrollSpeed),
+                deltaY: Self.scaledScroll(snapshot.scrollDeltaY, invert: invertScroll, speed: scrollSpeed))
         case .keyDown:
             RemoteEvent.key(type: .keyDown, code: CGKeyCode(snapshot.keyCode))
         case .keyUp:
@@ -28,5 +32,16 @@ public enum MBRemoteEventConverter: Sendable {
         default:
             nil
         }
+    }
+
+    private static func scaledScroll(_ raw: Int64, invert: Bool, speed: Double) -> Int {
+        guard raw != 0 else { return 0 }
+        let clampedSpeed = max(0.25, min(3.0, speed))
+        let sign: Double = invert ? -1.0 : 1.0
+        let scaled = Int((Double(raw) * clampedSpeed * sign).rounded())
+        if scaled == 0 {
+            return raw > 0 ? (invert ? -1 : 1) : (invert ? 1 : -1)
+        }
+        return scaled
     }
 }

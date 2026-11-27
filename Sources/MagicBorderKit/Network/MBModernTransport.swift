@@ -12,6 +12,8 @@ public final class MBModernTransport: MBTransport {
     private let localID: UUID
     private let localName: String
     private var securityKey: String
+    private var invertScroll: Bool = false
+    private var scrollSpeed: Double = 1.0
     private let screenGeometry: any ScreenGeometryProviding
     private let codec = ModernPacketCodec()
     private let continuation: AsyncStream<MBTransportEvent>.Continuation
@@ -66,8 +68,10 @@ public final class MBModernTransport: MBTransport {
         self.registry.stopListening()
     }
 
-    public func updateConfiguration(securityKey: String, settings _: MBCompatibilitySettings) {
+    public func updateConfiguration(securityKey: String, settings: MBCompatibilitySettings) {
         self.securityKey = securityKey
+        self.invertScroll = settings.invertRemoteScroll
+        self.scrollSpeed = settings.remoteScrollSpeed
     }
 
     public func connect(to endpoint: NWEndpoint) {
@@ -93,7 +97,12 @@ public final class MBModernTransport: MBTransport {
     }
 
     public func sendRemoteInput(snapshot: EventSnapshot, activeMachineId: UUID?) {
-        guard let remoteEvent = MBRemoteEventConverter.convert(snapshot: snapshot) else { return }
+        guard
+            let remoteEvent = MBRemoteEventConverter.convert(
+                snapshot: snapshot,
+                invertScroll: self.invertScroll,
+                scrollSpeed: self.scrollSpeed)
+        else { return }
         self.sendPacket(.inputEvent(remoteEvent), activeMachineId: activeMachineId)
     }
 

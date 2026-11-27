@@ -2,12 +2,31 @@ public import CoreGraphics
 
 /// Pure bidirectional mapping between Windows Virtual-Key codes and macOS `CGKeyCode`s.
 public enum MBKeyCodeMapper: Sendable {
+    public static let windowsModifierKeyCodes: [Int32] = [0x10, 0x11, 0x12, 0x5B, 0x5C]
+
     public static func macKeyCode(forWindowsKeyCode winCode: Int32) -> CGKeyCode? {
         self.windowsToMacMap[Int(winCode)]
     }
 
     public static func windowsKeyCode(for macKeyCode: CGKeyCode) -> Int32? {
         self.macToWindowsMap[macKeyCode]
+    }
+
+    public static func windowsKeyCode(
+        for macKeyCode: CGKeyCode,
+        remapMode: MBModifierRemapMode
+    ) -> Int32? {
+        if remapMode == .swapCommandControl {
+            switch macKeyCode {
+            case 55, 54:  // Command -> Ctrl
+                return 0x11
+            case 59, 62:  // Control -> Windows Key
+                return 0x5B
+            default:
+                break
+            }
+        }
+        return self.windowsKeyCode(for: macKeyCode)
     }
 
     public static func isModifierDown(macKeyCode: CGKeyCode, flags: CGEventFlags) -> Bool {
@@ -122,7 +141,11 @@ public enum MBKeyCodeMapper: Sendable {
     ]
 
     private static let macToWindowsMap: [CGKeyCode: Int32] = {
-        var map: [CGKeyCode: Int32] = [:]
+        var map: [CGKeyCode: Int32] = [
+            60: 0x10,  // Shift (Right)
+            62: 0x11,  // Ctrl (Right)
+            61: 0x12,  // Alt / Option (Right)
+        ]
         for (win, mac) in Self.windowsToMacMap {
             map[mac] = Int32(win)
         }

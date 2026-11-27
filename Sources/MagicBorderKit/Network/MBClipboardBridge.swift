@@ -42,12 +42,21 @@ public final class MBClipboardBridge: Observation.Observable {
         settings: MBCompatibilitySettings
     ) {
         guard settings.shareClipboard else { return }
+        let maxBytes = max(1, settings.maxClipboardSizeMB) * 1_048_576
 
         switch content {
         case .text(let text):
+            guard text.utf8.count <= maxBytes else {
+                self.emitToast(.clipboardTooLarge(settings.maxClipboardSizeMB))
+                return
+            }
             self.sendClipboardText(text)
             self.emitToast(.clipboardSyncedText)
         case .image(let data):
+            guard data.count <= maxBytes else {
+                self.emitToast(.clipboardTooLarge(settings.maxClipboardSizeMB))
+                return
+            }
             self.sendClipboardImage(data)
             self.emitToast(.clipboardSyncedImage)
         case .files(let urls):
@@ -55,6 +64,26 @@ public final class MBClipboardBridge: Observation.Observable {
             self.sendFileDrop(urls)
             self.emitToast(.clipboardSyncedFiles)
         }
+    }
+
+    public func pushCurrentClipboard(settings: MBCompatibilitySettings) {
+        guard !(settings.ignoreConcealedClipboard && self.pasteboard.isConcealedOrTransient) else {
+            self.emitToast(.clipboardEmpty)
+            return
+        }
+        if settings.transferFiles, let urls = self.pasteboard.readFileURLs(), !urls.isEmpty {
+            self.handleLocalPasteboard(.files(urls), settings: settings)
+            return
+        }
+        if let string = self.pasteboard.readString(), !string.isEmpty {
+            self.handleLocalPasteboard(.text(string), settings: settings)
+            return
+        }
+        if let png = self.pasteboard.readPNGData(), !png.isEmpty {
+            self.handleLocalPasteboard(.image(png), settings: settings)
+            return
+        }
+        self.emitToast(.clipboardEmpty)
     }
 
     public func handleTransportEvent(

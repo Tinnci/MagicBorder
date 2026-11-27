@@ -10,12 +10,18 @@ public enum MBToastEvent: Equatable, Sendable {
     case disconnected(String)
     case reconnecting(String)
     case reconnectStopped(String)
+    case cursorLocked
+    case cursorUnlocked
+    case inputPaused
+    case inputResumed
     case clipboardSyncedText
     case clipboardSyncedImage
     case clipboardSyncedFiles
     case clipboardReceivedText
     case clipboardReceivedImage
     case clipboardReceivedFiles
+    case clipboardTooLarge(Int)
+    case clipboardEmpty
     case fileTransferDisabled
     case filesSent(String)
 
@@ -35,6 +41,14 @@ public enum MBToastEvent: Equatable, Sendable {
             "arrow.clockwise"
         case .reconnectStopped:
             "pause.circle"
+        case .cursorLocked:
+            "lock.display"
+        case .cursorUnlocked:
+            "lock.open.display"
+        case .inputPaused:
+            "pause.circle.fill"
+        case .inputResumed:
+            "play.circle.fill"
         case .clipboardSyncedText, .clipboardReceivedText:
             "doc.on.clipboard"
         case .clipboardSyncedImage, .clipboardReceivedImage:
@@ -43,6 +57,8 @@ public enum MBToastEvent: Equatable, Sendable {
             "tray.and.arrow.up"
         case .clipboardReceivedFiles:
             "tray.and.arrow.down"
+        case .clipboardTooLarge, .clipboardEmpty:
+            "exclamationmark.triangle"
         case .fileTransferDisabled:
             "nosign"
         }

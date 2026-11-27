@@ -15,6 +15,7 @@ public final class MBPasteboardMonitor {
     private let pollingTask = CancellableTaskSlot()
     private let imageConversionTask = CancellableTaskSlot()
 
+    public var ignoreConcealedItems: Bool = true
     public var onChange: ((MBPasteboardContent) -> Void)?
 
     public init(pasteboard: any PasteboardAccessing = SystemPasteboard()) {
@@ -55,6 +56,10 @@ public final class MBPasteboardMonitor {
 
         if let ignored = self.ignoredChangeCount, ignored == count {
             self.ignoredChangeCount = nil
+            return
+        }
+
+        if self.ignoreConcealedItems, self.pasteboard.isConcealedOrTransient {
             return
         }
 

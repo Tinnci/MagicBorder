@@ -123,9 +123,16 @@ public final class MBMWBTransport:
     }
 
     public func activate(machine: Machine?) {
+        self.releaseModifiers()
         self.service.sendNextMachine(targetId: machine?.mwbPeerID)
         if machine == nil {
             self.service.stopAutoReconnect()
+        }
+    }
+
+    private func releaseModifiers() {
+        for keyCode in MBKeyCodeMapper.windowsModifierKeyCodes {
+            self.service.sendKeyEvent(keyCode: keyCode, flags: 0x80)
         }
     }
 
@@ -183,23 +190,41 @@ public final class MBMWBTransport:
             self.service.sendMouseEvent(x: normalizedX, y: normalizedY, wheel: 0, flags: 0x204)
         case .rightMouseUp:
             self.service.sendMouseEvent(x: normalizedX, y: normalizedY, wheel: 0, flags: 0x205)
+        case .otherMouseDown:
+            self.service.sendMouseEvent(x: normalizedX, y: normalizedY, wheel: 0, flags: 0x207)
+        case .otherMouseUp:
+            self.service.sendMouseEvent(x: normalizedX, y: normalizedY, wheel: 0, flags: 0x208)
         case .scrollWheel:
+            let speed = max(0.25, min(3.0, self.settings.remoteScrollSpeed))
+            let sign: Double = self.settings.invertRemoteScroll ? -1.0 : 1.0
+            let scaledWheel = Int32((Double(snapshot.scrollDeltaY) * speed * sign).rounded())
             self.service.sendMouseEvent(
                 x: normalizedX,
                 y: normalizedY,
-                wheel: Int32(snapshot.scrollDeltaY),
+                wheel: scaledWheel == 0 && snapshot.scrollDeltaY != 0
+                    ? (self.settings.invertRemoteScroll ? -1 : 1) : scaledWheel,
                 flags: 0x20A)
         case .keyDown:
-            if let key = MBKeyCodeMapper.windowsKeyCode(for: CGKeyCode(snapshot.keyCode)) {
+            if let key = MBKeyCodeMapper.windowsKeyCode(
+                for: CGKeyCode(snapshot.keyCode),
+                remapMode: self.settings.modifierRemapMode)
+            {
                 self.service.sendKeyEvent(keyCode: key, flags: 0)
             }
         case .keyUp:
-            if let key = MBKeyCodeMapper.windowsKeyCode(for: CGKeyCode(snapshot.keyCode)) {
+            if let key = MBKeyCodeMapper.windowsKeyCode(
+                for: CGKeyCode(snapshot.keyCode),
+                remapMode: self.settings.modifierRemapMode)
+            {
                 self.service.sendKeyEvent(keyCode: key, flags: 0x80)
             }
         case .flagsChanged:
             let macKey = CGKeyCode(snapshot.keyCode)
-            guard let key = MBKeyCodeMapper.windowsKeyCode(for: macKey) else { return }
+            guard
+                let key = MBKeyCodeMapper.windowsKeyCode(
+                    for: macKey,
+                    remapMode: self.settings.modifierRemapMode)
+            else { return }
             let isDown = MBKeyCodeMapper.isModifierDown(macKeyCode: macKey, flags: snapshot.flags)
             self.service.sendKeyEvent(keyCode: key, flags: isDown ? 0 : 0x80)
         default:

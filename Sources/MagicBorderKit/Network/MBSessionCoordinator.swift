@@ -28,6 +28,7 @@ public final class MBSessionCoordinator: Observation.Observable {
         /// Requests remote activation; returns `true` if handled asynchronously (MWB) or `false` if immediate (Modern).
         public let activateRemoteMachine: (Machine?) -> Bool
         public let centerRemoteCursor: () -> Void
+        public let isFrontmostAppFullscreen: () -> Bool
 
         public init(
             connectedMachines: @escaping () -> [Machine],
@@ -37,7 +38,8 @@ public final class MBSessionCoordinator: Observation.Observable {
             emitToast: @escaping (MBToastEvent) -> Void,
             appendLog: @escaping (String) -> Void,
             activateRemoteMachine: @escaping (Machine?) -> Bool,
-            centerRemoteCursor: @escaping () -> Void
+            centerRemoteCursor: @escaping () -> Void,
+            isFrontmostAppFullscreen: @escaping () -> Bool = { false }
         ) {
             self.connectedMachines = connectedMachines
             self.arrangement = arrangement
@@ -47,6 +49,7 @@ public final class MBSessionCoordinator: Observation.Observable {
             self.appendLog = appendLog
             self.activateRemoteMachine = activateRemoteMachine
             self.centerRemoteCursor = centerRemoteCursor
+            self.isFrontmostAppFullscreen = isFrontmostAppFullscreen
         }
     }
 
@@ -54,6 +57,8 @@ public final class MBSessionCoordinator: Observation.Observable {
     public var activeMachineId: UUID?
     public var activeMachineName: String
     public var lastSwitchTimestamp: Date?
+    public var isCursorLocked: Bool = false
+    public var isInputPaused: Bool = false
 
     private let localMachineID: UUID
     private let localMachineName: String
@@ -65,6 +70,8 @@ public final class MBSessionCoordinator: Observation.Observable {
     private var lastEdgeSwitchTime: TimeInterval = 0
     private var edgeSwitchLockedUntil: TimeInterval = 0
     private var edgeSwitchPendingRelease = false
+    private var edgeDwellDirection: EdgeDirection?
+    private var edgeDwellStartTime: TimeInterval?
     private var lastNoTargetDirection: EdgeDirection?
     private var lastNoTargetLogTime: TimeInterval = 0
 
@@ -162,16 +169,51 @@ public final class MBSessionCoordinator: Observation.Observable {
         self.deps.appendLog("Force return to local (\(reason))")
     }
 
+    public func toggleCursorLock() {
+        self.isCursorLocked.toggle()
+        self.resetEdgeDwell()
+        self.deps.emitToast(self.isCursorLocked ? .cursorLocked : .cursorUnlocked)
+    }
+
     public func handleLocalMouseEvent(snapshot: EventSnapshot) {
         let settings = self.deps.settings()
-        guard settings.switchByMouse, self.activeMachineId == nil else { return }
+        guard settings.switchByMouse, self.activeMachineId == nil else {
+            self.resetEdgeDwell()
+            return
+        }
+        guard !self.isCursorLocked,
+            !self.isInputPaused,
+            !(settings.lockCursorInFullscreenApps && self.deps.isFrontmostAppFullscreen())
+        else {
+            self.resetEdgeDwell()
+            return
+        }
+        guard settings.edgeCrossingModifier.matches(snapshot.flags) else {
+            self.resetEdgeDwell()
+            return
+        }
         guard let edgeContext = self.evaluateEdgeGuards(snapshot: snapshot, settings: settings) else {
+            self.resetEdgeDwell()
             return
         }
 
         let now = self.clock.now()
         guard now >= self.edgeSwitchLockedUntil else { return }
-        guard let dir = edgeContext.direction else { return }
+        guard let dir = edgeContext.direction else {
+            self.resetEdgeDwell()
+            return
+        }
+
+        if settings.edgeDwellSeconds > 0 {
+            if self.edgeDwellDirection != dir {
+                self.edgeDwellDirection = dir
+                self.edgeDwellStartTime = now
+                return
+            }
+            if now - (self.edgeDwellStartTime ?? now) < settings.edgeDwellSeconds {
+                return
+            }
+        }
 
         let effectiveArrangement = self.effectiveArrangement(oneRow: settings.matrixOneRow)
         guard
@@ -190,7 +232,13 @@ public final class MBSessionCoordinator: Observation.Observable {
         }
 
         guard now - self.lastEdgeSwitchTime >= 0.1 else { return }
+        self.resetEdgeDwell()
         self.triggerEdgeSwitch(to: targetId, direction: dir, at: now)
+    }
+
+    private func resetEdgeDwell() {
+        self.edgeDwellDirection = nil
+        self.edgeDwellStartTime = nil
     }
 
     public func handleRemoteMouseEvent(snapshot: EventSnapshot) {
@@ -296,14 +344,21 @@ public final class MBSessionCoordinator: Observation.Observable {
         let location = snapshot.location
         let cocoaY = mainScreenFrame.maxY - (location.y - mainScreenFrame.origin.y)
         let edgeLocation = CGPoint(x: location.x, y: cocoaY)
-        let bounds =
-            self.screenGeometry.allScreenFrames.first(where: { $0.contains(edgeLocation) })
-            ?? mainScreenFrame
+        let allFrames = self.screenGeometry.allScreenFrames
+        let bounds = allFrames.first(where: { $0.contains(edgeLocation) }) ?? mainScreenFrame
 
-        let nearLeft = edgeLocation.x <= bounds.minX + threshold
-        let nearRight = edgeLocation.x >= bounds.maxX - threshold
-        let nearTop = edgeLocation.y >= bounds.maxY - threshold
-        let nearBottom = edgeLocation.y <= bounds.minY + threshold
+        let nearLeft =
+            edgeLocation.x <= bounds.minX + threshold
+            && !Self.hasNeighbor(at: CGPoint(x: bounds.minX - 6, y: edgeLocation.y), in: allFrames, excluding: bounds)
+        let nearRight =
+            edgeLocation.x >= bounds.maxX - threshold
+            && !Self.hasNeighbor(at: CGPoint(x: bounds.maxX + 6, y: edgeLocation.y), in: allFrames, excluding: bounds)
+        let nearTop =
+            edgeLocation.y >= bounds.maxY - threshold
+            && !Self.hasNeighbor(at: CGPoint(x: edgeLocation.x, y: bounds.maxY + 6), in: allFrames, excluding: bounds)
+        let nearBottom =
+            edgeLocation.y <= bounds.minY + threshold
+            && !Self.hasNeighbor(at: CGPoint(x: edgeLocation.x, y: bounds.minY - 6), in: allFrames, excluding: bounds)
 
         if settings.blockCorners, (nearLeft || nearRight) && (nearBottom || nearTop) {
             return nil
@@ -323,6 +378,12 @@ public final class MBSessionCoordinator: Observation.Observable {
             }
 
         return EdgeContext(direction: direction, edgeLocation: edgeLocation, bounds: bounds)
+    }
+
+    private static func hasNeighbor(at probe: CGPoint, in frames: [CGRect], excluding current: CGRect) -> Bool {
+        frames.contains { frame in
+            frame != current && frame.contains(probe)
+        }
     }
 }
 

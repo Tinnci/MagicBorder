@@ -12,9 +12,9 @@ private import os
 public final class MBInputManager: Observation.Observable {
     private struct TapState: Sendable {
         var remoteID: UUID?
-        var isAppActive: Bool
         var lastLocalInteraction: TimeInterval = 0
-        var wrapCursor: Bool = true
+        var lastEscTapTime: TimeInterval = 0
+        var config = MBTapConfiguration()
         var mainScreenFrame: CGRect?
         var virtualCursor = MBVirtualCursorTracker()
     }
@@ -23,6 +23,7 @@ public final class MBInputManager: Observation.Observable {
         case passThrough
         case reenableTap
         case forceEscape
+        case triggerShortcut(MBShortcutAction)
         case forwardLocalMouse(EventSnapshot)
         case forwardRemote(EventSnapshot, isMouseMove: Bool)
     }
@@ -57,9 +58,7 @@ public final class MBInputManager: Observation.Observable {
         self.synthesizer = synthesizer
         self.screenGeometry = screenGeometry
         self.tapState = OSAllocatedUnfairLock(
-            initialState: TapState(
-                isAppActive: NSRunningApplication.current.isActive,
-                mainScreenFrame: screenGeometry.mainScreenFrame))
+            initialState: TapState(mainScreenFrame: screenGeometry.mainScreenFrame))
 
         if observeAppLifecycle {
             self.startAppStateObservers()
@@ -74,11 +73,19 @@ public final class MBInputManager: Observation.Observable {
     }
 
     public func syncTapConfiguration(wrapCursor: Bool) {
+        self.syncTapConfiguration(MBTapConfiguration(wrapCursor: wrapCursor))
+    }
+
+    public func syncTapConfiguration(_ config: MBTapConfiguration) {
         let frame = self.screenGeometry.mainScreenFrame
         self.tapState.withLock { state in
-            state.wrapCursor = wrapCursor
+            state.config = config
             state.mainScreenFrame = frame
         }
+    }
+
+    public func setIgnoreConcealedClipboard(_ ignore: Bool) {
+        self.clipboardMonitor?.ignoreConcealedItems = ignore
     }
 
     public func startClipboardSync() {
@@ -154,6 +161,11 @@ public final class MBInputManager: Observation.Observable {
                 self?.routingDelegate?.forceReturnToLocal(reason: "escape")
             }
             return nil
+        case .triggerShortcut(let shortcut):
+            Task { @MainActor [weak self] in
+                self?.routingDelegate?.handleShortcut(shortcut)
+            }
+            return nil
         case .forwardLocalMouse(let localSnapshot):
             Task { @MainActor [weak self] in
                 self?.routingDelegate?.handleLocalMouseEvent(snapshot: localSnapshot)
@@ -181,10 +193,21 @@ public final class MBInputManager: Observation.Observable {
     }
 
     private nonisolated func evaluateTapAction(type: CGEventType, snapshot: EventSnapshot) -> TapAction {
+        let now = CFAbsoluteTimeGetCurrent()
         let (action, warpTarget): (TapAction, CGPoint?) = self.tapState.withLock { state in
+            if type == .keyDown,
+                let shortcut = MBShortcutMatcher.matchShortcut(
+                    keyCode: snapshot.keyCode,
+                    flags: snapshot.flags,
+                    enabled: state.config.globalHotkeysEnabled)
+            {
+                return (.triggerShortcut(shortcut), nil)
+            }
+
             if state.remoteID == nil {
                 state.virtualCursor.reset()
-                if Self.shouldAllowLocalInteraction(type: type, state: &state) {
+                state.lastEscTapTime = 0
+                if Self.shouldAllowLocalInteraction(type: type, state: &state, now: now) {
                     return (.passThrough, nil)
                 }
                 if Self.isMouseMotion(type) {
@@ -193,7 +216,14 @@ public final class MBInputManager: Observation.Observable {
                 return (.passThrough, nil)
             }
 
-            if type == .keyDown, snapshot.keyCode == 53 {
+            if type == .keyDown,
+                MBShortcutMatcher.shouldTriggerEscape(
+                    mode: state.config.escapeMode,
+                    keyCode: snapshot.keyCode,
+                    flags: snapshot.flags,
+                    now: now,
+                    lastEscTap: &state.lastEscTapTime)
+            {
                 return (.forceEscape, nil)
             }
 
@@ -207,7 +237,7 @@ public final class MBInputManager: Observation.Observable {
                     deltaY: snapshot.mouseDeltaY,
                     screenFrame: state.mainScreenFrame)
                 updatedSnapshot = snapshot.withLocation(virtualLocation)
-                if state.wrapCursor, let frame = state.mainScreenFrame {
+                if state.config.wrapCursor, let frame = state.mainScreenFrame {
                     nextWarpTarget = CGPoint(x: frame.midX, y: frame.midY)
                 }
             }
@@ -227,18 +257,15 @@ public final class MBInputManager: Observation.Observable {
 
     private nonisolated static func shouldAllowLocalInteraction(
         type: CGEventType,
-        state: inout TapState
+        state: inout TapState,
+        now: TimeInterval
     ) -> Bool {
-        if state.isAppActive {
-            return true
-        }
-
         switch type {
         case .leftMouseDown, .rightMouseDown, .leftMouseUp, .rightMouseUp, .otherMouseDown, .otherMouseUp:
-            state.lastLocalInteraction = CFAbsoluteTimeGetCurrent()
+            state.lastLocalInteraction = now
             return true
         case .keyDown, .keyUp, .flagsChanged:
-            return CFAbsoluteTimeGetCurrent() - state.lastLocalInteraction < 2.0
+            return now - state.lastLocalInteraction < 0.5
         default:
             return false
         }
@@ -294,36 +321,67 @@ public final class MBInputManager: Observation.Observable {
     }
 
     private func startAppStateObservers() {
-        let tapState = self.tapState
-        let becameActiveName = NSApplication.didBecomeActiveNotification
-        let resignedActiveName = NSApplication.didResignActiveNotification
-        let task = Task.detached {
+        let screenChangedName = NSApplication.didChangeScreenParametersNotification
+        let willSleepName = NSWorkspace.willSleepNotification
+        let screenLockName = NSWorkspace.sessionDidResignActiveNotification
+        let didWakeName = NSWorkspace.didWakeNotification
+        let task = Task.detached { [weak self] in
             await withTaskGroup(of: Void.self) { group in
                 group.addTask {
-                    await Self.observeNotification(
-                        name: becameActiveName,
-                        isActive: true,
-                        tapState: tapState)
+                    await Self.observeScreenChanges(name: screenChangedName, owner: self)
                 }
                 group.addTask {
-                    await Self.observeNotification(
-                        name: resignedActiveName,
-                        isActive: false,
-                        tapState: tapState)
+                    await Self.observeSleepOrLock(name: willSleepName, owner: self)
+                }
+                group.addTask {
+                    await Self.observeSleepOrLock(name: screenLockName, owner: self)
+                }
+                group.addTask {
+                    await Self.observeWake(name: didWakeName, owner: self)
                 }
             }
         }
         self.appLifecycleTask.replace(with: task)
     }
 
-    private nonisolated static func observeNotification(
+    private nonisolated static func observeScreenChanges(
         name: Notification.Name,
-        isActive: Bool,
-        tapState: OSAllocatedUnfairLock<TapState>
+        owner: MBInputManager?
     ) async {
         for await _ in NotificationCenter.default.notifications(named: name) {
-            guard !Task.isCancelled else { break }
-            tapState.withLock { $0.isAppActive = isActive }
+            guard !Task.isCancelled, let owner else { break }
+            await MainActor.run {
+                let frame = owner.screenGeometry.mainScreenFrame
+                owner.tapState.withLock { $0.mainScreenFrame = frame }
+            }
+        }
+    }
+
+    private nonisolated static func observeSleepOrLock(
+        name: Notification.Name,
+        owner: MBInputManager?
+    ) async {
+        let center = await MainActor.run { NSWorkspace.shared.notificationCenter }
+        for await _ in center.notifications(named: name) {
+            guard !Task.isCancelled, let owner else { break }
+            await MainActor.run {
+                owner.routingDelegate?.handleSystemSleepOrLock()
+            }
+        }
+    }
+
+    private nonisolated static func observeWake(
+        name: Notification.Name,
+        owner: MBInputManager?
+    ) async {
+        let center = await MainActor.run { NSWorkspace.shared.notificationCenter }
+        for await _ in center.notifications(named: name) {
+            guard !Task.isCancelled, let owner else { break }
+            await MainActor.run {
+                if owner.isIntercepting, let tap = owner.eventTap {
+                    CGEvent.tapEnable(tap: tap, enable: true)
+                }
+            }
         }
     }
 }

@@ -16,4 +16,10 @@ public protocol MBInputRoutingDelegate: AnyObject {
 
     /// Return control to the local machine immediately (e.g. user pressed Escape).
     func forceReturnToLocal(reason: String)
+
+    /// Execute a hardware shortcut matched by `MBInputManager` (both locally and while remote).
+    func handleShortcut(_ action: MBShortcutAction)
+
+    /// Handle system sleep or screen lock transitions safely.
+    func handleSystemSleepOrLock()
 }
