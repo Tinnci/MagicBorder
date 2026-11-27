@@ -1,12 +1,12 @@
-import Foundation
+public import Foundation
 
 public enum MachineListResolver {
     public static func visibleMachines(
         localMachineID: UUID,
         localMachineName: String,
         connectedMachines: [Machine],
-        arrangement: MachineArrangement) -> [Machine]
-    {
+        arrangement: MachineArrangement
+    ) -> [Machine] {
         let localMachine = Machine(
             id: localMachineID,
             name: localMachineName,

@@ -1,6 +1,6 @@
-import Foundation
-import Network
-import OSLog
+public import Foundation
+public import Network
+private import OSLog
 
 // MARK: - MBConnectionEvent
 
@@ -13,53 +13,44 @@ public enum MBConnectionEvent: Sendable {
 
 // MARK: - MBConnectionRegistry
 
-/// Owns all NWConnection lifecycle: the NWListener (inbound TCP accept),
-/// outbound connections, and the machineId ↔ NWConnection mapping.
-///
-/// Application-layer protocol (handshake, packet framing, receiveLoop) stays
-/// in NetworkManager until Phase 3c/3d extraction.
-///
-/// Consume lifecycle events via `events: AsyncStream<MBConnectionEvent>`.
+/// Owns all `NWConnection` lifecycle: the `NWListener` (inbound TCP accept),
+/// outbound connections, and the `machineId <-> NWConnection` mapping.
 @MainActor
 public final class MBConnectionRegistry {
-    // MARK: - Public state
-
-    /// All raw transport connections (inbound + outbound, pre- and post-handshake).
     public private(set) var peers: [NWConnection] = []
-
-    /// UUID → NWConnection mapping; populated after handshake completes.
     public private(set) var machineConnections: [UUID: NWConnection] = [:]
 
-    // MARK: - Events
+    public let events: AsyncStream<MBConnectionEvent>
+    private let continuation: AsyncStream<MBConnectionEvent>.Continuation
 
-    public private(set) var events: AsyncStream<MBConnectionEvent>
-    private var continuation: AsyncStream<MBConnectionEvent>.Continuation?
-
-    // MARK: - Listener
-
+    private let ioQueue = DispatchQueue(label: "com.magicborder.modern.registry.io")
     private var listener: NWListener?
     private let serviceType: String
     private let localName: String
+    private let port: NWEndpoint.Port?
 
-    // MARK: - Init
-
-    public init(serviceType: String, localName: String) {
+    public init(serviceType: String, localName: String, port: NWEndpoint.Port? = nil) {
         self.serviceType = serviceType
         self.localName = localName
-        var cont: AsyncStream<MBConnectionEvent>.Continuation?
-        self.events = AsyncStream { cont = $0 }
-        self.continuation = cont
+        self.port = port
+        let stream = AsyncStream<MBConnectionEvent>.makeStream()
+        self.events = stream.stream
+        self.continuation = stream.continuation
     }
 
     deinit {
-        continuation?.finish()
+        self.continuation.finish()
     }
 
-    // MARK: - Listener (Bonjour advertising + inbound TCP accept)
-
     public func startListening() {
+        guard self.listener == nil else { return }
         do {
-            let listener = try NWListener(using: .tcp)
+            let listener: NWListener =
+                if let port = self.port {
+                    try NWListener(using: .tcp, on: port)
+                } else {
+                    try NWListener(using: .tcp)
+                }
             listener.service = NWListener.Service(name: self.localName, type: self.serviceType)
             listener.newConnectionHandler = { [weak self] connection in
                 Task { @MainActor [weak self] in self?.add(connection) }
@@ -67,7 +58,7 @@ public final class MBConnectionRegistry {
             listener.stateUpdateHandler = { state in
                 MBLogger.network.info("[Registry] Listener state: \(String(describing: state))")
             }
-            listener.start(queue: .main)
+            listener.start(queue: self.ioQueue)
             self.listener = listener
             MBLogger.network.info("[Registry] Listener started (\(self.localName)).")
         } catch {
@@ -78,9 +69,12 @@ public final class MBConnectionRegistry {
     public func stopListening() {
         self.listener?.cancel()
         self.listener = nil
+        for peer in self.peers {
+            peer.cancel()
+        }
+        self.peers.removeAll()
+        self.machineConnections.removeAll()
     }
-
-    // MARK: - Outbound connections
 
     public func connect(to result: NWBrowser.Result) {
         self.add(NWConnection(to: result.endpoint, using: .tcp))
@@ -95,24 +89,18 @@ public final class MBConnectionRegistry {
         self.add(NWConnection(to: .hostPort(host: .init(ip), port: nwPort), using: .tcp))
     }
 
-    // MARK: - Registration (post-handshake)
-
-    /// Called by the application layer once a handshake identifies the remote machine.
     public func register(_ connection: NWConnection, for machineId: UUID) {
         self.machineConnections[machineId] = connection
     }
 
-    // MARK: - Disconnect / Reconnect
-
     public func disconnect(machineId: UUID) {
-        if let conn = machineConnections[machineId] {
+        if let conn = self.machineConnections[machineId] {
             conn.cancel()
-            // `.connectionLost` event will fire from the stateUpdateHandler
         }
     }
 
     public func reconnect(machineId: UUID) {
-        guard let conn = machineConnections[machineId] else { return }
+        guard let conn = self.machineConnections[machineId] else { return }
         let endpoint = conn.endpoint
         conn.cancel()
         self.machineConnections.removeValue(forKey: machineId)
@@ -120,56 +108,48 @@ public final class MBConnectionRegistry {
         self.connect(to: endpoint)
     }
 
-    // MARK: - Queries
-
     public func connection(for machineId: UUID) -> NWConnection? {
         self.machineConnections[machineId]
-    }
-
-    public func activeConnection(activeMachineId: UUID?) -> NWConnection? {
-        guard let id = activeMachineId else { return nil }
-        return self.machineConnections[id]
     }
 
     public func machineId(for connection: NWConnection) -> UUID? {
         self.machineConnections.first(where: { $0.value === connection })?.key
     }
 
-    // MARK: - Private helpers
-
     private func add(_ connection: NWConnection) {
         self.peers.append(connection)
 
         connection.stateUpdateHandler = { [weak self, weak connection] state in
-            guard let self, let connection else { return }
+            guard let connection else { return }
             Task { @MainActor [weak self] in
+                guard let self else { return }
                 switch state {
                 case .ready:
                     MBLogger.network.info(
                         "[Registry] Connection ready: \(String(describing: connection.endpoint))")
-                    self?.continuation?.yield(.connectionReady(connection))
+                    self.continuation.yield(.connectionReady(connection))
                 case .failed(let error):
                     MBLogger.network.error(
                         "[Registry] Connection failed: \(error.localizedDescription)")
-                    let machineId = self?.machineId(for: connection)
-                    self?.remove(connection)
-                    self?.continuation?.yield(.connectionLost(connection, machineId: machineId))
+                    let machineId = self.machineId(for: connection)
+                    self.remove(connection)
+                    self.continuation.yield(.connectionLost(connection, machineId: machineId))
                 case .cancelled:
-                    let machineId = self?.machineId(for: connection)
-                    self?.remove(connection)
-                    self?.continuation?.yield(.connectionLost(connection, machineId: machineId))
+                    let machineId = self.machineId(for: connection)
+                    self.remove(connection)
+                    self.continuation.yield(.connectionLost(connection, machineId: machineId))
                 default:
                     break
                 }
             }
         }
 
-        connection.start(queue: .main)
+        connection.start(queue: self.ioQueue)
     }
 
     private func remove(_ connection: NWConnection) {
         self.peers.removeAll { $0 === connection }
-        if let id = machineConnections.first(where: { $0.value === connection })?.key {
+        if let id = self.machineConnections.first(where: { $0.value === connection })?.key {
             self.machineConnections.removeValue(forKey: id)
         }
     }

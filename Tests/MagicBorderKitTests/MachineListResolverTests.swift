@@ -1,9 +1,11 @@
 import Foundation
-@testable import MagicBorderKit
-import XCTest
+import Testing
 
-final class MachineListResolverTests: XCTestCase {
-    func testVisibleMachinesStartWithLocalMachineWhenArrangementIsEmpty() {
+@testable import MagicBorderKit
+
+@Suite("MachineListResolver")
+struct MachineListResolverTests {
+    @Test func visibleMachinesStartWithLocalMachineWhenArrangementIsEmpty() {
         let localID = UUID()
         let remote = Machine(id: UUID(), name: "Windows", state: .connected)
 
@@ -13,11 +15,11 @@ final class MachineListResolverTests: XCTestCase {
             connectedMachines: [remote],
             arrangement: MachineArrangement())
 
-        XCTAssertEqual(machines.map(\.id), [localID, remote.id])
-        XCTAssertEqual(machines.first?.state, .local)
+        #expect(machines.map(\.id) == [localID, remote.id])
+        #expect(machines.first?.state == .local)
     }
 
-    func testVisibleMachinesFollowArrangementAndAppendMissingConnectedMachines() {
+    @Test func visibleMachinesFollowArrangementAndAppendMissingConnectedMachines() {
         let localID = UUID()
         let firstRemote = Machine(id: UUID(), name: "Windows", state: .connected)
         let secondRemote = Machine(id: UUID(), name: "Linux", state: .connected)
@@ -32,10 +34,10 @@ final class MachineListResolverTests: XCTestCase {
             connectedMachines: [secondRemote, firstRemote],
             arrangement: arrangement)
 
-        XCTAssertEqual(machines.map(\.id), [firstRemote.id, localID, secondRemote.id])
+        #expect(machines.map(\.id) == [firstRemote.id, localID, secondRemote.id])
     }
 
-    func testVisibleMachinesDoNotCrashWhenConnectedListContainsDuplicateID() {
+    @Test func visibleMachinesHandleDuplicateIDsInConnectedList() {
         let localID = UUID()
         let duplicate = Machine(id: UUID(), name: "Windows", state: .connected)
 
@@ -45,10 +47,10 @@ final class MachineListResolverTests: XCTestCase {
             connectedMachines: [duplicate, duplicate],
             arrangement: MachineArrangement(slots: [duplicate.id], columns: 2))
 
-        XCTAssertEqual(machines.map(\.id), [duplicate.id, localID])
+        #expect(machines.map(\.id) == [duplicate.id, localID])
     }
 
-    func testVisibleMachinesPreserveLocalStateWhenConnectedListContainsLocalID() {
+    @Test func visibleMachinesPreserveLocalStateWhenConnectedListContainsLocalID() {
         let localID = UUID()
         let remoteCopyOfLocal = Machine(id: localID, name: "Stale Mac", state: .connected)
 
@@ -58,8 +60,8 @@ final class MachineListResolverTests: XCTestCase {
             connectedMachines: [remoteCopyOfLocal],
             arrangement: MachineArrangement(slots: [localID], columns: 2))
 
-        XCTAssertEqual(machines.map(\.id), [localID])
-        XCTAssertEqual(machines.first?.name, "Mac")
-        XCTAssertEqual(machines.first?.state, .local)
+        #expect(machines.map(\.id) == [localID])
+        #expect(machines.first?.name == "Mac")
+        #expect(machines.first?.state == .local)
     }
 }

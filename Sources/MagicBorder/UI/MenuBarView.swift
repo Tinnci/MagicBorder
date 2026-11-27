@@ -13,23 +13,23 @@ struct MenuBarView: View {
         @Bindable var networkManager = networkManager
         @Bindable var sessionCoordinator = networkManager.sessionCoordinator
 
-        Button(MBLocalized("Open MagicBorder")) {
+        Button(localizedString("Open MagicBorder")) {
             self.openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)
         }
 
-        Button(MBLocalized("Machine Arrangement...")) {
+        Button(localizedString("Machine Arrangement...")) {
             self.openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)
         }
 
         Divider()
 
-        Text(MBLocalized("Active: %@", arguments: [sessionCoordinator.activeMachineName]))
+        Text(localizedString("Active: %@", arguments: [sessionCoordinator.activeMachineName]))
             .font(.caption)
 
-        Menu(MBLocalized("Switch Target")) {
-            Button(MBLocalized("Local")) {
+        Menu(localizedString("Switch Target")) {
+            Button(localizedString("Local")) {
                 networkManager.forceReturnToLocal(reason: "menu")
             }
             ForEach(networkManager.connectedMachines) { machine in
@@ -39,23 +39,23 @@ struct MenuBarView: View {
             }
         }
 
-        Toggle(MBLocalized("Capture Input"), isOn: self.$captureInput)
+        Toggle(localizedString("Capture Input"), isOn: self.$captureInput)
             .disabled(!self.accessibilityService.isTrusted)
 
-        Toggle(MBLocalized("Share Clipboard"), isOn: $networkManager.compatibilitySettings.shareClipboard)
-        Toggle(MBLocalized("Transfer Files"), isOn: $networkManager.compatibilitySettings.transferFiles)
-        Toggle(MBLocalized("Switch by Edge"), isOn: $networkManager.compatibilitySettings.switchByMouse)
+        Toggle(localizedString("Share Clipboard"), isOn: $networkManager.compatibilitySettings.shareClipboard)
+        Toggle(localizedString("Transfer Files"), isOn: $networkManager.compatibilitySettings.transferFiles)
+        Toggle(localizedString("Switch by Edge"), isOn: $networkManager.compatibilitySettings.switchByMouse)
 
         Divider()
 
         SettingsLink {
-            Text(MBLocalized("Settings..."))
+            Text(localizedString("Settings..."))
         }
         .keyboardShortcut(",", modifiers: .command)
 
         Divider()
 
-        Button(MBLocalized("Quit MagicBorder")) {
+        Button(localizedString("Quit MagicBorder")) {
             NSApp.terminate(nil)
         }
     }

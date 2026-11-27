@@ -1,5 +1,5 @@
-import Foundation
-import Network
+public import Foundation
+public import Network
 
 @MainActor
 public enum MBTransportEvent: Sendable {
@@ -23,6 +23,7 @@ public enum MBTransportEvent: Sendable {
     case error(String)
 }
 
+/// Core transport capabilities supported by both Modern and MWB compatibility transports.
 @MainActor
 public protocol MBTransport: AnyObject {
     var events: AsyncStream<MBTransportEvent> { get }
@@ -37,13 +38,27 @@ public protocol MBTransport: AnyObject {
     func disconnect(machine: Machine)
     func reconnect(machine: Machine)
 
-    func activate(machine: Machine?)
-    func centerRemoteCursor()
-
     func sendRemoteInput(snapshot: EventSnapshot, activeMachineId: UUID?)
     func sendClipboardText(_ text: String, activeMachineId: UUID?)
     func sendClipboardImage(_ data: Data, activeMachineId: UUID?)
-    func sendScreenCapture(_ data: Data, to peerID: Int32?)
+}
+
+/// Optional capability for transports that synchronize machine matrix layout across peers.
+@MainActor
+public protocol MBMatrixSyncTransport: MBTransport {
     func sendMachineMatrix(names: [String], twoRow: Bool, swap: Bool)
+}
+
+/// Optional capability for transports that support cross-machine file drops.
+@MainActor
+public protocol MBFileDropTransport: MBTransport {
     func sendFileDrop(_ urls: [URL])
+}
+
+/// Optional capability for transports where the peer coordinates active machine switching and cursor centering.
+@MainActor
+public protocol MBRemoteActivationTransport: MBTransport {
+    func activate(machine: Machine?)
+    func centerRemoteCursor()
+    func sendScreenCapture(_ data: Data, to peerID: Int32?)
 }

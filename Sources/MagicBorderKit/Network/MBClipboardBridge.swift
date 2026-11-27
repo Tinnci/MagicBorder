@@ -1,6 +1,5 @@
-import AppKit
-import Foundation
-import Observation
+public import Foundation
+public import Observation
 
 @MainActor
 @Observable
@@ -10,88 +9,102 @@ public final class MBClipboardBridge: Observation.Observable {
     public var dragDropFileSummary: String?
     public var dragDropProgress: Double?
 
-    private let showToast: (String, String) -> Void
+    private let pasteboard: any PasteboardAccessing
+    private let ignoreNextLocalChange: () -> Void
+    private let emitToast: (MBToastEvent) -> Void
     private let sendClipboardText: (String) -> Void
     private let sendClipboardImage: (Data) -> Void
     private let sendFileDrop: ([URL]) -> Void
+    private let clearPresentationTask = CancellableTaskSlot()
 
     public init(
-        showToast: @escaping (String, String) -> Void,
+        pasteboard: any PasteboardAccessing = SystemPasteboard(),
+        ignoreNextLocalChange: @escaping () -> Void = {},
+        emitToast: @escaping (MBToastEvent) -> Void,
         sendClipboardText: @escaping (String) -> Void,
         sendClipboardImage: @escaping (Data) -> Void,
-        sendFileDrop: @escaping ([URL]) -> Void)
-    {
-        self.showToast = showToast
+        sendFileDrop: @escaping ([URL]) -> Void
+    ) {
+        self.pasteboard = pasteboard
+        self.ignoreNextLocalChange = ignoreNextLocalChange
+        self.emitToast = emitToast
         self.sendClipboardText = sendClipboardText
         self.sendClipboardImage = sendClipboardImage
         self.sendFileDrop = sendFileDrop
     }
 
+    deinit {
+        self.clearPresentationTask.cancel()
+    }
+
     public func handleLocalPasteboard(
         _ content: MBPasteboardContent,
-        settings: MBCompatibilitySettings)
-    {
+        settings: MBCompatibilitySettings
+    ) {
         guard settings.shareClipboard else { return }
 
         switch content {
         case .text(let text):
             self.sendClipboardText(text)
-            self.showToast("已同步剪贴板文本", "doc.on.clipboard")
+            self.emitToast(.clipboardSyncedText)
         case .image(let data):
             self.sendClipboardImage(data)
-            self.showToast("已同步剪贴板图片", "photo")
+            self.emitToast(.clipboardSyncedImage)
         case .files(let urls):
             guard settings.transferFiles else { return }
             self.sendFileDrop(urls)
-            self.showToast("已同步剪贴板文件", "tray.and.arrow.up")
+            self.emitToast(.clipboardSyncedFiles)
         }
     }
 
-    public func handleTransportEvent(_ event: MBTransportEvent, settings: MBCompatibilitySettings) -> Bool {
+    public func handleTransportEvent(
+        _ event: MBTransportEvent,
+        settings: MBCompatibilitySettings
+    ) -> Bool {
         switch event {
         case .clipboardText(let text):
             guard settings.shareClipboard else { return true }
-            MBInputManager.shared.ignoreNextClipboardChange()
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-            self.showToast("收到剪贴板文本", "doc.on.clipboard")
+            self.ignoreNextLocalChange()
+            self.pasteboard.writeString(text)
+            self.emitToast(.clipboardReceivedText)
             return true
         case .clipboardImage(let data):
             guard settings.shareClipboard else { return true }
-            MBInputManager.shared.ignoreNextClipboardChange()
-            if let image = NSImage(data: data) {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.writeObjects([image])
-                self.showToast("收到剪贴板图片", "photo")
+            self.ignoreNextLocalChange()
+            if self.pasteboard.writeImageData(data) {
+                self.emitToast(.clipboardReceivedImage)
             }
             return true
         case .clipboardFiles(let urls):
             guard settings.shareClipboard, settings.transferFiles else { return true }
-            MBInputManager.shared.ignoreNextClipboardChange()
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.writeObjects(urls as [NSURL])
+            self.ignoreNextLocalChange()
+            self.pasteboard.writeFileURLs(urls)
             self.dragDropFileSummary = self.makeFileSummary(urls)
             self.dragDropProgress = 1.0
-            self.showToast("收到剪贴板文件", "tray.and.arrow.down")
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 1500000000)
-                self?.clearPresentation()
-            }
+            self.emitToast(.clipboardReceivedFiles)
+            self.schedulePresentationClear()
             return true
         case .dragDropStateChanged(let state, let sourceName):
             guard settings.transferFiles else { return true }
             self.dragDropState = state
             self.dragDropSourceName = sourceName
+            self.dragDropProgress = nil
             if state == nil {
                 self.dragDropFileSummary = nil
-                self.dragDropProgress = nil
-            } else {
-                self.dragDropProgress = nil
             }
             return true
         default:
             return false
         }
+    }
+
+    private func schedulePresentationClear() {
+        let task = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(1500))
+            guard !Task.isCancelled, let self else { return }
+            self.clearPresentation()
+        }
+        self.clearPresentationTask.replace(with: task)
     }
 
     private func clearPresentation() {
@@ -102,10 +115,10 @@ public final class MBClipboardBridge: Observation.Observable {
     }
 
     private func makeFileSummary(_ urls: [URL]) -> String? {
-        guard !urls.isEmpty else { return nil }
+        guard let first = urls.first else { return nil }
         if urls.count == 1 {
-            return urls[0].lastPathComponent
+            return first.lastPathComponent
         }
-        return "\(urls[0].lastPathComponent) +\(urls.count - 1)"
+        return "\(first.lastPathComponent) +\(urls.count - 1)"
     }
 }

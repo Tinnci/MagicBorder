@@ -10,7 +10,7 @@ struct MachineMatrixView: View {
     var body: some View {
         Grid(horizontalSpacing: 16, verticalSpacing: 16) {
             let rows = self.machines.chunked(into: max(1, self.columns))
-            ForEach(0 ..< rows.count, id: \.self) { rowIndex in
+            ForEach(0..<rows.count, id: \.self) { rowIndex in
                 GridRow {
                     ForEach(rows[rowIndex]) { machine in
                         MachineCard(name: machine.name, isOnline: machine.isOnline)
@@ -37,7 +37,7 @@ struct MachineMatrixView: View {
 extension Array {
     func chunked(into size: Int) -> [[Element]] {
         stride(from: 0, to: count, by: size).map {
-            Array(self[$0 ..< Swift.min($0 + size, count)])
+            Array(self[$0..<Swift.min($0 + size, count)])
         }
     }
 }
@@ -61,7 +61,7 @@ struct MachineCard: View {
 
                     HStack(spacing: 4) {
                         StatusDot(active: self.isOnline)
-                        Text(self.isOnline ? "Online" : "Offline")
+                        Text(self.isOnline ? localizedString("Online") : localizedString("Offline"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -81,8 +81,8 @@ struct MachineDropDelegate: DropDelegate {
 
     func performDrop(info _: DropInfo) -> Bool {
         if let draggingItem, self.item != draggingItem,
-           let from = machines.firstIndex(of: draggingItem),
-           let to = machines.firstIndex(of: item)
+            let from = machines.firstIndex(of: draggingItem),
+            let to = machines.firstIndex(of: item)
         {
             withAnimation {
                 self.machines.move(

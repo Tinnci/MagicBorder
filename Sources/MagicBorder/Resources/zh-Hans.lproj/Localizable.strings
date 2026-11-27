@@ -89,3 +89,20 @@
 "Debug log" = "调试日志";
 "No logs yet" = "暂无日志";
 "Copy Log" = "复制日志";
+
+"Switched to %@" = "已切换到 %@";
+"Returned to local machine" = "已切回本机";
+"Switching to %@..." = "正在切换到 %@...";
+"Connecting to %@..." = "正在连接 %@...";
+"Disconnected from %@" = "已断开 %@";
+"Reconnecting to %@..." = "正在重连 %@...";
+"Stopped reconnecting to %@" = "已停止重连 %@";
+"Synced clipboard text" = "已同步剪贴板文本";
+"Synced clipboard image" = "已同步剪贴板图片";
+"Synced clipboard files" = "已同步剪贴板文件";
+"Received clipboard text" = "收到剪贴板文本";
+"Received clipboard image" = "收到剪贴板图片";
+"Received clipboard files" = "收到剪贴板文件";
+"File transfer is disabled" = "文件传输已关闭";
+"Security key is valid" = "安全密钥有效";
+"Security key must be at least 16 characters" = "安全密钥至少需要 16 个字符";

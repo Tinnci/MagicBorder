@@ -1,4 +1,4 @@
-import OSLog
+public import OSLog
 
 public enum MBLogger {
     private static let subsystem = "com.tinnci.MagicBorder"

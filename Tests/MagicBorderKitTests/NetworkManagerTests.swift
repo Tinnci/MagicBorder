@@ -1,43 +1,52 @@
 import Foundation
-@testable import MagicBorderKit
-import XCTest
+import Testing
 
+@testable import MagicBorderKit
+
+@Suite("NetworkManager")
 @MainActor
-final class NetworkManagerTests: XCTestCase {
-    func testTransportMachineEventsUpdateConnectionStateAndRecoverActiveMachineOnDisconnect() async {
+struct NetworkManagerTests {
+    @Test func transportMachineEventsUpdateConnectionStateAndRecoverActiveMachineOnDisconnect() async {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
         let compatibility = FakeTransport()
-        let manager = MBNetworkManager.testing(
-            localName: "Local Mac",
-            compatibilityTransport: compatibility)
+        let manager = self.makeManager(defaults: defaults, compatibilityTransport: compatibility)
         let remote = Machine(id: UUID(), name: "Windows", state: .connected, mwbPeerID: 42)
 
         compatibility.emit(.machineConnected(remote))
         await self.waitUntil { manager.connectedMachines.map(\.id) == [remote.id] }
-        XCTAssertEqual(manager.connectedMachines.map(\.id), [remote.id])
+        #expect(manager.connectedMachines.map(\.id) == [remote.id])
 
         compatibility.emit(.activeMachineChanged(remote.id, remote.name))
         await self.waitUntil { manager.activeMachineId == remote.id }
-        XCTAssertEqual(manager.activeMachineId, remote.id)
+        #expect(manager.activeMachineId == remote.id)
 
         compatibility.emit(.machineDisconnected(remote.id))
         await self.waitUntil { manager.activeMachineId == nil && manager.connectedMachines.isEmpty }
-        XCTAssertNil(manager.activeMachineId)
-        XCTAssertTrue(manager.connectedMachines.isEmpty)
+        #expect(manager.activeMachineId == nil)
+        #expect(manager.connectedMachines.isEmpty)
+        #expect(manager.toast == .disconnected("Windows"))
     }
 
-    func testApplyCompatibilitySettingsUpdatesCurrentTransport() {
+    @Test func applyCompatibilitySettingsUpdatesTransportAndDeduplicatesRepeats() {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
         let compatibility = FakeTransport()
-        let settings = MBCompatibilitySettings(defaults: UserDefaults(suiteName: "MagicBorderTests.\(UUID().uuidString)")!)
+        let settings = MBCompatibilitySettings(defaults: defaults)
         settings.securityKey = "1234567890ABCDEF"
         settings.messagePort = 15111
         settings.clipboardPort = 15110
-        let manager = MBNetworkManager.testing(
-            compatibilitySettings: settings,
+        let manager = self.makeManager(
+            defaults: defaults,
+            settings: settings,
             compatibilityTransport: compatibility)
 
+        let initialCount = compatibility.calls.count
+        manager.applyCompatibilitySettings()
         manager.applyCompatibilitySettings()
 
-        XCTAssertTrue(
+        #expect(compatibility.calls.count == initialCount)
+        #expect(
             compatibility.calls.contains(
                 .updateConfiguration(
                     securityKey: "1234567890ABCDEF",
@@ -45,42 +54,53 @@ final class NetworkManagerTests: XCTestCase {
                     clipboardPort: 15110)))
     }
 
-    func testSendFileDropIsGatedByTransferFilesSetting() {
+    @Test func sendFileDropIsGatedByTransferFilesSetting() {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
         let compatibility = FakeTransport()
-        let settings = MBCompatibilitySettings(defaults: UserDefaults(suiteName: "MagicBorderTests.\(UUID().uuidString)")!)
+        let settings = MBCompatibilitySettings(defaults: defaults)
         settings.transferFiles = false
-        let manager = MBNetworkManager.testing(
-            compatibilitySettings: settings,
+        let manager = self.makeManager(
+            defaults: defaults,
+            settings: settings,
             compatibilityTransport: compatibility)
 
         let sent = manager.sendFileDrop([URL(fileURLWithPath: "/tmp/file.txt")])
 
-        XCTAssertFalse(sent)
-        XCTAssertFalse(compatibility.calls.contains { call in
-            if case .fileDrop = call { return true }
-            return false
-        })
+        #expect(!sent)
+        #expect(manager.toast == .fileTransferDisabled)
+        #expect(
+            !compatibility.calls.contains { call in
+                if case .fileDrop = call { return true }
+                return false
+            })
     }
 
-    func testSendFileDropUsesCurrentTransportWhenEnabled() {
+    @Test func sendFileDropUsesCurrentTransportWhenEnabled() {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
         let compatibility = FakeTransport()
-        let settings = MBCompatibilitySettings(defaults: UserDefaults(suiteName: "MagicBorderTests.\(UUID().uuidString)")!)
+        let settings = MBCompatibilitySettings(defaults: defaults)
         settings.transferFiles = true
-        let manager = MBNetworkManager.testing(
-            compatibilitySettings: settings,
+        let manager = self.makeManager(
+            defaults: defaults,
+            settings: settings,
             compatibilityTransport: compatibility)
         let url = URL(fileURLWithPath: "/tmp/file.txt")
 
         let sent = manager.sendFileDrop([url])
 
-        XCTAssertTrue(sent)
-        XCTAssertTrue(compatibility.calls.contains(.fileDrop([url])))
+        #expect(sent)
+        #expect(compatibility.calls.contains(.fileDrop([url])))
     }
 
-    func testArrangementSyncSendsVisibleMachineNamesInArrangementOrder() async {
+    @Test func arrangementSyncSendsVisibleMachineNamesInArrangementOrder() async {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
         let compatibility = FakeTransport()
-        let manager = MBNetworkManager.testing(
+        let manager = self.makeManager(
             localName: "Mac",
+            defaults: defaults,
             compatibilityTransport: compatibility)
         let first = Machine(id: UUID(), name: "Windows", state: .connected)
         let second = Machine(id: UUID(), name: "Linux", state: .connected)
@@ -88,74 +108,127 @@ final class NetworkManagerTests: XCTestCase {
         compatibility.emit(.machineConnected(second))
         await self.waitUntil { manager.connectedMachines.count == 2 }
 
-        manager.syncArrangement(machineIDs: [second.id, MBNetworkManager.localMachineUUID, first.id], twoRow: true, swap: false)
+        manager.syncArrangement(
+            machineIDs: [second.id, MBNetworkManager.localMachineUUID, first.id],
+            twoRow: true,
+            swap: false)
 
-        XCTAssertTrue(compatibility.calls.contains(.matrix(["LINUX", "MAC", "WINDOWS"], true, false)))
+        #expect(compatibility.calls.contains(.matrix(["LINUX", "MAC", "WINDOWS"], true, false)))
     }
 
-    func testTransportLogAndErrorUpdatePairingDiagnostics() async {
+    @Test func transportLogAndErrorUpdatePairingDiagnostics() async {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
         let compatibility = FakeTransport()
-        let manager = MBNetworkManager.testing(compatibilityTransport: compatibility)
+        let manager = self.makeManager(defaults: defaults, compatibilityTransport: compatibility)
 
         compatibility.emit(.log("hello"))
         await self.waitUntil { manager.pairingDebugLog.contains { $0.contains("hello") } }
         compatibility.emit(.error("bad key"))
         await self.waitUntil { manager.pairingError == "bad key" }
 
-        XCTAssertEqual(manager.pairingError, "bad key")
-        XCTAssertTrue(manager.pairingDebugLog.contains { $0.contains("ERROR: bad key") })
+        #expect(manager.pairingError == "bad key")
+        #expect(manager.pairingDebugLog.contains { $0.contains("ERROR: bad key") })
     }
 
-    func testArrangementOptionsEventUpdatesCompatibilitySettings() async {
+    @Test func arrangementOptionsEventUpdatesCompatibilitySettings() async {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
         let compatibility = FakeTransport()
-        let manager = MBNetworkManager.testing(compatibilityTransport: compatibility)
+        let manager = self.makeManager(defaults: defaults, compatibilityTransport: compatibility)
 
         compatibility.emit(.arrangementOptionsUpdated(twoRow: true, swap: true))
         await self.waitUntil {
-            manager.compatibilitySettings.matrixOneRow == false
-                && manager.compatibilitySettings.matrixCircle == true
+            !manager.compatibilitySettings.matrixOneRow && manager.compatibilitySettings.matrixCircle
         }
 
-        XCTAssertFalse(manager.compatibilitySettings.matrixOneRow)
-        XCTAssertTrue(manager.compatibilitySettings.matrixCircle)
+        #expect(!manager.compatibilitySettings.matrixOneRow)
+        #expect(manager.compatibilitySettings.matrixCircle)
     }
 
-    func testSendMachineMatrixUppercasesNamesBeforeSending() {
+    @Test func sendMachineMatrixUppercasesNamesBeforeSending() {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
         let compatibility = FakeTransport()
-        let manager = MBNetworkManager.testing(compatibilityTransport: compatibility)
+        let manager = self.makeManager(defaults: defaults, compatibilityTransport: compatibility)
 
         manager.sendMachineMatrix(names: ["windows", "Mac"], twoRow: false, swap: true)
 
-        XCTAssertTrue(compatibility.calls.contains(.matrix(["WINDOWS", "MAC"], false, true)))
+        #expect(compatibility.calls.contains(.matrix(["WINDOWS", "MAC"], false, true)))
     }
 
-    func testConnectToHostUsesCurrentTransport() {
+    @Test func connectToHostUsesCorrectDefaultPortPerProtocolMode() {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
+        let modern = FakeTransport()
         let compatibility = FakeTransport()
-        let manager = MBNetworkManager.testing(compatibilityTransport: compatibility)
-
-        manager.connectToHost(ip: "192.168.1.10", port: 15101)
-
-        XCTAssertTrue(compatibility.calls.contains(.connectHost("192.168.1.10", 15101)))
-    }
-
-    func testConnectToHostUsesConfiguredCompatibilityPortByDefault() {
-        let compatibility = FakeTransport()
-        let settings = MBCompatibilitySettings(defaults: UserDefaults(suiteName: "MagicBorderTests.\(UUID().uuidString)")!)
+        let settings = MBCompatibilitySettings(defaults: defaults)
         settings.messagePort = 15111
-        let manager = MBNetworkManager.testing(
-            compatibilitySettings: settings,
+        let manager = self.makeManager(
+            defaults: defaults,
+            settings: settings,
+            modernTransport: modern,
             compatibilityTransport: compatibility)
 
         manager.connectToHost(ip: "192.168.1.10")
+        #expect(compatibility.calls.contains(.connectHost("192.168.1.10", 15111)))
 
-        XCTAssertTrue(compatibility.calls.contains(.connectHost("192.168.1.10", 15111)))
+        manager.protocolMode = .modern
+        manager.connectToHost(ip: "192.168.1.20")
+        #expect(modern.calls.contains(.connectHost("192.168.1.20", 12345)))
+    }
+
+    @Test func hideMouseEventCallsCursorControllerHide() async {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
+        let compatibility = FakeTransport()
+        let cursor = FakeCursorController()
+        let manager = self.makeManager(
+            defaults: defaults,
+            compatibilityTransport: compatibility,
+            cursorController: cursor)
+
+        compatibility.emit(.hideMouse)
+        await self.waitUntil { cursor.hideCount == 1 }
+        _ = manager
+
+        #expect(cursor.hideCount == 1)
+        #expect(cursor.unhideCount == 0)
+    }
+
+    private func makeManager(
+        localName: String = "Test Mac",
+        defaults: UserDefaults,
+        settings: MBCompatibilitySettings? = nil,
+        modernTransport: FakeTransport = FakeTransport(),
+        compatibilityTransport: FakeTransport = FakeTransport(),
+        cursorController: FakeCursorController = FakeCursorController()
+    ) -> MBNetworkManager {
+        let pasteboard = FakePasteboard()
+        let geometry = FakeScreenGeometry()
+        let input = MBInputManager(
+            pasteboard: pasteboard,
+            synthesizer: FakeInputEventSynthesizer(),
+            screenGeometry: geometry,
+            startClipboardSync: false,
+            observeAppLifecycle: false)
+        return MBNetworkManager.testing(
+            localName: localName,
+            compatibilitySettings: settings ?? MBCompatibilitySettings(defaults: defaults),
+            inputManager: input,
+            modernTransport: modernTransport,
+            compatibilityTransport: compatibilityTransport,
+            pasteboard: pasteboard,
+            screenGeometry: geometry,
+            clock: FakeClock(),
+            cursorController: cursorController,
+            screenCapturer: FakeScreenCapturer())
     }
 
     private func waitUntil(
         timeout: TimeInterval = 1,
-        condition: @escaping @MainActor () -> Bool)
-        async
-    {
+        condition: @escaping @MainActor () -> Bool
+    ) async {
         let deadline = Date().addingTimeInterval(timeout)
         while !condition(), Date() < deadline {
             try? await Task.sleep(for: .milliseconds(10))

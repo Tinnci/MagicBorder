@@ -1,44 +1,50 @@
-import AppKit
-import CryptoKit
-import Foundation
-import Network
+import CoreGraphics
+public import Foundation
+public import Network
+private import OSLog
 
 @MainActor
 public final class MBModernTransport: MBTransport {
-    public var events: AsyncStream<MBTransportEvent>
+    public let events: AsyncStream<MBTransportEvent>
     public var peers: [NWConnection] { self.registry.peers }
 
     private let registry: MBConnectionRegistry
     private let localID: UUID
     private let localName: String
     private var securityKey: String
-    private var continuation: AsyncStream<MBTransportEvent>.Continuation?
-    private var registryEventsTask: Task<Void, Never>?
+    private let screenGeometry: any ScreenGeometryProviding
+    private let codec = ModernPacketCodec()
+    private let continuation: AsyncStream<MBTransportEvent>.Continuation
+    private let registryEventsTask = CancellableTaskSlot()
 
     public init(
         serviceType: String,
         localName: String,
         localID: UUID,
-        securityKey: String)
-    {
-        self.registry = MBConnectionRegistry(serviceType: serviceType, localName: localName)
+        securityKey: String,
+        port: NWEndpoint.Port? = nil,
+        screenGeometry: any ScreenGeometryProviding = SystemScreenGeometryProvider()
+    ) {
+        self.registry = MBConnectionRegistry(serviceType: serviceType, localName: localName, port: port)
         self.localID = localID
         self.localName = localName
         self.securityKey = securityKey
+        self.screenGeometry = screenGeometry
 
-        var continuation: AsyncStream<MBTransportEvent>.Continuation?
-        self.events = AsyncStream { continuation = $0 }
-        self.continuation = continuation
+        let stream = AsyncStream<MBTransportEvent>.makeStream()
+        self.events = stream.stream
+        self.continuation = stream.continuation
     }
 
     deinit {
-        self.registryEventsTask?.cancel()
-        self.continuation?.finish()
+        self.registryEventsTask.cancel()
+        self.continuation.finish()
     }
 
     public func start() {
         self.registry.startListening()
-        self.registryEventsTask = Task { @MainActor [weak self] in
+        guard !self.registryEventsTask.isActive else { return }
+        let task = Task { @MainActor [weak self] in
             guard let self else { return }
             for await event in self.registry.events {
                 switch event {
@@ -47,16 +53,16 @@ public final class MBModernTransport: MBTransport {
                     self.receiveLoop(connection: connection)
                 case .connectionLost(_, let machineId):
                     if let machineId {
-                        self.continuation?.yield(.machineDisconnected(machineId))
+                        self.continuation.yield(.machineDisconnected(machineId))
                     }
                 }
             }
         }
+        self.registryEventsTask.replace(with: task)
     }
 
     public func stop() {
-        self.registryEventsTask?.cancel()
-        self.registryEventsTask = nil
+        self.registryEventsTask.cancel()
         self.registry.stopListening()
     }
 
@@ -78,20 +84,16 @@ public final class MBModernTransport: MBTransport {
 
     public func disconnect(machine: Machine) {
         self.registry.disconnect(machineId: machine.id)
-        self.continuation?.yield(.machineDisconnected(machine.id))
+        self.continuation.yield(.machineDisconnected(machine.id))
     }
 
     public func reconnect(machine: Machine) {
         self.registry.reconnect(machineId: machine.id)
-        self.continuation?.yield(.machineDisconnected(machine.id))
+        self.continuation.yield(.machineDisconnected(machine.id))
     }
 
-    public func activate(machine _: Machine?) {}
-
-    public func centerRemoteCursor() {}
-
     public func sendRemoteInput(snapshot: EventSnapshot, activeMachineId: UUID?) {
-        guard let remoteEvent = MBInputManager.shared.convertToRemoteEvent(snapshot: snapshot) else { return }
+        guard let remoteEvent = MBRemoteEventConverter.convert(snapshot: snapshot) else { return }
         self.sendPacket(.inputEvent(remoteEvent), activeMachineId: activeMachineId)
     }
 
@@ -105,17 +107,9 @@ public final class MBModernTransport: MBTransport {
         self.sendPacket(.clipboardData(payload), activeMachineId: activeMachineId)
     }
 
-    public func sendScreenCapture(_ data: Data, to _: Int32?) {
-        self.sendClipboardImage(data, activeMachineId: nil)
-    }
-
-    public func sendMachineMatrix(names _: [String], twoRow _: Bool, swap _: Bool) {}
-
-    public func sendFileDrop(_: [URL]) {}
-
     private func sendPacket(_ packet: PacketType, activeMachineId: UUID?) {
         if let activeMachineId,
-           let connection = self.registry.connection(for: activeMachineId)
+            let connection = self.registry.connection(for: activeMachineId)
         {
             self.send(packet, to: connection)
         } else {
@@ -126,31 +120,22 @@ public final class MBModernTransport: MBTransport {
     }
 
     private func sendHandshake(connection: NWConnection) {
-        var info = MachineInfo(
+        let screenSize = self.screenGeometry.mainScreenFrame?.size ?? .zero
+        let signature = ModernPacketCodec.sign(machineID: self.localID, securityKey: self.securityKey)
+        let info = MachineInfo(
             id: self.localID,
             name: self.localName,
-            screenWidth: Double(NSScreen.main?.frame.width ?? 0),
-            screenHeight: Double(NSScreen.main?.frame.height ?? 0),
-            signature: nil)
-
-        if let keyData = self.securityKey.data(using: .utf8),
-           let idData = info.id.uuidString.data(using: .utf8)
-        {
-            let key = SymmetricKey(data: keyData)
-            let signature = HMAC<SHA256>.authenticationCode(for: idData, using: key)
-            info.signature = Data(signature).base64EncodedString()
-        }
-
+            screenWidth: Double(screenSize.width),
+            screenHeight: Double(screenSize.height),
+            signature: signature)
         self.send(.handshake(info: info), to: connection)
     }
 
     private func send(_ packet: PacketType, to connection: NWConnection) {
         do {
-            let data = try JSONEncoder().encode(packet)
-            var length = UInt32(data.count)
-            let lengthData = Data(bytes: &length, count: MemoryLayout<UInt32>.size)
+            let frame = try self.codec.encodeFrame(packet)
             connection.send(
-                content: lengthData + data,
+                content: frame,
                 completion: .contentProcessed { error in
                     if let error {
                         MBLogger.network.error("[ModernTransport] Send error: \(error)")
@@ -163,39 +148,36 @@ public final class MBModernTransport: MBTransport {
 
     private func receiveLoop(connection: NWConnection) {
         connection.receive(minimumIncompleteLength: 4, maximumLength: 4) { [weak self] content, _, isComplete, error in
-            guard let self else { return }
-
-            if let error {
-                MBLogger.network.error("[ModernTransport] Receive error: \(error)")
-                return
-            }
-
-            if isComplete {
-                MBLogger.network.info("[ModernTransport] Connection closed by peer")
-                return
-            }
-
-            guard let content, content.count == 4 else { return }
-            let length = content.withUnsafeBytes { $0.load(as: UInt32.self) }
             Task { @MainActor [weak self] in
-                self?.receiveBody(connection: connection, length: Int(length))
+                guard let self else { return }
+                if let error {
+                    MBLogger.network.error("[ModernTransport] Receive error: \(error)")
+                    return
+                }
+                if isComplete {
+                    MBLogger.network.info("[ModernTransport] Connection closed by peer")
+                    return
+                }
+                guard let content, let length = self.codec.decodeLengthHeader(content) else {
+                    MBLogger.security.error("[ModernTransport] Invalid or oversized frame header; closing connection")
+                    connection.cancel()
+                    return
+                }
+                self.receiveBody(connection: connection, length: length)
             }
         }
     }
 
     private func receiveBody(connection: NWConnection, length: Int) {
-        connection.receive(minimumIncompleteLength: length, maximumLength: length) { [weak self] content, _, isComplete, error in
-            guard let self else { return }
-
-            if let content {
-                Task { @MainActor [weak self] in
-                    self?.handlePacketData(content, from: connection)
+        connection.receive(minimumIncompleteLength: length, maximumLength: length) {
+            [weak self] content, _, isComplete, error in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let content {
+                    self.handlePacketData(content, from: connection)
                 }
-            }
-
-            if !isComplete, error == nil {
-                Task { @MainActor [weak self] in
-                    self?.receiveLoop(connection: connection)
+                if !isComplete, error == nil {
+                    self.receiveLoop(connection: connection)
                 }
             }
         }
@@ -203,21 +185,18 @@ public final class MBModernTransport: MBTransport {
 
     private func handlePacketData(_ data: Data, from connection: NWConnection) {
         do {
-            let packet = try JSONDecoder().decode(PacketType.self, from: data)
+            let packet = try self.codec.decodePacket(data)
             switch packet {
             case .handshake(let info):
-                if let signature = info.signature,
-                   let keyData = self.securityKey.data(using: .utf8),
-                   let idData = info.id.uuidString.data(using: .utf8)
-                {
-                    let key = SymmetricKey(data: keyData)
-                    let computed = HMAC<SHA256>.authenticationCode(for: idData, using: key)
-                    let computedString = Data(computed).base64EncodedString()
-                    if signature != computedString {
-                        MBLogger.security.error("[ModernTransport] Invalid signature from \(info.name)")
-                        connection.cancel()
-                        return
-                    }
+                guard
+                    ModernPacketCodec.verify(
+                        signature: info.signature,
+                        machineID: info.id,
+                        securityKey: self.securityKey)
+                else {
+                    MBLogger.security.error("[ModernTransport] Invalid or missing signature from \(info.name)")
+                    connection.cancel()
+                    return
                 }
 
                 let machine = Machine(
@@ -226,22 +205,22 @@ public final class MBModernTransport: MBTransport {
                     state: .connected,
                     screenSize: CGSize(width: info.screenWidth, height: info.screenHeight))
                 self.registry.register(connection, for: info.id)
-                self.continuation?.yield(.machineConnected(machine))
+                self.continuation.yield(.machineConnected(machine))
 
             case .inputEvent(let event):
-                self.continuation?.yield(.remoteEvent(event))
+                self.continuation.yield(.remoteEvent(event))
 
             case .clipboardData(let payload):
                 switch payload.type {
                 case .text:
                     if let text = String(data: payload.content, encoding: .utf8) {
-                        self.continuation?.yield(.clipboardText(text))
+                        self.continuation.yield(.clipboardText(text))
                     }
                 case .image:
-                    self.continuation?.yield(.clipboardImage(payload.content))
+                    self.continuation.yield(.clipboardImage(payload.content))
                 }
 
-            default:
+            case .heartbeat, .bye:
                 break
             }
         } catch {

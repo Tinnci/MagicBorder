@@ -7,13 +7,19 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
+  build-and-test:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: Select Swift
         run: swift --version
-      - name: Resolve dependencies
-        run: swift package resolve
-      - name: Build (debug)
-        run: swift build
+      - name: Format Lint
+        run: swift format lint --strict --recursive Sources Tests
+      - name: Build (debug, warnings as errors)
+        run: swift build -Xswiftc -warnings-as-errors
+      - name: Run Tests (with coverage)
+        run: swift test --enable-code-coverage
+      - name: Run Tests (Thread Sanitizer)
+        run: swift test --sanitize=thread
+      - name: Build (release, warnings as errors)
+        run: swift build -c release -Xswiftc -warnings-as-errors

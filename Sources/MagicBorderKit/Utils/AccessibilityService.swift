@@ -1,14 +1,19 @@
+import AppKit
 @preconcurrency import ApplicationServices
-import Observation
-import SwiftUI
+public import Observation
 
 @MainActor
 @Observable
-public class MBAccessibilityService: Observation.Observable {
+public final class MBAccessibilityService: Observation.Observable {
     public var isTrusted: Bool = false
+    private let pollingTask = CancellableTaskSlot()
 
     public init() {
         self.checkStatus()
+    }
+
+    deinit {
+        self.pollingTask.cancel()
     }
 
     public func checkStatus() {
@@ -17,15 +22,14 @@ public class MBAccessibilityService: Observation.Observable {
         self.isTrusted = AXIsProcessTrustedWithOptions(options)
     }
 
-    /// Prompts the user with system alert if permission is missing (2026 best practice)
+    /// Prompts the user with a system alert if accessibility permission is missing.
     public func promptForPermission() {
         let options =
             [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        let granted = AXIsProcessTrustedWithOptions(options)
-        self.isTrusted = granted
+        self.isTrusted = AXIsProcessTrustedWithOptions(options)
     }
 
-    /// Opens System Settings directly to Accessibility privacy pane (2026 UX best practice)
+    /// Opens System Settings directly to the Accessibility privacy pane.
     public func openSystemSettings() {
         if let url = URL(
             string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
@@ -34,17 +38,23 @@ public class MBAccessibilityService: Observation.Observable {
         }
     }
 
-    /// Polling loop to check permission status periodically
-    public func startPolling() {
-        Task {
-            while true {
-                // Sleep for 1 second
-                try? await Task.sleep(nanoseconds: 1 * 1000000000)
+    /// Idempotent polling loop to check permission status periodically.
+    public func startPolling(interval: Duration = .seconds(1)) {
+        guard !self.pollingTask.isActive else { return }
+        let task = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: interval)
+                guard !Task.isCancelled, let self else { break }
                 let currentStatus = AXIsProcessTrusted()
                 if self.isTrusted != currentStatus {
                     self.isTrusted = currentStatus
                 }
             }
         }
+        self.pollingTask.replace(with: task)
+    }
+
+    public func stopPolling() {
+        self.pollingTask.cancel()
     }
 }

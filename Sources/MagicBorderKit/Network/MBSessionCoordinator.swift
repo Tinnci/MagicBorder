@@ -1,19 +1,53 @@
-import AppKit
-import Foundation
-import Observation
+public import CoreGraphics
+public import Foundation
+private import OSLog
+public import Observation
 
+/// Coordinates active-machine switching, edge-switching guards, and return-to-local transitions.
 @MainActor
 @Observable
 public final class MBSessionCoordinator: Observation.Observable {
-    public enum SwitchState: String {
+    public enum SwitchState: String, Sendable {
         case idle
         case switching
         case active
     }
 
-    public enum SwitchReason {
+    public enum SwitchReason: Sendable {
         case manual
         case edge
+    }
+
+    public struct Dependencies {
+        public let connectedMachines: () -> [Machine]
+        public let arrangement: () -> MachineArrangement
+        public let settings: () -> MBCompatibilitySettings
+        public let updateRemoteTarget: (UUID?) -> Void
+        public let emitToast: (MBToastEvent) -> Void
+        public let appendLog: (String) -> Void
+        /// Requests remote activation; returns `true` if handled asynchronously (MWB) or `false` if immediate (Modern).
+        public let activateRemoteMachine: (Machine?) -> Bool
+        public let centerRemoteCursor: () -> Void
+
+        public init(
+            connectedMachines: @escaping () -> [Machine],
+            arrangement: @escaping () -> MachineArrangement,
+            settings: @escaping () -> MBCompatibilitySettings,
+            updateRemoteTarget: @escaping (UUID?) -> Void,
+            emitToast: @escaping (MBToastEvent) -> Void,
+            appendLog: @escaping (String) -> Void,
+            activateRemoteMachine: @escaping (Machine?) -> Bool,
+            centerRemoteCursor: @escaping () -> Void
+        ) {
+            self.connectedMachines = connectedMachines
+            self.arrangement = arrangement
+            self.settings = settings
+            self.updateRemoteTarget = updateRemoteTarget
+            self.emitToast = emitToast
+            self.appendLog = appendLog
+            self.activateRemoteMachine = activateRemoteMachine
+            self.centerRemoteCursor = centerRemoteCursor
+        }
     }
 
     public var switchState: SwitchState = .idle
@@ -23,16 +57,10 @@ public final class MBSessionCoordinator: Observation.Observable {
 
     private let localMachineID: UUID
     private let localMachineName: String
-    private let connectedMachinesProvider: () -> [Machine]
-    private let arrangementProvider: () -> MachineArrangement
-    private let settingsProvider: () -> MBCompatibilitySettings
-    private let protocolModeProvider: () -> MBProtocolMode
-    private let updateRemoteTarget: (UUID?) -> Void
-    private let showToast: (String, String) -> Void
-    private let appendLog: (String) -> Void
-    private let activateCompatibilityMachine: (Machine?) -> Void
-    private let centerRemoteCursor: () -> Void
-    private let unhideCursor: () -> Void
+    private let deps: Dependencies
+    private let screenGeometry: any ScreenGeometryProviding
+    private let clock: any ClockProviding
+    private let cursorController: any CursorControlling
 
     private var lastEdgeSwitchTime: TimeInterval = 0
     private var edgeSwitchLockedUntil: TimeInterval = 0
@@ -43,45 +71,34 @@ public final class MBSessionCoordinator: Observation.Observable {
     public init(
         localMachineID: UUID,
         localMachineName: String,
-        connectedMachinesProvider: @escaping () -> [Machine],
-        arrangementProvider: @escaping () -> MachineArrangement,
-        settingsProvider: @escaping () -> MBCompatibilitySettings,
-        protocolModeProvider: @escaping () -> MBProtocolMode,
-        updateRemoteTarget: @escaping (UUID?) -> Void,
-        showToast: @escaping (String, String) -> Void,
-        appendLog: @escaping (String) -> Void,
-        activateCompatibilityMachine: @escaping (Machine?) -> Void,
-        centerRemoteCursor: @escaping () -> Void,
-        unhideCursor: @escaping () -> Void = { NSCursor.unhide() })
-    {
+        dependencies: Dependencies,
+        screenGeometry: any ScreenGeometryProviding = SystemScreenGeometryProvider(),
+        clock: any ClockProviding = SystemClock(),
+        cursorController: any CursorControlling = SystemCursorController()
+    ) {
         self.localMachineID = localMachineID
         self.localMachineName = localMachineName
-        self.connectedMachinesProvider = connectedMachinesProvider
-        self.arrangementProvider = arrangementProvider
-        self.settingsProvider = settingsProvider
-        self.protocolModeProvider = protocolModeProvider
-        self.updateRemoteTarget = updateRemoteTarget
-        self.showToast = showToast
-        self.appendLog = appendLog
-        self.activateCompatibilityMachine = activateCompatibilityMachine
-        self.centerRemoteCursor = centerRemoteCursor
-        self.unhideCursor = unhideCursor
+        self.deps = dependencies
+        self.screenGeometry = screenGeometry
+        self.clock = clock
+        self.cursorController = cursorController
         self.activeMachineName = localMachineName
     }
 
     public func setActiveMachine(_ id: UUID?, nameHint: String? = nil, notify: Bool = true) {
         self.activeMachineId = id
-        self.updateRemoteTarget(id)
+        self.deps.updateRemoteTarget(id)
 
         if let id {
-            let machineName = self.connectedMachinesProvider().first(where: { $0.id == id })?.name
+            let machineName =
+                self.deps.connectedMachines().first(where: { $0.id == id })?.name
                 ?? nameHint
                 ?? self.localMachineName
             self.activeMachineName = machineName
             self.switchState = .active
             self.lastSwitchTimestamp = Date()
             if notify {
-                self.showToast("已切换到 \(machineName)", "arrow.right")
+                self.deps.emitToast(.switchedToMachine(machineName))
             }
             return
         }
@@ -90,30 +107,29 @@ public final class MBSessionCoordinator: Observation.Observable {
         self.switchState = .idle
         self.lastSwitchTimestamp = Date()
         if notify {
-            self.showToast("已切回本机", "arrow.left")
+            self.deps.emitToast(.returnedToLocal)
         }
     }
 
     public func handleTransportActiveMachineChanged(id: UUID?, name: String?) {
         self.setActiveMachine(id, nameHint: name)
         if id == nil {
-            self.unhideCursor()
+            self.cursorController.unhide()
         }
     }
 
     public func requestSwitch(to machineId: UUID, reason: SwitchReason = .manual) {
-        guard let machine = self.connectedMachinesProvider().first(where: { $0.id == machineId }) else {
+        guard let machine = self.deps.connectedMachines().first(where: { $0.id == machineId }) else {
             return
         }
 
-        if self.protocolModeProvider() == .modern {
+        guard self.deps.activateRemoteMachine(machine) else {
             self.setActiveMachine(machineId)
             return
         }
 
         self.switchState = .switching
-        self.showToast("正在切换到 \(machine.name)", "arrow.triangle.2.circlepath")
-        self.activateCompatibilityMachine(machine)
+        self.deps.emitToast(.switchingToMachine(machine.name))
 
         if reason == .manual {
             self.setEdgeSwitchGuard()
@@ -128,11 +144,11 @@ public final class MBSessionCoordinator: Observation.Observable {
             return
         }
 
-        guard let target = self.connectedMachinesProvider().first(where: {
-            $0.name.uppercased() == normalized
-        }) else {
-            return
-        }
+        guard
+            let target = self.deps.connectedMachines().first(where: {
+                $0.name.uppercased() == normalized
+            })
+        else { return }
 
         self.requestSwitch(to: target.id, reason: reason)
     }
@@ -140,66 +156,32 @@ public final class MBSessionCoordinator: Observation.Observable {
     public func forceReturnToLocal(reason: String) {
         guard self.activeMachineId != nil else { return }
 
-        if self.protocolModeProvider() != .modern {
-            self.activateCompatibilityMachine(nil)
-        }
-
+        _ = self.deps.activateRemoteMachine(nil)
         self.setActiveMachine(nil)
-        self.unhideCursor()
-        self.appendLog("Force return to local (\(reason))")
+        self.cursorController.unhide()
+        self.deps.appendLog("Force return to local (\(reason))")
     }
 
     public func handleLocalMouseEvent(snapshot: EventSnapshot) {
-        let settings = self.settingsProvider()
-        guard settings.switchByMouse else {
-            MBLogger.network.debug("Edge check skipped: switchByMouse=false")
-            return
-        }
-        guard self.activeMachineId == nil else {
-            MBLogger.network.debug("Edge check skipped: activeMachineId != nil")
-            return
-        }
-        guard let mainScreen = NSScreen.main ?? NSScreen.screens.first else {
-            MBLogger.network.debug("Edge check skipped: no screen")
+        let settings = self.deps.settings()
+        guard settings.switchByMouse, self.activeMachineId == nil else { return }
+        guard let edgeContext = self.evaluateEdgeGuards(snapshot: snapshot, settings: settings) else {
             return
         }
 
-        let edgeContext = self.makeEdgeContext(snapshot: snapshot, mainScreen: mainScreen, settings: settings)
-        guard let edgeContext else { return }
-
-        if self.edgeSwitchPendingRelease {
-            if self.isAwayFromEdges(
-                location: edgeContext.edgeLocation,
-                bounds: edgeContext.bounds,
-                margin: CGFloat(settings.edgeSwitchSafeMargin))
-            {
-                self.edgeSwitchPendingRelease = false
-            } else {
-                MBLogger.network.debug("Edge check skipped: pending release")
-                return
-            }
-        }
-
-        let now = CFAbsoluteTimeGetCurrent()
-        if now < self.edgeSwitchLockedUntil {
-            MBLogger.network.debug("Edge check skipped: locked")
-            return
-        }
-
-        guard let dir = edgeContext.direction else {
-            MBLogger.network.debug("Edge check: not near edge")
-            return
-        }
+        let now = self.clock.now()
+        guard now >= self.edgeSwitchLockedUntil else { return }
+        guard let dir = edgeContext.direction else { return }
 
         let effectiveArrangement = self.effectiveArrangement(oneRow: settings.matrixOneRow)
-        guard let targetId = effectiveArrangement.next(
-            from: self.localMachineID,
-            direction: self.arrangementDirection(for: dir),
-            wraps: settings.matrixCircle,
-            oneRow: settings.matrixOneRow)
+        guard
+            let targetId = effectiveArrangement.next(
+                from: self.localMachineID,
+                direction: dir.arrangementDirection,
+                wraps: settings.matrixCircle,
+                oneRow: settings.matrixOneRow)
         else {
-            let shouldLog = self.lastNoTargetDirection != dir || now - self.lastNoTargetLogTime > 1.0
-            if shouldLog {
+            if self.lastNoTargetDirection != dir || now - self.lastNoTargetLogTime > 1.0 {
                 self.lastNoTargetDirection = dir
                 self.lastNoTargetLogTime = now
                 MBLogger.network.debug("Edge check: no target for direction")
@@ -207,15 +189,64 @@ public final class MBSessionCoordinator: Observation.Observable {
             return
         }
 
-        if now - self.lastEdgeSwitchTime < 0.1 {
-            MBLogger.network.debug("Edge check skipped: throttled")
+        guard now - self.lastEdgeSwitchTime >= 0.1 else { return }
+        self.triggerEdgeSwitch(to: targetId, direction: dir, at: now)
+    }
+
+    public func handleRemoteMouseEvent(snapshot: EventSnapshot) {
+        let settings = self.deps.settings()
+        guard settings.switchByMouse, let activeMachineId = self.activeMachineId else { return }
+        guard let edgeContext = self.evaluateEdgeGuards(snapshot: snapshot, settings: settings) else {
             return
         }
 
-        self.lastEdgeSwitchTime = now
-        self.setEdgeSwitchGuard()
+        let now = self.clock.now()
+        guard now >= self.edgeSwitchLockedUntil, now - self.lastEdgeSwitchTime >= 0.1 else {
+            return
+        }
 
-        MBLogger.network.info("Edge switch triggered: \(String(describing: dir)) towards \(targetId)")
+        // Only lock/arm the edge guard once the cursor actually reaches a screen edge.
+        guard let dir = edgeContext.direction else { return }
+
+        let targetId =
+            self.effectiveArrangement(oneRow: settings.matrixOneRow).next(
+                from: activeMachineId,
+                direction: dir.arrangementDirection,
+                wraps: settings.matrixCircle,
+                oneRow: settings.matrixOneRow) ?? self.localMachineID
+
+        self.triggerEdgeSwitch(to: targetId, direction: dir, at: now)
+    }
+
+    private func evaluateEdgeGuards(
+        snapshot: EventSnapshot,
+        settings: MBCompatibilitySettings
+    ) -> EdgeContext? {
+        guard let mainScreenFrame = self.screenGeometry.mainScreenFrame else { return nil }
+        guard
+            let edgeContext = self.makeEdgeContext(
+                snapshot: snapshot,
+                mainScreenFrame: mainScreenFrame,
+                settings: settings)
+        else { return nil }
+
+        if self.edgeSwitchPendingRelease {
+            let margin = CGFloat(settings.edgeSwitchSafeMargin)
+            if self.isAwayFromEdges(location: edgeContext.edgeLocation, bounds: edgeContext.bounds, margin: margin) {
+                self.edgeSwitchPendingRelease = false
+            } else {
+                return nil
+            }
+        }
+
+        return edgeContext
+    }
+
+    private func triggerEdgeSwitch(to targetId: UUID, direction: EdgeDirection, at now: TimeInterval) {
+        self.lastEdgeSwitchTime = now
+        self.setEdgeSwitchGuard(at: now)
+        MBLogger.network.info("Edge switch triggered: \(String(describing: direction)) -> \(targetId)")
+
         if targetId == self.localMachineID {
             self.forceReturnToLocal(reason: "edge")
         } else {
@@ -223,125 +254,59 @@ public final class MBSessionCoordinator: Observation.Observable {
         }
     }
 
-    public func handleRemoteMouseEvent(snapshot: EventSnapshot) {
-        let settings = self.settingsProvider()
-        guard settings.switchByMouse else { return }
-        guard let activeMachineId = self.activeMachineId else { return }
-        guard let mainScreen = NSScreen.main ?? NSScreen.screens.first else { return }
-
-        let edgeContext = self.makeEdgeContext(snapshot: snapshot, mainScreen: mainScreen, settings: settings)
-        guard let edgeContext else { return }
-
-        if self.edgeSwitchPendingRelease {
-            if self.isAwayFromEdges(
-                location: edgeContext.edgeLocation,
-                bounds: edgeContext.bounds,
-                margin: CGFloat(settings.edgeSwitchSafeMargin))
-            {
-                self.edgeSwitchPendingRelease = false
-            } else {
-                return
-            }
-        }
-
-        let now = CFAbsoluteTimeGetCurrent()
-        if now < self.edgeSwitchLockedUntil || now - self.lastEdgeSwitchTime < 0.1 {
-            return
-        }
-        self.lastEdgeSwitchTime = now
-        self.setEdgeSwitchGuard()
-
-        if let dir = edgeContext.direction,
-           let targetId = self.effectiveArrangement(oneRow: settings.matrixOneRow).next(
-               from: activeMachineId,
-               direction: self.arrangementDirection(for: dir),
-               wraps: settings.matrixCircle,
-               oneRow: settings.matrixOneRow)
-        {
-            MBLogger.network.info("Remote edge switch: \(String(describing: dir)) → \(targetId)")
-            if targetId == self.localMachineID {
-                self.forceReturnToLocal(reason: "edge")
-            } else {
-                self.requestSwitch(to: targetId, reason: .edge)
-            }
-            return
-        }
-
-        if edgeContext.direction != nil {
-            self.forceReturnToLocal(reason: "edge")
-        }
-    }
-
     private func centerRemoteCursorIfPossible() {
-        let settings = self.settingsProvider()
-        guard self.protocolModeProvider() != .modern else { return }
-        guard !settings.moveMouseRelatively else { return }
-        guard settings.centerCursorOnManualSwitch else { return }
-        self.centerRemoteCursor()
+        let settings = self.deps.settings()
+        guard !settings.moveMouseRelatively, settings.centerCursorOnManualSwitch else { return }
+        self.deps.centerRemoteCursor()
     }
 
-    private func setEdgeSwitchGuard() {
-        let now = CFAbsoluteTimeGetCurrent()
-        let lockSeconds = max(0.05, self.settingsProvider().edgeSwitchLockSeconds)
-        self.edgeSwitchLockedUntil = now + lockSeconds
+    private func setEdgeSwitchGuard(at now: TimeInterval? = nil) {
+        let timestamp = now ?? self.clock.now()
+        let lockSeconds = max(0.05, self.deps.settings().edgeSwitchLockSeconds)
+        self.edgeSwitchLockedUntil = timestamp + lockSeconds
         self.edgeSwitchPendingRelease = true
     }
 
     private func isAwayFromEdges(location: CGPoint, bounds: CGRect, margin: CGFloat) -> Bool {
-        let awayLeft = location.x > bounds.minX + margin
-        let awayRight = location.x < bounds.maxX - margin
-        let awayBottom = location.y > bounds.minY + margin
-        let awayTop = location.y < bounds.maxY - margin
-        return awayLeft && awayRight && awayBottom && awayTop
+        location.x > bounds.minX + margin
+            && location.x < bounds.maxX - margin
+            && location.y > bounds.minY + margin
+            && location.y < bounds.maxY - margin
     }
 
     private func effectiveArrangement(oneRow: Bool) -> MachineArrangement {
-        let connectedMachineIDs = self.connectedMachinesProvider().map(\.id)
+        let connectedMachineIDs = self.deps.connectedMachines().map(\.id)
         let validIDs = Set([self.localMachineID] + connectedMachineIDs)
 
-        var slots = self.arrangementProvider().slots.filter { validIDs.contains($0) }
+        var slots = self.deps.arrangement().slots.filter { validIDs.contains($0) }
         for id in [self.localMachineID] + connectedMachineIDs where !slots.contains(id) {
             slots.append(id)
         }
 
-        let columnCount = oneRow ? max(1, slots.count) : max(1, self.arrangementProvider().columns)
+        let columnCount = oneRow ? max(1, slots.count) : max(1, self.deps.arrangement().columns)
         return MachineArrangement(slots: slots, columns: columnCount)
-    }
-
-    private func arrangementDirection(for direction: EdgeDirection) -> ArrangementDirection {
-        switch direction {
-        case .left:
-            .left
-        case .right:
-            .right
-        case .up:
-            .up
-        case .down:
-            .down
-        }
     }
 
     private func makeEdgeContext(
         snapshot: EventSnapshot,
-        mainScreen: NSScreen,
-        settings: MBCompatibilitySettings)
-        -> EdgeContext?
-    {
+        mainScreenFrame: CGRect,
+        settings: MBCompatibilitySettings
+    ) -> EdgeContext? {
         let threshold: CGFloat = 3
         let location = snapshot.location
-        let cocoaY = mainScreen.frame.maxY - (location.y - mainScreen.frame.origin.y)
+        let cocoaY = mainScreenFrame.maxY - (location.y - mainScreenFrame.origin.y)
         let edgeLocation = CGPoint(x: location.x, y: cocoaY)
-        let screen = NSScreen.screens.first(where: { $0.frame.contains(edgeLocation) }) ?? mainScreen
-        let bounds = screen.frame
+        let bounds =
+            self.screenGeometry.allScreenFrames.first(where: { $0.contains(edgeLocation) })
+            ?? mainScreenFrame
 
         let nearLeft = edgeLocation.x <= bounds.minX + threshold
         let nearRight = edgeLocation.x >= bounds.maxX - threshold
         let nearTop = edgeLocation.y >= bounds.maxY - threshold
         let nearBottom = edgeLocation.y <= bounds.minY + threshold
 
-        if settings.blockCorners {
-            let nearCorner = (nearLeft || nearRight) && (nearBottom || nearTop)
-            if nearCorner { return nil }
+        if settings.blockCorners, (nearLeft || nearRight) && (nearBottom || nearTop) {
+            return nil
         }
 
         let direction: EdgeDirection? =
@@ -373,5 +338,14 @@ extension MBSessionCoordinator {
         case right
         case up
         case down
+
+        var arrangementDirection: ArrangementDirection {
+            switch self {
+            case .left: .left
+            case .right: .right
+            case .up: .up
+            case .down: .down
+            }
+        }
     }
 }

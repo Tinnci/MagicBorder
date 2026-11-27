@@ -9,23 +9,23 @@ struct SettingsView: View {
         TabView {
             GeneralSettingsTab()
                 .tabItem {
-                    Label(MBLocalized("General"), systemImage: "gear")
+                    Label(localizedString("General"), systemImage: "gear")
                 }
                 .frame(width: self.settingsWindowWidth)
 
             NetworkSettingsTab()
                 .tabItem {
-                    Label(MBLocalized("Network"), systemImage: "antenna.radiowaves.left.and.right")
+                    Label(localizedString("Network"), systemImage: "antenna.radiowaves.left.and.right")
                 }
                 .frame(width: self.settingsWindowWidth)
 
             OverlaySettingsTab()
                 .tabItem {
-                    Label(MBLocalized("Overlay"), systemImage: "macwindow.on.rectangle")
+                    Label(localizedString("Overlay"), systemImage: "macwindow.on.rectangle")
                 }
                 .frame(width: self.settingsWindowWidth)
         }
-        .padding(20) // Global padding for visually pleasing layout
+        .padding(20)  // Global padding for visually pleasing layout
         .onChange(of: self.networkManager.compatibilitySettings.securityKey) { _, _ in
             self.networkManager.applyCompatibilitySettings()
         }
@@ -81,19 +81,19 @@ private struct GeneralSettingsTab: View {
         @Bindable var networkManager = networkManager
 
         VStack(alignment: .leading, spacing: 24) {
-            SettingsSection(MBLocalized("Clipboard & Files")) {
+            SettingsSection(localizedString("Clipboard & Files")) {
                 Toggle(
-                    MBLocalized("Share Clipboard"),
+                    localizedString("Share Clipboard"),
                     isOn: $networkManager.compatibilitySettings.shareClipboard)
                 Toggle(
-                    MBLocalized("Transfer Files"),
+                    localizedString("Transfer Files"),
                     isOn: $networkManager.compatibilitySettings.transferFiles)
             }
 
             Divider()
 
-            SettingsSection(MBLocalized("Cursor Control")) {
-                Toggle(MBLocalized("Capture Local Input"), isOn: self.$captureInput)
+            SettingsSection(localizedString("Cursor Control")) {
+                Toggle(localizedString("Capture Local Input"), isOn: self.$captureInput)
                     .disabled(!self.accessibilityService.isTrusted)
 
                 if !self.accessibilityService.isTrusted {
@@ -102,13 +102,15 @@ private struct GeneralSettingsTab: View {
                             .foregroundStyle(.orange)
                             .font(.title3)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(MBLocalized("Permission Required"))
+                            Text(localizedString("Permission Required"))
                                 .font(.headline)
                             Text(
-                                MBLocalized("MagicBorder needs accessibility access to share mouse and keyboard input."))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Button(MBLocalized("Open System Settings")) {
+                                localizedString(
+                                    "MagicBorder needs accessibility access to share mouse and keyboard input.")
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            Button(localizedString("Open System Settings")) {
                                 self.accessibilityService.openSystemSettings()
                             }
                             .controlSize(.small)
@@ -119,74 +121,79 @@ private struct GeneralSettingsTab: View {
                 }
 
                 Toggle(
-                    MBLocalized("Switch by Moving to Edge"),
+                    localizedString("Switch by Moving to Edge"),
                     isOn: $networkManager.compatibilitySettings.switchByMouse)
                 Toggle(
-                    MBLocalized("Block Corner Switching"),
+                    localizedString("Block Corner Switching"),
                     isOn: $networkManager.compatibilitySettings.blockCorners)
                 Toggle(
-                    MBLocalized("Center Cursor on Manual Switch"),
+                    localizedString("Center Cursor on Manual Switch"),
                     isOn: $networkManager.compatibilitySettings.centerCursorOnManualSwitch)
 
                 Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 8) {
                     GridRow {
-                        Text(MBLocalized("Edge Switch Lock"))
+                        Text(localizedString("Edge Switch Lock"))
                         HStack {
                             Slider(
                                 value: $networkManager.compatibilitySettings.edgeSwitchLockSeconds,
-                                in: 0.1 ... 1.0)
-                                .frame(width: 120)
+                                in: 0.1...1.0
+                            )
+                            .frame(width: 120)
                             Text(
-                                "\(networkManager.compatibilitySettings.edgeSwitchLockSeconds, specifier: "%.2fs")")
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
+                                "\(networkManager.compatibilitySettings.edgeSwitchLockSeconds, specifier: "%.2fs")"
+                            )
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
                         }
                     }
                     GridRow {
-                        Text(MBLocalized("Edge Safe Margin"))
+                        Text(localizedString("Edge Safe Margin"))
                         HStack {
                             Slider(
                                 value: $networkManager.compatibilitySettings.edgeSwitchSafeMargin,
-                                in: 4 ... 40, step: 2)
-                                .frame(width: 120)
+                                in: 4...40, step: 2
+                            )
+                            .frame(width: 120)
                             Text(
-                                "\(Int(networkManager.compatibilitySettings.edgeSwitchSafeMargin))px")
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
+                                "\(Int(networkManager.compatibilitySettings.edgeSwitchSafeMargin))px"
+                            )
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
                         }
                     }
                 }
-                .padding(.leading, 24) // Indent controls slightly
+                .padding(.leading, 24)  // Indent controls slightly
 
                 Toggle(
-                    MBLocalized("Wrap Mouse at Screen Edge"),
+                    localizedString("Wrap Mouse at Screen Edge"),
                     isOn: $networkManager.compatibilitySettings.wrapCursor)
                 Toggle(
-                    MBLocalized("Relative Mouse Movement"),
+                    localizedString("Relative Mouse Movement"),
                     isOn: $networkManager.compatibilitySettings.moveMouseRelatively)
             }
 
             Divider()
 
-            SettingsSection(MBLocalized("Matrix Configuration")) {
-                Picker(MBLocalized("Layout Mode"), selection: self.matrixModeBinding) {
-                    Text(MBLocalized("Single Row")).tag(0)
-                    Text(MBLocalized("Grid (2 Rows)")).tag(1)
+            SettingsSection(localizedString("Matrix Configuration")) {
+                Picker(localizedString("Layout Mode"), selection: self.matrixModeBinding) {
+                    Text(localizedString("Single Row")).tag(0)
+                    Text(localizedString("Grid (2 Rows)")).tag(1)
                 }
                 .pickerStyle(.segmented)
-                .labelsHidden() // Segmented picker shows labels inside
+                .labelsHidden()  // Segmented picker shows labels inside
                 .frame(width: 250)
 
                 Toggle(
-                    MBLocalized("Cycle Through Screens"),
+                    localizedString("Cycle Through Screens"),
                     isOn: $networkManager.compatibilitySettings.matrixCircle)
 
                 Text(
                     networkManager.compatibilitySettings.matrixOneRow
-                        ? MBLocalized("Machines are arranged in a single horizontal line.")
-                        : MBLocalized("Machines are arranged in a 2-row grid layout."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                        ? localizedString("Machines are arranged in a single horizontal line.")
+                        : localizedString("Machines are arranged in a 2-row grid layout.")
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         }
     }
@@ -199,23 +206,24 @@ private struct NetworkSettingsTab: View {
         @Bindable var networkManager = networkManager
 
         VStack(alignment: .leading, spacing: 24) {
-            SettingsSection(MBLocalized("Security")) {
+            SettingsSection(localizedString("Security")) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading) {
                         SecureField(
-                            MBLocalized("Security Key"),
-                            text: $networkManager.compatibilitySettings.securityKey)
-                            .textContentType(.password)
-                            .frame(width: 240)
+                            localizedString("Security Key"),
+                            text: $networkManager.compatibilitySettings.securityKey
+                        )
+                        .textContentType(.password)
+                        .frame(width: 240)
 
-                        if let message = networkManager.compatibilitySettings.validationMessage {
-                            Text(message)
+                        if let status = networkManager.compatibilitySettings.validationStatus {
+                            Text(status.localizedMessage)
                                 .font(.caption)
-                                .foregroundStyle(message.contains("Success") ? .green : .red)
+                                .foregroundStyle(status == .valid ? .green : .red)
                         }
                     }
 
-                    Button(MBLocalized("Validate")) {
+                    Button(localizedString("Validate")) {
                         _ = networkManager.compatibilitySettings.validateSecurityKey()
                     }
                 }
@@ -223,29 +231,31 @@ private struct NetworkSettingsTab: View {
 
             Divider()
 
-            SettingsSection(MBLocalized("Ports")) {
+            SettingsSection(localizedString("Ports")) {
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 12) {
                     GridRow {
-                        Text(MBLocalized("Message Port"))
+                        Text(localizedString("Message Port"))
                         TextField(
-                            MBLocalized("15101"),
+                            localizedString("15101"),
                             value: $networkManager.compatibilitySettings.messagePort,
-                            formatter: NumberFormatter())
-                            .monospacedDigit()
-                            .frame(width: 80)
-                        Text(MBLocalized("Default: 15101"))
+                            formatter: NumberFormatter()
+                        )
+                        .monospacedDigit()
+                        .frame(width: 80)
+                        Text(localizedString("Default: 15101"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     GridRow {
-                        Text(MBLocalized("Clipboard Port"))
+                        Text(localizedString("Clipboard Port"))
                         TextField(
-                            MBLocalized("15100"),
+                            localizedString("15100"),
                             value: $networkManager.compatibilitySettings.clipboardPort,
-                            formatter: NumberFormatter())
-                            .monospacedDigit()
-                            .frame(width: 80)
-                        Text(MBLocalized("Default: 15100"))
+                            formatter: NumberFormatter()
+                        )
+                        .monospacedDigit()
+                        .frame(width: 80)
+                        Text(localizedString("Default: 15100"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -269,20 +279,21 @@ private struct OverlaySettingsTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            SettingsSection(MBLocalized("Global Defaults")) {
-                Toggle(MBLocalized("Show Overlay"), isOn: self.$dragDropOverlayEnabled)
+            SettingsSection(localizedString("Global Defaults")) {
+                Toggle(localizedString("Show Overlay"), isOn: self.$dragDropOverlayEnabled)
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Toggle(MBLocalized("Show Device Name"), isOn: self.$dragDropOverlayShowDevice)
-                    Toggle(MBLocalized("Show Progress"), isOn: self.$dragDropOverlayShowProgress)
+                    Toggle(localizedString("Show Device Name"), isOn: self.$dragDropOverlayShowDevice)
+                    Toggle(localizedString("Show Progress"), isOn: self.$dragDropOverlayShowProgress)
 
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
                         GridRow {
-                            Text(MBLocalized("Size"))
+                            Text(localizedString("Size"))
                             HStack {
                                 Slider(
-                                    value: self.$dragDropOverlayScale, in: 0.85 ... 1.3, step: 0.05)
-                                    .frame(width: 120)
+                                    value: self.$dragDropOverlayScale, in: 0.85...1.3, step: 0.05
+                                )
+                                .frame(width: 120)
                                 Text("\(Int(self.dragDropOverlayScale * 100))%")
                                     .monospacedDigit()
                                     .foregroundStyle(.secondary)
@@ -290,15 +301,15 @@ private struct OverlaySettingsTab: View {
                         }
 
                         GridRow {
-                            Text(MBLocalized("Position"))
+                            Text(localizedString("Position"))
                             Picker("", selection: self.$dragDropOverlayPosition) {
-                                Text(MBLocalized("Top")).tag("top")
-                                Text(MBLocalized("Bottom")).tag("bottom")
-                                Text(MBLocalized("Top Left")).tag("topLeading")
-                                Text(MBLocalized("Top Right")).tag("topTrailing")
-                                Text(MBLocalized("Bottom Left")).tag(
+                                Text(localizedString("Top")).tag("top")
+                                Text(localizedString("Bottom")).tag("bottom")
+                                Text(localizedString("Top Left")).tag("topLeading")
+                                Text(localizedString("Top Right")).tag("topTrailing")
+                                Text(localizedString("Bottom Left")).tag(
                                     "bottomLeading")
-                                Text(MBLocalized("Bottom Right")).tag(
+                                Text(localizedString("Bottom Right")).tag(
                                     "bottomTrailing")
                             }
                             .frame(width: 140)
@@ -311,9 +322,9 @@ private struct OverlaySettingsTab: View {
 
             Divider()
 
-            SettingsSection(MBLocalized("Per-Device Override")) {
+            SettingsSection(localizedString("Per-Device Override")) {
                 HStack {
-                    Text(MBLocalized("Target Device"))
+                    Text(localizedString("Target Device"))
                     Picker("", selection: self.$selectedDevice) {
                         ForEach(self.deviceOptions, id: \.self) { device in
                             Text(device).tag(device)
@@ -323,17 +334,17 @@ private struct OverlaySettingsTab: View {
                 }
 
                 if !self.selectedDevice.isEmpty {
-                    Toggle(MBLocalized("Override Global Settings"), isOn: self.useOverrideBinding)
+                    Toggle(localizedString("Override Global Settings"), isOn: self.useOverrideBinding)
                         .padding(.top, 4)
 
                     if self.overlayPreferences.hasOverride(for: self.selectedDevice) {
                         VStack(alignment: .leading, spacing: 10) {
-                            Toggle(MBLocalized("Show Device Name"), isOn: self.showDeviceBinding)
-                            Toggle(MBLocalized("Show Progress"), isOn: self.showProgressBinding)
+                            Toggle(localizedString("Show Device Name"), isOn: self.showDeviceBinding)
+                            Toggle(localizedString("Show Progress"), isOn: self.showProgressBinding)
 
                             HStack {
-                                Text(MBLocalized("Size"))
-                                Slider(value: self.scaleBinding, in: 0.85 ... 1.3, step: 0.05)
+                                Text(localizedString("Size"))
+                                Slider(value: self.scaleBinding, in: 0.85...1.3, step: 0.05)
                                     .frame(width: 120)
                                 Text("\(Int(self.scaleBinding.wrappedValue * 100))%")
                                     .monospacedDigit()
@@ -415,7 +426,7 @@ private struct OverlaySettingsTab: View {
 
 #Preview {
     SettingsView()
-        .environment(MagicBorderKit.MBNetworkManager.shared)
+        .environment(MagicBorderKit.MBNetworkManager())
         .environment(MBAccessibilityService())
         .environment(MBOverlayPreferencesStore())
 }

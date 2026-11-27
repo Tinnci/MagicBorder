@@ -1,13 +1,15 @@
 repos:
   - repo: local
     hooks:
-      - id: swiftformat
-        name: SwiftFormat
-        entry: swiftformat
+      - id: swift-format
+        name: swift format lint
+        entry: swift format lint --strict --recursive Sources Tests
         language: system
+        pass_filenames: false
         types: [swift]
       - id: swiftlint
         name: SwiftLint
-        entry: swiftlint
+        entry: swiftlint lint --strict
         language: system
+        pass_filenames: false
         types: [swift]

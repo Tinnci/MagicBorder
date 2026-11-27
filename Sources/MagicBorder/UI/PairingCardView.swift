@@ -1,3 +1,4 @@
+import AppKit
 import MagicBorderKit
 import SwiftUI
 
@@ -5,6 +6,7 @@ struct PairingCardView: View {
     @Binding var securityKey: String
     @State private var isVisible = false
     @State private var copyMessage: String?
+    @State private var copyMessageTask: Task<Void, Never>?
 
     var maskedKey: String {
         String(repeating: "•", count: self.securityKey.count)
@@ -13,38 +15,38 @@ struct PairingCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Label(MBLocalized("Security Key"), systemImage: "key.fill")
+                Label(localizedString("Security Key"), systemImage: "key.fill")
                     .font(.headline)
                 Spacer()
                 Button(action: { self.isVisible.toggle() }) {
                     Image(systemName: self.isVisible ? "eye.slash" : "eye")
                 }
                 .buttonStyle(.borderless)
-                .help(self.isVisible ? MBLocalized("Hide") : MBLocalized("Show"))
+                .help(self.isVisible ? localizedString("Hide") : localizedString("Show"))
             }
 
             Group {
                 if self.isVisible {
-                    TextField(MBLocalized("Security Key"), text: self.$securityKey)
+                    TextField(localizedString("Security Key"), text: self.$securityKey)
                 } else {
-                    SecureField(MBLocalized("Security Key"), text: self.$securityKey)
+                    SecureField(localizedString("Security Key"), text: self.$securityKey)
                 }
             }
             .textFieldStyle(.roundedBorder)
             .font(.system(.body, design: .monospaced))
 
             HStack(spacing: 8) {
-                Button(MBLocalized("Copy")) {
+                Button(localizedString("Copy")) {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
                     pasteboard.setString(self.securityKey, forType: .string)
-                    self.showCopyMessage(MBLocalized("Copied"))
+                    self.showCopyMessage(localizedString("Copied"))
                 }
                 .buttonStyle(.bordered)
 
-                Button(MBLocalized("Regenerate")) {
+                Button(localizedString("Regenerate")) {
                     self.securityKey = Self.generatedSecurityKey()
-                    self.showCopyMessage(MBLocalized("New key generated"))
+                    self.showCopyMessage(localizedString("New key generated"))
                 }
                 .buttonStyle(.bordered)
 
@@ -65,7 +67,10 @@ struct PairingCardView: View {
 
     private func showCopyMessage(_ text: String) {
         self.copyMessage = text
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+        self.copyMessageTask?.cancel()
+        self.copyMessageTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
             if self.copyMessage == text {
                 self.copyMessage = nil
             }

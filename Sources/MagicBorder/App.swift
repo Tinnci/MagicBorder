@@ -16,19 +16,26 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import AppKit
 import MagicBorderKit
 import SwiftUI
 
 @main
 struct MagicBorderApp: App {
     @State private var accessibilityService = MBAccessibilityService()
-    @State private var inputManager = MBInputManager.shared
-    @State private var networkManager = MBNetworkManager.shared
+    @State private var inputManager: MBInputManager
+    @State private var networkManager: MBNetworkManager
     @State private var overlayPreferences = MBOverlayPreferencesStore()
     @State private var toastPresenter = MBToastPresenter()
     @AppStorage("captureInput") private var captureInput = true
 
-    // Computed locale based on preferred languages for swift run compatibility
+    init() {
+        let input = MBInputManager()
+        let network = MBNetworkManager(inputManager: input)
+        self._inputManager = State(initialValue: input)
+        self._networkManager = State(initialValue: network)
+    }
+
     private var currentLocale: Locale {
         if let languageCode = Locale.preferredLanguages.first {
             return Locale(identifier: languageCode)
@@ -56,17 +63,19 @@ struct MagicBorderApp: App {
                 .onChange(of: self.captureInput) { _, _ in
                     self.syncInputCapture()
                 }
+                .onChange(of: self.networkManager.compatibilitySettings.wrapCursor) { _, _ in
+                    self.networkManager.applyCompatibilitySettings()
+                }
                 .onChange(of: self.networkManager.toast) { _, toast in
                     if let toast {
                         self.toastPresenter.show(
-                            message: toast.message,
-                            systemImage: toast.systemImage)
+                            message: toast.localizedMessage,
+                            systemImage: toast.defaultSystemImage)
                     } else {
                         self.toastPresenter.hide()
                     }
                 }
         }
-        .commands {}
 
         Settings {
             SettingsView()

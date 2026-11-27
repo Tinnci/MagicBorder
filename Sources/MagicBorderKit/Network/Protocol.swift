@@ -1,5 +1,5 @@
-import CoreGraphics
-import Foundation
+public import CoreGraphics
+public import Foundation
 
 // MARK: - Packet Types
 
@@ -18,11 +18,15 @@ public struct MachineInfo: Codable, Equatable, Sendable {
     public let name: String
     public let screenWidth: Double
     public let screenHeight: Double
-    public var signature: String? // HMAC(securityKey, id.uuidString)
+    public var signature: String?
 
     public init(
-        id: UUID, name: String, screenWidth: Double, screenHeight: Double, signature: String? = nil)
-    {
+        id: UUID,
+        name: String,
+        screenWidth: Double,
+        screenHeight: Double,
+        signature: String? = nil
+    ) {
         self.id = id
         self.name = name
         self.screenWidth = screenWidth
@@ -31,36 +35,48 @@ public struct MachineInfo: Codable, Equatable, Sendable {
     }
 }
 
-public struct ClipboardPayload: Codable, Sendable {
+public struct ClipboardPayload: Codable, Equatable, Sendable {
     public let content: Data
     public let type: ClipboardType
+
+    public init(content: Data, type: ClipboardType) {
+        self.content = content
+        self.type = type
+    }
 }
 
-public enum ClipboardType: Codable, Sendable {
+public enum ClipboardType: Codable, Equatable, Sendable {
     case text
     case image
 }
 
 // MARK: - Input Events
 
-public enum RemoteEventType: Codable, Sendable {
+public enum RemoteEventType: Codable, Equatable, Sendable {
     case mouseMove
-    case leftMouseDown, leftMouseUp
-    case rightMouseDown, rightMouseUp
+    case leftMouseDown
+    case leftMouseUp
+    case rightMouseDown
+    case rightMouseUp
     case scrollWheel
-    case keyDown, keyUp
+    case keyDown
+    case keyUp
 }
 
-public struct RemoteEvent: Codable, Sendable {
+public struct RemoteEvent: Codable, Equatable, Sendable {
     public let type: RemoteEventType
-    public let point: CGPoint? // For mouse events
-    public let keyCode: CGKeyCode? // For key events
-    public let deltaX: Int? // For Scroll
-    public let deltaY: Int? // For Scroll
+    public let point: CGPoint?
+    public let keyCode: CGKeyCode?
+    public let deltaX: Int?
+    public let deltaY: Int?
 
     public init(
-        type: RemoteEventType, point: CGPoint?, keyCode: CGKeyCode?, deltaX: Int?, deltaY: Int?)
-    {
+        type: RemoteEventType,
+        point: CGPoint?,
+        keyCode: CGKeyCode?,
+        deltaX: Int?,
+        deltaY: Int?
+    ) {
         self.type = type
         self.point = point
         self.keyCode = keyCode
@@ -68,12 +84,10 @@ public struct RemoteEvent: Codable, Sendable {
         self.deltaY = deltaY
     }
 
-    // Helper init for Mouse Move
     public static func mouseMove(at point: CGPoint) -> RemoteEvent {
         RemoteEvent(type: .mouseMove, point: point, keyCode: nil, deltaX: nil, deltaY: nil)
     }
 
-    // Helper init for Click
     public static func mouseClick(type: RemoteEventType, at point: CGPoint) -> RemoteEvent {
         RemoteEvent(type: type, point: point, keyCode: nil, deltaX: nil, deltaY: nil)
     }
@@ -83,7 +97,7 @@ public struct RemoteEvent: Codable, Sendable {
     }
 }
 
-// MARK: - Local Event Snapshot (Sendable)
+// MARK: - Local Event Snapshot
 
 public struct EventSnapshot: Sendable {
     public let location: CGPoint
@@ -107,9 +121,15 @@ public struct EventSnapshot: Sendable {
     }
 
     public init(
-        location: CGPoint, type: CGEventType, keyCode: Int64, scrollDeltaY: Int64,
-        scrollDeltaX: Int64, mouseDeltaX: Int64, mouseDeltaY: Int64, flags: CGEventFlags)
-    {
+        location: CGPoint,
+        type: CGEventType,
+        keyCode: Int64,
+        scrollDeltaY: Int64,
+        scrollDeltaX: Int64,
+        mouseDeltaX: Int64,
+        mouseDeltaY: Int64,
+        flags: CGEventFlags
+    ) {
         self.location = location
         self.type = type
         self.keyCode = keyCode
@@ -118,5 +138,17 @@ public struct EventSnapshot: Sendable {
         self.mouseDeltaX = mouseDeltaX
         self.mouseDeltaY = mouseDeltaY
         self.flags = flags
+    }
+
+    public func withLocation(_ newLocation: CGPoint) -> EventSnapshot {
+        EventSnapshot(
+            location: newLocation,
+            type: self.type,
+            keyCode: self.keyCode,
+            scrollDeltaY: self.scrollDeltaY,
+            scrollDeltaX: self.scrollDeltaX,
+            mouseDeltaX: self.mouseDeltaX,
+            mouseDeltaY: self.mouseDeltaY,
+            flags: self.flags)
     }
 }

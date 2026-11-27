@@ -1,6 +1,7 @@
-import Foundation
-import Network
-import OSLog
+public import Foundation
+public import Network
+private import OSLog
+private import os
 
 // MARK: - DiscoveredPeer
 
@@ -29,63 +30,44 @@ public struct DiscoveredPeer: Identifiable, Equatable, Hashable, Sendable {
 
 // MARK: - MBDiscoveryService
 
-/// Discovers MagicBorder / MWB peers on the local network via Bonjour and subnet scanning.
-///
-/// Ownership: this service owns `NWBrowser` and the subnet scanner.
-/// The `NWListener` (inbound connection acceptance) remains in `MBNetworkManager`
-/// until a dedicated `MBConnectionRegistry` is extracted (Phase 3).
-///
-/// Consume events via the `AsyncStream<Event>` returned by `events`:
-/// ```swift
-/// Task {
-///     for await event in discoveryService.events {
-///         switch event { case .found(let peer): … }
-///     }
-/// }
-/// ```
+/// Discovers MagicBorder / MWB peers on the local network via Bonjour and bounded subnet scanning.
 @MainActor
 public final class MBDiscoveryService {
-    // MARK: - Event
-
     public enum Event: Sendable {
         case found(DiscoveredPeer)
         case lost(DiscoveredPeer)
     }
 
-    // MARK: - Public API
-
     public let serviceType: String
     public let localName: String
 
-    /// Continuously emits `.found` / `.lost` events as peers appear and disappear.
-    public private(set) var events: AsyncStream<Event>
-
-    /// Current snapshot of all known peers (updated before each event is emitted).
+    public let events: AsyncStream<Event>
     public private(set) var discoveredPeers: [DiscoveredPeer] = []
 
-    // MARK: - Private
-
-    private var continuation: AsyncStream<Event>.Continuation?
+    private let continuation: AsyncStream<Event>.Continuation
+    private let browserQueue = DispatchQueue(label: "com.magicborder.discovery.browser")
+    private let scannerQueue = DispatchQueue(label: "com.magicborder.discovery.scanner", attributes: .concurrent)
     private var browser: NWBrowser?
-
-    // MARK: - Init
+    private let subnetScanTask = CancellableTaskSlot()
 
     public init(serviceType: String, localName: String) {
         self.serviceType = serviceType
         self.localName = localName
-        var cont: AsyncStream<Event>.Continuation?
-        self.events = AsyncStream { cont = $0 }
-        self.continuation = cont
+        let stream = AsyncStream<Event>.makeStream()
+        self.events = stream.stream
+        self.continuation = stream.continuation
     }
 
     deinit {
-        continuation?.finish()
+        self.subnetScanTask.cancel()
+        self.continuation.finish()
     }
 
     // MARK: - Browsing
 
     public func startBrowsing() {
-        let browser = NWBrowser(for: .bonjour(type: serviceType, domain: nil), using: .tcp)
+        guard self.browser == nil else { return }
+        let browser = NWBrowser(for: .bonjour(type: self.serviceType, domain: nil), using: .tcp)
         self.browser = browser
         let localName = self.localName
 
@@ -94,7 +76,7 @@ public final class MBDiscoveryService {
                 guard let self else { return }
                 let bonjourPeers = results.compactMap { result -> DiscoveredPeer? in
                     guard case .service(let name, _, _, _) = result.endpoint,
-                          name != localName
+                        name != localName
                     else { return nil }
                     return DiscoveredPeer(name: name, endpoint: result.endpoint, type: .bonjour)
                 }
@@ -108,15 +90,15 @@ public final class MBDiscoveryService {
                 self.discoveredPeers = existing + bonjourPeers
 
                 for peer in removed {
-                    self.continuation?.yield(.lost(peer))
+                    self.continuation.yield(.lost(peer))
                 }
                 for peer in added {
-                    self.continuation?.yield(.found(peer))
+                    self.continuation.yield(.found(peer))
                 }
             }
         }
 
-        browser.start(queue: .main)
+        browser.start(queue: self.browserQueue)
         MBLogger.network.info("[Discovery] Bonjour browsing started.")
     }
 
@@ -125,77 +107,136 @@ public final class MBDiscoveryService {
         self.browser = nil
     }
 
-    // MARK: - Subnet Scanning
+    // MARK: - Bounded Subnet Scanning
 
-    public func startSubnetScanning(port: UInt16 = 15101) {
-        MBLogger.network.info("[Discovery] Starting subnet scan…")
+    public func startSubnetScanning(port: UInt16 = 15101, maxConcurrentProbes: Int = 32) {
+        self.subnetScanTask.cancel()
+        MBLogger.network.info("[Discovery] Starting bounded subnet scan…")
         let prefixes = Self.localIPPrefixes()
         guard !prefixes.isEmpty else {
             MBLogger.network.info("[Discovery] No local IPv4 found for scanning.")
             return
         }
-        let queue = DispatchQueue(label: "com.magicborder.scanner", attributes: .concurrent)
-        for prefix in prefixes {
-            for i in 1 ... 254 {
-                let ip = "\(prefix).\(i)"
-                queue.async { [weak self] in self?.probe(ip: ip, port: port) }
+
+        let targets = prefixes.flatMap { prefix in (1...254).map { "\(prefix).\($0)" } }
+        let concurrencyLimit = max(1, maxConcurrentProbes)
+        let queue = self.scannerQueue
+
+        let task = Task { [weak self] in
+            await withTaskGroup(of: String?.self) { group in
+                var nextIndex = 0
+                let initialCount = min(concurrencyLimit, targets.count)
+                while nextIndex < initialCount {
+                    let ip = targets[nextIndex]
+                    nextIndex += 1
+                    group.addTask {
+                        await Self.probe(ip: ip, port: port, queue: queue) ? ip : nil
+                    }
+                }
+
+                for await openIP in group {
+                    guard !Task.isCancelled else {
+                        group.cancelAll()
+                        return
+                    }
+                    if let openIP {
+                        self?.addScannedPeer(ip: openIP, port: port)
+                    }
+                    if nextIndex < targets.count {
+                        let ip = targets[nextIndex]
+                        nextIndex += 1
+                        group.addTask {
+                            await Self.probe(ip: ip, port: port, queue: queue) ? ip : nil
+                        }
+                    }
+                }
             }
         }
+        self.subnetScanTask.replace(with: task)
     }
 
-    private nonisolated func probe(ip: String, port: UInt16) {
-        let host = NWEndpoint.Host(ip)
-        let nwPort = NWEndpoint.Port(integerLiteral: port)
-        let connection = NWConnection(to: .hostPort(host: host, port: nwPort), using: .tcp)
+    private nonisolated static func probe(ip: String, port: UInt16, queue: DispatchQueue) async -> Bool {
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else { return false }
+        let connection = NWConnection(
+            to: .hostPort(host: NWEndpoint.Host(ip), port: nwPort),
+            using: .tcp)
 
-        connection.stateUpdateHandler = { [weak self] state in
-            if case .ready = state {
-                MBLogger.network.info("[Discovery] Open port at \(ip)")
-                Task { @MainActor [weak self] in self?.addScannedPeer(ip: ip, port: port) }
-                connection.cancel()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                let finished = OSAllocatedUnfairLock(initialState: false)
+                let finish: @Sendable (Bool) -> Void = { isOpen in
+                    let shouldResume = finished.withLock { done -> Bool in
+                        guard !done else { return false }
+                        done = true
+                        return true
+                    }
+                    if shouldResume {
+                        connection.cancel()
+                        continuation.resume(returning: isOpen)
+                    }
+                }
+
+                connection.stateUpdateHandler = { state in
+                    switch state {
+                    case .ready:
+                        MBLogger.network.info("[Discovery] Open port at \(ip)")
+                        finish(true)
+                    case .failed, .cancelled:
+                        finish(false)
+                    default:
+                        break
+                    }
+                }
+
+                queue.asyncAfter(deadline: .now() + 0.5) {
+                    finish(false)
+                }
+                connection.start(queue: queue)
             }
+        } onCancel: {
+            connection.cancel()
         }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
-            if connection.state != .ready { connection.cancel() }
-        }
-        connection.start(queue: .global())
     }
 
     private func addScannedPeer(ip: String, port: UInt16) {
-        let endpoint = NWEndpoint.hostPort(host: .init(ip), port: .init(integerLiteral: port))
-        guard !self.discoveredPeers.contains(where: {
-            if case .hostPort(let h, _) = $0.endpoint, case .ipv4(let v4) = h {
-                return String(describing: v4) == ip
-            }
-            return false
-        }) else { return }
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else { return }
+        let endpoint = NWEndpoint.hostPort(host: .init(ip), port: nwPort)
+        guard
+            !self.discoveredPeers.contains(where: {
+                if case .hostPort(let h, _) = $0.endpoint, case .ipv4(let v4) = h {
+                    return String(describing: v4) == ip
+                }
+                return false
+            })
+        else { return }
 
         let peer = DiscoveredPeer(name: "PC (\(ip))", endpoint: endpoint, type: .scanned)
         self.discoveredPeers.append(peer)
-        self.continuation?.yield(.found(peer))
+        self.continuation.yield(.found(peer))
     }
 
     // MARK: - Manual Peer
 
     public func addManualPeer(ip: String, port: UInt16 = 15101) {
-        let endpoint = NWEndpoint.hostPort(host: .init(ip), port: .init(integerLiteral: port))
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else { return }
+        let endpoint = NWEndpoint.hostPort(host: .init(ip), port: nwPort)
         guard !self.discoveredPeers.contains(where: { $0.endpoint == endpoint }) else { return }
         let peer = DiscoveredPeer(name: ip, endpoint: endpoint, type: .manual)
         self.discoveredPeers.append(peer)
-        self.continuation?.yield(.found(peer))
+        self.continuation.yield(.found(peer))
     }
 
     // MARK: - Lifecycle
 
     public func stopAll() {
         self.stopBrowsing()
+        self.subnetScanTask.cancel()
     }
-
-    // MARK: - Helpers
 
     private static func localIPPrefixes() -> [String] {
         let addresses = Host.current().addresses
-        let prefixes = addresses
+        let prefixes =
+            addresses
             .filter { $0.contains(".") && !$0.hasPrefix("127.") }
             .compactMap { ip -> String? in
                 let parts = ip.split(separator: ".")

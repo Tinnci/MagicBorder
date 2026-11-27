@@ -1,20 +1,19 @@
-import CoreGraphics
-import Foundation
+public import CoreGraphics
+public import Foundation
 
 /// Connection lifecycle of a machine in the network.
 public enum MachineConnectionState: String, Codable, Equatable, Sendable {
-    case local // the machine running this app
-    case discovered // visible on the network, not yet connected
-    case connecting // TCP/handshake in progress
-    case connected // handshake complete, ready to forward input
-    case active // currently receiving input (local cursor → this machine)
+    case local  // the machine running this app
+    case discovered  // visible on the network, not yet connected
+    case connecting  // TCP/handshake in progress
+    case connected  // handshake complete, ready to forward input
+    case active  // currently receiving input (local cursor → this machine)
 }
 
 /// A machine participating in the MagicBorder session.
 ///
 /// This is the canonical aggregate root for any network peer (and for the local machine
-/// when it appears in the arrangement view). Previously fragmented across `Machine` (UI layer),
-/// `ConnectedMachine` (nested in NetworkManager), `MachineInfo` (wire DTO), and `MWBPeer`.
+/// when it appears in the arrangement view).
 public struct Machine: Identifiable, Equatable, Codable, Sendable {
     public let id: UUID
     public var name: String
@@ -32,8 +31,8 @@ public struct Machine: Identifiable, Equatable, Codable, Sendable {
         name: String,
         state: MachineConnectionState = .discovered,
         screenSize: CGSize = .zero,
-        mwbPeerID: Int32? = nil)
-    {
+        mwbPeerID: Int32? = nil
+    ) {
         self.id = id
         self.name = name
         self.state = state

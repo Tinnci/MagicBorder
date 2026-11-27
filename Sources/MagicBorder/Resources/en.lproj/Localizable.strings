@@ -89,3 +89,20 @@
 "Debug log" = "Debug log";
 "No logs yet" = "No logs yet";
 "Copy Log" = "Copy Log";
+
+"Switched to %@" = "Switched to %@";
+"Returned to local machine" = "Returned to local machine";
+"Switching to %@..." = "Switching to %@...";
+"Connecting to %@..." = "Connecting to %@...";
+"Disconnected from %@" = "Disconnected from %@";
+"Reconnecting to %@..." = "Reconnecting to %@...";
+"Stopped reconnecting to %@" = "Stopped reconnecting to %@";
+"Synced clipboard text" = "Synced clipboard text";
+"Synced clipboard image" = "Synced clipboard image";
+"Synced clipboard files" = "Synced clipboard files";
+"Received clipboard text" = "Received clipboard text";
+"Received clipboard image" = "Received clipboard image";
+"Received clipboard files" = "Received clipboard files";
+"File transfer is disabled" = "File transfer is disabled";
+"Security key is valid" = "Security key is valid";
+"Security key must be at least 16 characters" = "Security key must be at least 16 characters";

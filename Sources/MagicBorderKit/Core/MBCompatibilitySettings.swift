@@ -1,9 +1,14 @@
-import Foundation
-import Observation
+public import Foundation
+public import Observation
 
 @MainActor
 @Observable
 public final class MBCompatibilitySettings {
+    public enum KeyValidationStatus: Equatable, Sendable {
+        case valid
+        case tooShort
+    }
+
     private enum Keys {
         static let shareClipboard = "compat.shareClipboard"
         static let transferFiles = "compat.transferFiles"
@@ -87,24 +92,24 @@ public final class MBCompatibilitySettings {
         didSet { self.defaults.set(self.wrapCursor, forKey: Keys.wrapCursor) }
     }
 
-    public var validationMessage: String?
+    public var validationStatus: KeyValidationStatus?
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.shareClipboard = self.defaults.object(forKey: Keys.shareClipboard) as? Bool ?? true
-        self.transferFiles = self.defaults.object(forKey: Keys.transferFiles) as? Bool ?? false
-        self.switchByMouse = self.defaults.object(forKey: Keys.switchByMouse) as? Bool ?? true
-        self.blockCorners = self.defaults.object(forKey: Keys.blockCorners) as? Bool ?? false
+        self.shareClipboard = defaults.object(forKey: Keys.shareClipboard) as? Bool ?? true
+        self.transferFiles = defaults.object(forKey: Keys.transferFiles) as? Bool ?? false
+        self.switchByMouse = defaults.object(forKey: Keys.switchByMouse) as? Bool ?? true
+        self.blockCorners = defaults.object(forKey: Keys.blockCorners) as? Bool ?? false
         self.moveMouseRelatively =
-            self.defaults.object(forKey: Keys.moveMouseRelatively) as? Bool ?? false
+            defaults.object(forKey: Keys.moveMouseRelatively) as? Bool ?? false
         self.centerCursorOnManualSwitch =
-            self.defaults.object(forKey: Keys.centerCursorOnManualSwitch) as? Bool ?? true
+            defaults.object(forKey: Keys.centerCursorOnManualSwitch) as? Bool ?? true
         self.edgeSwitchLockSeconds =
-            self.defaults.object(forKey: Keys.edgeSwitchLockSeconds) as? Double ?? 0.4
+            defaults.object(forKey: Keys.edgeSwitchLockSeconds) as? Double ?? 0.4
         self.edgeSwitchSafeMargin =
-            self.defaults.object(forKey: Keys.edgeSwitchSafeMargin) as? Double ?? 16
-        self.matrixOneRow = self.defaults.object(forKey: Keys.matrixOneRow) as? Bool ?? true
-        self.matrixCircle = self.defaults.object(forKey: Keys.matrixCircle) as? Bool ?? false
+            defaults.object(forKey: Keys.edgeSwitchSafeMargin) as? Double ?? 16
+        self.matrixOneRow = defaults.object(forKey: Keys.matrixOneRow) as? Bool ?? true
+        self.matrixCircle = defaults.object(forKey: Keys.matrixCircle) as? Bool ?? false
         self.messagePort = Self.portValue(
             forKey: Keys.messagePort,
             defaultValue: 15101,
@@ -113,30 +118,31 @@ public final class MBCompatibilitySettings {
             forKey: Keys.clipboardPort,
             defaultValue: 15100,
             defaults: defaults)
-        self.securityKey = self.defaults.string(forKey: Keys.securityKey) ?? ""
-        self.wrapCursor = self.defaults.object(forKey: Keys.wrapCursor) as? Bool ?? true
+        self.securityKey = defaults.string(forKey: Keys.securityKey) ?? ""
+        self.wrapCursor = defaults.object(forKey: Keys.wrapCursor) as? Bool ?? true
     }
 
     public func validateSecurityKey() -> Bool {
         let trimmed = self.securityKey.replacingOccurrences(of: " ", with: "")
         if trimmed.count < 16 {
-            self.validationMessage = "Security Key 至少 16 位"
+            self.validationStatus = .tooShort
             return false
         }
-        self.validationMessage = "Success"
+        self.validationStatus = .valid
         return true
     }
 
     private static func portValue(
         forKey key: String,
         defaultValue: UInt16,
-        defaults: UserDefaults)
+        defaults: UserDefaults
+    )
         -> UInt16
     {
         let value = defaults.integer(forKey: key)
         guard defaults.object(forKey: key) != nil,
-              value > 0,
-              value <= Int(UInt16.max)
+            value > 0,
+            value <= Int(UInt16.max)
         else { return defaultValue }
         return UInt16(value)
     }

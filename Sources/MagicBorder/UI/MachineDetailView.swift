@@ -15,42 +15,42 @@ struct MachineDetailView: View {
                 MachineDetailHeader(machine: self.machine)
             }
 
-            Section(MBLocalized("Connection")) {
-                LabeledContent(MBLocalized("Name"), value: self.machine.name)
+            Section(localizedString("Connection")) {
+                LabeledContent(localizedString("Name"), value: self.machine.name)
                 LabeledContent(
-                    MBLocalized("Status"),
-                    value: self.machine.isOnline ? MBLocalized("Online") : MBLocalized("Offline"))
+                    localizedString("Status"),
+                    value: self.machine.isOnline ? localizedString("Online") : localizedString("Offline"))
 
                 if self.machine.screenSize != .zero {
                     LabeledContent(
-                        MBLocalized("Screen Size"),
+                        localizedString("Screen Size"),
                         value: self.screenSizeText)
                 }
 
                 if let peerID = self.machine.mwbPeerID {
-                    LabeledContent(MBLocalized("MWB Peer ID"), value: "\(peerID)")
+                    LabeledContent(localizedString("MWB Peer ID"), value: "\(peerID)")
                 }
             }
 
-            Section(MBLocalized("Actions")) {
+            Section(localizedString("Actions")) {
                 Button {
                     self.networkManager.requestSwitch(to: self.machine.id)
                 } label: {
-                    Label(MBLocalized("Switch to Machine"), systemImage: "arrow.right.circle")
+                    Label(localizedString("Switch to Machine"), systemImage: "arrow.right.circle")
                 }
                 .disabled(self.isLocalMachine || !self.machine.isOnline)
 
                 Button {
                     self.networkManager.reconnect(machineId: self.machine.id)
                 } label: {
-                    Label(MBLocalized("Restart Connection"), systemImage: "restart")
+                    Label(localizedString("Restart Connection"), systemImage: "restart")
                 }
                 .disabled(self.isLocalMachine)
 
                 Button(role: .destructive) {
                     self.networkManager.disconnect(machineId: self.machine.id)
                 } label: {
-                    Label(MBLocalized("Disconnect"), systemImage: "xmark.circle")
+                    Label(localizedString("Disconnect"), systemImage: "xmark.circle")
                 }
                 .disabled(self.isLocalMachine)
             }
@@ -73,7 +73,8 @@ private struct MachineDetailHeader: View {
                 .font(.system(size: 36))
                 .foregroundStyle(
                     self.machine.isOnline || self.machine.state == .local
-                        ? Color.accentColor : Color.secondary)
+                        ? Color.accentColor : Color.secondary
+                )
                 .frame(width: 48)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -95,15 +96,15 @@ private struct MachineDetailHeader: View {
     private var statusText: String {
         switch self.machine.state {
         case .local:
-            MBLocalized("Local Machine")
+            localizedString("Local Machine")
         case .discovered:
-            MBLocalized("Discovered")
+            localizedString("Discovered")
         case .connecting:
-            MBLocalized("Connecting...")
+            localizedString("Connecting...")
         case .connected:
-            MBLocalized("Online")
+            localizedString("Online")
         case .active:
-            MBLocalized("Active")
+            localizedString("Active")
         }
     }
 }

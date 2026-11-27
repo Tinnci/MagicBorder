@@ -1,55 +1,67 @@
-import AppKit
-import Foundation
-import Network
+import CoreGraphics
+public import Foundation
+public import Network
 
 @MainActor
-public final class MBMWBTransport: MBTransport {
-    public var events: AsyncStream<MBTransportEvent>
+public final class MBMWBTransport:
+    MBTransport,
+    MBMatrixSyncTransport,
+    MBFileDropTransport,
+    MBRemoteActivationTransport
+{
+    public let events: AsyncStream<MBTransportEvent>
 
     private let service: any MWBCompatibilityServicing
-    private let localName: String
+    private let screenGeometry: any ScreenGeometryProviding
+    private let clock: any ClockProviding
     private var settings: MBCompatibilitySettings
-    private var continuation: AsyncStream<MBTransportEvent>.Continuation?
-    private var serviceEventsTask: Task<Void, Never>?
+    private let continuation: AsyncStream<MBTransportEvent>.Continuation
+    private let serviceEventsTask = CancellableTaskSlot()
     private var peerIDs: [Int32: UUID] = [:]
     private var lastMouseLocation: CGPoint?
-    private var mouseCoalescer: MouseCoalescer?
+    private var mouseCoalescer: MBMouseCoalescer?
 
     public init(
         localName: String,
         localID: Int32,
         settings: MBCompatibilitySettings,
-        service: (any MWBCompatibilityServicing)? = nil)
-    {
-        self.localName = localName
+        service: (any MWBCompatibilityServicing)? = nil,
+        screenGeometry: any ScreenGeometryProviding = SystemScreenGeometryProvider(),
+        clock: any ClockProviding = SystemClock()
+    ) {
         self.settings = settings
-        if let service {
-            self.service = service
-        } else {
-            self.service = MWBCompatibilityService(
+        self.screenGeometry = screenGeometry
+        self.clock = clock
+        self.service =
+            service
+            ?? MWBCompatibilityService(
                 localName: localName,
                 localId: localID,
                 messagePort: settings.messagePort,
                 clipboardPort: settings.clipboardPort)
-        }
 
-        var continuation: AsyncStream<MBTransportEvent>.Continuation?
-        self.events = AsyncStream { continuation = $0 }
-        self.continuation = continuation
-        self.mouseCoalescer = MouseCoalescer(transport: self)
-        self.serviceEventsTask = Task { @MainActor [weak self] in
-            await self?.consumeServiceEvents()
+        let stream = AsyncStream<MBTransportEvent>.makeStream()
+        self.events = stream.stream
+        self.continuation = stream.continuation
+        self.mouseCoalescer = MBMouseCoalescer(clock: clock) { [weak self] snapshot in
+            self?.sendCompatibilityInputInternal(snapshot: snapshot)
         }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.consumeServiceEvents()
+        }
+        self.serviceEventsTask.replace(with: task)
     }
 
     deinit {
-        self.serviceEventsTask?.cancel()
-        self.continuation?.finish()
+        self.serviceEventsTask.cancel()
+        self.continuation.finish()
     }
 
     public func start() {}
 
     public func stop() {
+        self.mouseCoalescer?.cancel()
         self.service.stop()
     }
 
@@ -62,7 +74,7 @@ public final class MBMWBTransport: MBTransport {
         let trimmed = securityKey.replacingOccurrences(of: " ", with: "")
         guard trimmed.count >= 16 else {
             self.service.stop()
-            self.continuation?.yield(.log("Compatibility mode stopped: security key invalid"))
+            self.continuation.yield(.log("Compatibility mode stopped: security key invalid"))
             return
         }
 
@@ -90,13 +102,13 @@ public final class MBMWBTransport: MBTransport {
     static func hostString(_ host: NWEndpoint.Host) -> String {
         switch host {
         case .name(let name, _):
-            return name
+            name
         case .ipv4(let address):
-            return "\(address)"
+            "\(address)"
         case .ipv6(let address):
-            return "\(address)"
+            "\(address)"
         @unknown default:
-            return "\(host)"
+            "\(host)"
         }
     }
 
@@ -123,7 +135,7 @@ public final class MBMWBTransport: MBTransport {
 
     public func sendRemoteInput(snapshot: EventSnapshot, activeMachineId _: UUID?) {
         switch snapshot.type {
-        case .mouseMoved, .leftMouseDragged, .rightMouseDragged:
+        case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
             self.mouseCoalescer?.update(snapshot: snapshot)
         default:
             self.mouseCoalescer?.forceFlush(snapshot: snapshot)
@@ -150,28 +162,19 @@ public final class MBMWBTransport: MBTransport {
         self.service.sendFileDrop(urls)
     }
 
-    fileprivate func sendCompatibilityInputInternal(snapshot: EventSnapshot) {
-        guard let screen = NSScreen.main else { return }
-        let bounds = screen.frame
-        let location = snapshot.location
+    private func sendCompatibilityInputInternal(snapshot: EventSnapshot) {
+        guard let bounds = self.screenGeometry.mainScreenFrame,
+            bounds.width > 0,
+            bounds.height > 0
+        else { return }
 
+        let location = snapshot.location
         let normalizedX = Int32(((location.x - bounds.minX) / bounds.width) * 65535.0)
         let normalizedY = Int32(((location.y - bounds.minY) / bounds.height) * 65535.0)
 
         switch snapshot.type {
-        case .mouseMoved, .leftMouseDragged, .rightMouseDragged:
-            if self.settings.moveMouseRelatively, let last = self.lastMouseLocation {
-                let dx = Int32(location.x - last.x)
-                let dy = Int32(location.y - last.y)
-                let offset: Int32 = 100000
-                let relX = dx + (dx < 0 ? -offset : offset)
-                let winDy = -dy
-                let relY = winDy + (winDy < 0 ? -offset : offset)
-                self.service.sendMouseEvent(x: relX, y: relY, wheel: 0, flags: 0x200)
-            } else {
-                self.service.sendMouseEvent(x: normalizedX, y: normalizedY, wheel: 0, flags: 0x200)
-            }
-            self.lastMouseLocation = location
+        case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
+            self.sendMouseMotion(location: location, normalizedX: normalizedX, normalizedY: normalizedY)
         case .leftMouseDown:
             self.service.sendMouseEvent(x: normalizedX, y: normalizedY, wheel: 0, flags: 0x201)
         case .leftMouseUp:
@@ -187,81 +190,89 @@ public final class MBMWBTransport: MBTransport {
                 wheel: Int32(snapshot.scrollDeltaY),
                 flags: 0x20A)
         case .keyDown:
-            if let key = MBInputManager.shared.windowsKeyCode(for: CGKeyCode(snapshot.keyCode)) {
+            if let key = MBKeyCodeMapper.windowsKeyCode(for: CGKeyCode(snapshot.keyCode)) {
                 self.service.sendKeyEvent(keyCode: key, flags: 0)
             }
         case .keyUp:
-            if let key = MBInputManager.shared.windowsKeyCode(for: CGKeyCode(snapshot.keyCode)) {
+            if let key = MBKeyCodeMapper.windowsKeyCode(for: CGKeyCode(snapshot.keyCode)) {
                 self.service.sendKeyEvent(keyCode: key, flags: 0x80)
             }
         case .flagsChanged:
             let macKey = CGKeyCode(snapshot.keyCode)
-            guard let key = MBInputManager.shared.windowsKeyCode(for: macKey) else { return }
-            let isDown: Bool = switch macKey {
-            case 56, 60:
-                snapshot.flags.contains(.maskShift)
-            case 59, 62:
-                snapshot.flags.contains(.maskControl)
-            case 58, 61:
-                snapshot.flags.contains(.maskAlternate)
-            case 55, 54:
-                snapshot.flags.contains(.maskCommand)
-            case 57:
-                snapshot.flags.contains(.maskAlphaShift)
-            default:
-                snapshot.flags.contains(.maskNonCoalesced)
-            }
+            guard let key = MBKeyCodeMapper.windowsKeyCode(for: macKey) else { return }
+            let isDown = MBKeyCodeMapper.isModifierDown(macKeyCode: macKey, flags: snapshot.flags)
             self.service.sendKeyEvent(keyCode: key, flags: isDown ? 0 : 0x80)
         default:
             break
         }
     }
 
+    private func sendMouseMotion(location: CGPoint, normalizedX: Int32, normalizedY: Int32) {
+        if self.settings.moveMouseRelatively, let last = self.lastMouseLocation {
+            let dx = Int32(location.x - last.x)
+            let dy = Int32(location.y - last.y)
+            let offset: Int32 = 100_000
+            let relX = dx + (dx < 0 ? -offset : offset)
+            let winDy = -dy
+            let relY = winDy + (winDy < 0 ? -offset : offset)
+            self.service.sendMouseEvent(x: relX, y: relY, wheel: 0, flags: 0x200)
+        } else {
+            self.service.sendMouseEvent(x: normalizedX, y: normalizedY, wheel: 0, flags: 0x200)
+        }
+        self.lastMouseLocation = location
+    }
+
     private func consumeServiceEvents() async {
         for await event in self.service.events {
-            switch event {
-            case .connected(let peer):
-                let id = self.uuid(for: peer.id)
-                self.continuation?.yield(.machineConnected(Machine(id: id, name: peer.name, state: .connected, mwbPeerID: peer.id)))
-            case .disconnected(let peer):
-                guard let id = self.peerIDs[peer.id] else { continue }
-                self.continuation?.yield(.machineDisconnected(id))
-            case .remoteMouse(let event):
-                self.continuation?.yield(.mwbMouse(event))
-            case .remoteKey(let event):
-                self.continuation?.yield(.mwbKey(event))
-            case .machineSwitched(let peer):
-                let id = peer.map { self.uuid(for: $0.id) }
-                self.continuation?.yield(.activeMachineChanged(id, peer?.name))
-            case .machineMatrix(let matrix):
-                self.continuation?.yield(.arrangementReceived(matrix))
-            case .matrixOptionsUpdated(let twoRow, let swap):
-                self.continuation?.yield(.arrangementOptionsUpdated(twoRow: twoRow, swap: swap))
-            case .clipboardText(let text):
-                self.continuation?.yield(.clipboardText(text))
-            case .clipboardImage(let data):
-                self.continuation?.yield(.clipboardImage(data))
-            case .clipboardFiles(let urls):
-                self.continuation?.yield(.clipboardFiles(urls))
-            case .hideMouse:
-                self.continuation?.yield(.hideMouse)
-            case .dragDropOperation(let sourceName):
-                self.continuation?.yield(.dragDropStateChanged(.dropping, sourceName: sourceName))
-            case .dragDropBegin(let sourceName):
-                self.continuation?.yield(.dragDropStateChanged(.dragging, sourceName: sourceName))
-            case .dragDropEnd:
-                self.continuation?.yield(.dragDropStateChanged(nil, sourceName: nil))
-            case .captureScreen(let sourceId):
-                self.continuation?.yield(.screenCaptureRequested(sourceId))
-            case .reconnectAttempt(let host):
-                self.continuation?.yield(.reconnectAttempt(host))
-            case .reconnectStopped(let host):
-                self.continuation?.yield(.reconnectStopped(host))
-            case .log(let message):
-                self.continuation?.yield(.log(message))
-            case .error(let message):
-                self.continuation?.yield(.error(message))
+            if let mapped = self.mapServiceEvent(event) {
+                self.continuation.yield(mapped)
             }
+        }
+    }
+
+    private func mapServiceEvent(_ event: MWBCompatibilityEvent) -> MBTransportEvent? {
+        switch event {
+        case .connected(let peer):
+            let id = self.uuid(for: peer.id)
+            return .machineConnected(Machine(id: id, name: peer.name, state: .connected, mwbPeerID: peer.id))
+        case .disconnected(let peer):
+            guard let id = self.peerIDs[peer.id] else { return nil }
+            return .machineDisconnected(id)
+        case .remoteMouse(let mouseEvent):
+            return .mwbMouse(mouseEvent)
+        case .remoteKey(let keyEvent):
+            return .mwbKey(keyEvent)
+        case .machineSwitched(let peer):
+            let id = peer.map { self.uuid(for: $0.id) }
+            return .activeMachineChanged(id, peer?.name)
+        case .machineMatrix(let matrix):
+            return .arrangementReceived(matrix)
+        case .matrixOptionsUpdated(let twoRow, let swap):
+            return .arrangementOptionsUpdated(twoRow: twoRow, swap: swap)
+        case .clipboardText(let text):
+            return .clipboardText(text)
+        case .clipboardImage(let data):
+            return .clipboardImage(data)
+        case .clipboardFiles(let urls):
+            return .clipboardFiles(urls)
+        case .hideMouse:
+            return .hideMouse
+        case .dragDropOperation(let sourceName):
+            return .dragDropStateChanged(.dropping, sourceName: sourceName)
+        case .dragDropBegin(let sourceName):
+            return .dragDropStateChanged(.dragging, sourceName: sourceName)
+        case .dragDropEnd:
+            return .dragDropStateChanged(nil, sourceName: nil)
+        case .captureScreen(let sourceID):
+            return .screenCaptureRequested(sourceID)
+        case .reconnectAttempt(let host):
+            return .reconnectAttempt(host)
+        case .reconnectStopped(let host):
+            return .reconnectStopped(host)
+        case .log(let message):
+            return .log(message)
+        case .error(let message):
+            return .error(message)
         }
     }
 
@@ -275,49 +286,58 @@ public final class MBMWBTransport: MBTransport {
     }
 }
 
-private final class MouseCoalescer: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "com.magicborder.mwb.mouse.coalescing", qos: .userInteractive)
-    private weak var transport: MBMWBTransport?
+@MainActor
+private final class MBMouseCoalescer {
+    private let clock: any ClockProviding
+    private let flush: (EventSnapshot) -> Void
     private var pendingSnapshot: EventSnapshot?
-    private var lastSendTime: CFAbsoluteTime = 0
+    private var lastSendTime: TimeInterval = 0
+    private let scheduledFlushTask = CancellableTaskSlot()
     private let minInterval: TimeInterval = 0.008
 
-    init(transport: MBMWBTransport) {
-        self.transport = transport
+    init(clock: any ClockProviding, flush: @escaping (EventSnapshot) -> Void) {
+        self.clock = clock
+        self.flush = flush
+    }
+
+    deinit {
+        self.scheduledFlushTask.cancel()
     }
 
     func update(snapshot: EventSnapshot) {
-        self.queue.async {
-            self.pendingSnapshot = snapshot
-            self.tryFlush()
-        }
+        self.pendingSnapshot = snapshot
+        self.tryFlush()
     }
 
     func forceFlush(snapshot: EventSnapshot) {
-        self.queue.sync {
-            self.pendingSnapshot = nil
-            self.lastSendTime = CFAbsoluteTimeGetCurrent()
-            Task { @MainActor [weak self] in
-                self?.transport?.sendCompatibilityInputInternal(snapshot: snapshot)
-            }
-        }
+        self.scheduledFlushTask.cancel()
+        self.pendingSnapshot = nil
+        self.lastSendTime = self.clock.now()
+        self.flush(snapshot)
+    }
+
+    func cancel() {
+        self.scheduledFlushTask.cancel()
+        self.pendingSnapshot = nil
     }
 
     private func tryFlush() {
-        let now = CFAbsoluteTimeGetCurrent()
+        let now = self.clock.now()
         let elapsed = now - self.lastSendTime
         if elapsed >= self.minInterval, let snapshot = self.pendingSnapshot {
+            self.scheduledFlushTask.cancel()
             self.pendingSnapshot = nil
             self.lastSendTime = now
-            Task { @MainActor [weak self] in
-                self?.transport?.sendCompatibilityInputInternal(snapshot: snapshot)
-            }
-        } else if let snapshot = self.pendingSnapshot {
-            let delay = max(0, self.minInterval - elapsed)
-            self.queue.asyncAfter(deadline: .now() + delay) { [weak self] in
-                guard let self, self.pendingSnapshot?.location == snapshot.location else { return }
+            self.flush(snapshot)
+        } else if !self.scheduledFlushTask.isActive, self.pendingSnapshot != nil {
+            let delay = max(0.001, self.minInterval - elapsed)
+            let task = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(delay))
+                guard !Task.isCancelled, let self else { return }
+                self.scheduledFlushTask.replace(with: nil)
                 self.tryFlush()
             }
+            self.scheduledFlushTask.replace(with: task)
         }
     }
 }

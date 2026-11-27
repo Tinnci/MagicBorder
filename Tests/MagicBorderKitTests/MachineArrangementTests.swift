@@ -1,51 +1,48 @@
 import Foundation
-@testable import MagicBorderKit
-import XCTest
+import Testing
 
-final class MachineArrangementTests: XCTestCase {
-    func testNextUsesAtLeastOneColumnWhenColumnCountIsInvalid() {
+@testable import MagicBorderKit
+
+@Suite("MachineArrangement")
+struct MachineArrangementTests {
+    @Test func nextUsesAtLeastOneColumnWhenColumnCountIsInvalid() {
         let first = UUID()
         let second = UUID()
         let arrangement = MachineArrangement(slots: [first, second], columns: 0)
 
-        XCTAssertEqual(
-            arrangement.next(from: first, direction: .down, wraps: false, oneRow: false),
-            second)
+        #expect(arrangement.next(from: first, direction: .down, wraps: false, oneRow: false) == second)
     }
 
-    func testWrappedIncompleteGridDoesNotReturnMissingCell() {
+    @Test func wrappedIncompleteGridDoesNotReturnMissingCell() {
         let first = UUID()
         let second = UUID()
         let third = UUID()
         let arrangement = MachineArrangement(slots: [first, second, third], columns: 2)
 
-        XCTAssertNil(
-            arrangement.next(from: third, direction: .right, wraps: true, oneRow: false))
+        #expect(arrangement.next(from: third, direction: .right, wraps: true, oneRow: false) == nil)
     }
 
-    func testOneRowWrapsHorizontallyOnly() {
+    @Test func oneRowWrapsHorizontallyOnly() {
         let first = UUID()
         let second = UUID()
         let arrangement = MachineArrangement(slots: [first, second], columns: 2)
 
-        XCTAssertEqual(
-            arrangement.next(from: first, direction: .left, wraps: true, oneRow: true),
-            second)
-        XCTAssertNil(arrangement.next(from: first, direction: .up, wraps: true, oneRow: true))
+        #expect(arrangement.next(from: first, direction: .left, wraps: true, oneRow: true) == second)
+        #expect(arrangement.next(from: first, direction: .up, wraps: true, oneRow: true) == nil)
     }
 
-    func testTwoRowNavigationFindsVerticalNeighbor() {
+    @Test func twoRowNavigationFindsVerticalNeighbor() {
         let first = UUID()
         let second = UUID()
         let third = UUID()
         let fourth = UUID()
         let arrangement = MachineArrangement(slots: [first, second, third, fourth], columns: 2)
 
-        XCTAssertEqual(arrangement.next(from: first, direction: .down, wraps: false, oneRow: false), third)
-        XCTAssertEqual(arrangement.next(from: fourth, direction: .up, wraps: false, oneRow: false), second)
+        #expect(arrangement.next(from: first, direction: .down, wraps: false, oneRow: false) == third)
+        #expect(arrangement.next(from: fourth, direction: .up, wraps: false, oneRow: false) == second)
     }
 
-    func testMoveReordersSourceToDestinationPosition() {
+    @Test func moveReordersSourceToDestinationPosition() {
         let first = UUID()
         let second = UUID()
         let third = UUID()
@@ -53,35 +50,35 @@ final class MachineArrangementTests: XCTestCase {
 
         arrangement.move(from: first, to: third)
 
-        XCTAssertEqual(arrangement.slots, [second, third, first])
+        #expect(arrangement.slots == [second, third, first])
     }
 
-    func testMoveIgnoresUnknownIds() {
+    @Test func moveIgnoresUnknownIDs() {
         let first = UUID()
         let second = UUID()
         var arrangement = MachineArrangement(slots: [first, second], columns: 2)
 
         arrangement.move(from: UUID(), to: second)
 
-        XCTAssertEqual(arrangement.slots, [first, second])
+        #expect(arrangement.slots == [first, second])
     }
 
-    func testInsertDoesNotDuplicateExistingMachine() {
+    @Test func insertDoesNotDuplicateExistingMachine() {
         let first = UUID()
         var arrangement = MachineArrangement(slots: [first], columns: 1)
 
         arrangement.insert(first)
 
-        XCTAssertEqual(arrangement.slots, [first])
+        #expect(arrangement.slots == [first])
     }
 
-    func testRemoveDeletesMachineFromArrangement() {
+    @Test func removeDeletesMachineFromArrangement() {
         let first = UUID()
         let second = UUID()
         var arrangement = MachineArrangement(slots: [first, second], columns: 2)
 
         arrangement.remove(first)
 
-        XCTAssertEqual(arrangement.slots, [second])
+        #expect(arrangement.slots == [second])
     }
 }

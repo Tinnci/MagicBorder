@@ -3,6 +3,12 @@
 
 import PackageDescription
 
+let sharedSwiftSettings: [SwiftSetting] = [
+    .enableUpcomingFeature("ExistentialAny"),
+    .enableUpcomingFeature("InternalImportsByDefault"),
+    .enableUpcomingFeature("MemberImportVisibility"),
+]
+
 let package = Package(
     name: "MagicBorder",
     defaultLocalization: "en",
@@ -14,16 +20,10 @@ let package = Package(
         .executable(name: "MagicBorder", targets: ["MagicBorder"]),
         .executable(name: "MagicBorderCLI", targets: ["MagicBorderCLI"]),
     ],
-    dependencies: [
-        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
-    ],
     targets: [
         .target(
             name: "MagicBorderKit",
-            dependencies: [
-                .product(name: "Crypto", package: "swift-crypto"),
-            ],
-            linkerSettings: []),
+            swiftSettings: sharedSwiftSettings),
         .executableTarget(
             name: "MagicBorder",
             dependencies: ["MagicBorderKit"],
@@ -33,12 +33,13 @@ let package = Package(
                 .process("Resources/zh-Hans.lproj"),
                 .process("Resources/Assets.xcassets"),
             ],
-            linkerSettings: []),
+            swiftSettings: sharedSwiftSettings),
         .executableTarget(
             name: "MagicBorderCLI",
             dependencies: ["MagicBorderKit"],
-            linkerSettings: []),
+            swiftSettings: sharedSwiftSettings),
         .testTarget(
             name: "MagicBorderKitTests",
-            dependencies: ["MagicBorderKit"]),
+            dependencies: ["MagicBorderKit"],
+            swiftSettings: sharedSwiftSettings),
     ])

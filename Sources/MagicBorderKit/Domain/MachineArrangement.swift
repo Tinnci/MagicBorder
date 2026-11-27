@@ -1,4 +1,4 @@
-import Foundation
+public import Foundation
 
 // MARK: - ArrangementDirection
 
@@ -14,8 +14,7 @@ public enum ArrangementDirection: Sendable {
 
 /// Aggregate root for the spatial grid layout of machines.
 ///
-/// Owns the ordered sequence of machine UUIDs and all grid-navigation logic
-/// that was previously embedded in `MBNetworkManager.nextMachineName(for:from:)`.
+/// Owns the ordered sequence of machine UUIDs and all grid-navigation logic.
 /// The UI layer derives `[Machine]` by resolving slots against the connected
 /// machine list; it does not store `Machine` objects directly.
 public struct MachineArrangement: Codable, Equatable, Sendable {
@@ -38,8 +37,8 @@ public struct MachineArrangement: Codable, Equatable, Sendable {
 
     /// Reorder `sourceId` to the position of `destinationId`.
     public mutating func move(from sourceId: UUID, to destinationId: UUID) {
-        guard let fromIndex = slots.firstIndex(of: sourceId),
-              let toIndex = slots.firstIndex(of: destinationId)
+        guard let fromIndex = self.slots.firstIndex(of: sourceId),
+            let toIndex = self.slots.firstIndex(of: destinationId)
         else { return }
         self.slots.remove(at: fromIndex)
         self.slots.insert(sourceId, at: min(toIndex, self.slots.count))
@@ -58,19 +57,13 @@ public struct MachineArrangement: Codable, Equatable, Sendable {
     // MARK: - Navigation
 
     /// Returns the UUID of the machine adjacent to `machineId` in the given direction.
-    ///
-    /// - Parameters:
-    ///   - machineId: The current machine's UUID.
-    ///   - direction: The cardinal direction to navigate.
-    ///   - wraps: When `true`, navigation wraps around edges (circle mode).
-    ///   - oneRow: When `true`, treats the arrangement as a single-row list.
     public func next(
         from machineId: UUID,
         direction: ArrangementDirection,
         wraps: Bool,
-        oneRow: Bool) -> UUID?
-    {
-        guard let currentIndex = slots.firstIndex(of: machineId) else { return nil }
+        oneRow: Bool
+    ) -> UUID? {
+        guard let currentIndex = self.slots.firstIndex(of: machineId) else { return nil }
 
         if oneRow {
             switch direction {
@@ -90,7 +83,7 @@ public struct MachineArrangement: Codable, Equatable, Sendable {
         let columnCount = max(1, self.columns)
         let row = currentIndex / columnCount
         let col = currentIndex % columnCount
-        let rowCount = Int((slots.count + columnCount - 1) / columnCount)
+        let rowCount = (self.slots.count + columnCount - 1) / columnCount
 
         var newRow = row
         var newCol = col

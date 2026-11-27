@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-public enum MBOverlayPosition: String, CaseIterable, Codable, Sendable {
+enum MBOverlayPosition: String, CaseIterable, Codable, Sendable {
     case top
     case topLeading
     case topTrailing
@@ -10,53 +10,46 @@ public enum MBOverlayPosition: String, CaseIterable, Codable, Sendable {
     case bottomTrailing
 }
 
-public struct MBOverlayPreferences: Codable, Equatable, Sendable {
-    public var showDevice: Bool
-    public var showProgress: Bool
-    public var scale: Double
-    public var position: MBOverlayPosition
-
-    public init(showDevice: Bool, showProgress: Bool, scale: Double, position: MBOverlayPosition) {
-        self.showDevice = showDevice
-        self.showProgress = showProgress
-        self.scale = scale
-        self.position = position
-    }
+struct MBOverlayPreferences: Codable, Equatable, Sendable {
+    var showDevice: Bool
+    var showProgress: Bool
+    var scale: Double
+    var position: MBOverlayPosition
 }
 
 @MainActor
 @Observable
-public final class MBOverlayPreferencesStore {
+final class MBOverlayPreferencesStore {
     private enum Keys {
         static let overrides = "overlay.preferences.overrides"
     }
 
     private let defaults = UserDefaults.standard
-    public private(set) var overrides: [String: MBOverlayPreferences] = [:]
+    private(set) var overrides: [String: MBOverlayPreferences] = [:]
 
-    public init() {
+    init() {
         self.load()
     }
 
-    public func preferences(for deviceName: String, default defaultPreferences: MBOverlayPreferences) -> MBOverlayPreferences {
+    func preferences(for deviceName: String, default defaultPreferences: MBOverlayPreferences) -> MBOverlayPreferences {
         self.overrides[deviceName] ?? defaultPreferences
     }
 
-    public func setOverride(_ preferences: MBOverlayPreferences, for deviceName: String) {
+    func setOverride(_ preferences: MBOverlayPreferences, for deviceName: String) {
         self.overrides[deviceName] = preferences
         self.save()
     }
 
-    public func clearOverride(for deviceName: String) {
+    func clearOverride(for deviceName: String) {
         self.overrides.removeValue(forKey: deviceName)
         self.save()
     }
 
-    public func hasOverride(for deviceName: String) -> Bool {
+    func hasOverride(for deviceName: String) -> Bool {
         self.overrides[deviceName] != nil
     }
 
-    public func allDeviceNames() -> [String] {
+    func allDeviceNames() -> [String] {
         self.overrides.keys.sorted()
     }
 

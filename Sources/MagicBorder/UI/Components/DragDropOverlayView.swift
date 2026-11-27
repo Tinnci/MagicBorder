@@ -35,8 +35,9 @@ struct DragDropOverlayView: View {
                 VStack(alignment: .leading, spacing: AppTheme.Layout.tinySpacing) {
                     Text(
                         self.state == .dropping
-                            ? MBLocalized("Release to drop") : MBLocalized("Dragging files"))
-                        .font(.headline)
+                            ? localizedString("Release to drop") : localizedString("Dragging files")
+                    )
+                    .font(.headline)
                     if self.showDevice, let sourceName, !sourceName.isEmpty {
                         Text(sourceName)
                             .font(.caption)

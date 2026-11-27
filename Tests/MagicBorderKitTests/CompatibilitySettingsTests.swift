@@ -1,45 +1,48 @@
-@testable import MagicBorderKit
-import XCTest
+import Foundation
+import Testing
 
+@testable import MagicBorderKit
+
+@Suite("CompatibilitySettings")
 @MainActor
-final class CompatibilitySettingsTests: XCTestCase {
-    func testDefaultsUseMWBPortsWhenNoValuesArePersisted() {
-        let (defaults, suiteName) = self.makeDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+struct CompatibilitySettingsTests {
+    @Test func defaultsUseMWBPortsWhenNoValuesArePersisted() {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
 
         let settings = MBCompatibilitySettings(defaults: defaults)
 
-        XCTAssertEqual(settings.messagePort, 15101)
-        XCTAssertEqual(settings.clipboardPort, 15100)
+        #expect(settings.messagePort == 15101)
+        #expect(settings.clipboardPort == 15100)
     }
 
-    func testInvalidPersistedPortsFallBackToDefaults() {
-        let (defaults, suiteName) = self.makeDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+    @Test func invalidPersistedPortsFallBackToDefaults() {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
         defaults.set(70000, forKey: "compat.messagePort")
         defaults.set(-1, forKey: "compat.clipboardPort")
 
         let settings = MBCompatibilitySettings(defaults: defaults)
 
-        XCTAssertEqual(settings.messagePort, 15101)
-        XCTAssertEqual(settings.clipboardPort, 15100)
+        #expect(settings.messagePort == 15101)
+        #expect(settings.clipboardPort == 15100)
     }
 
-    func testZeroPortsFallBackToDefaults() {
-        let (defaults, suiteName) = self.makeDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+    @Test func zeroPortsFallBackToDefaults() {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
         defaults.set(0, forKey: "compat.messagePort")
         defaults.set(0, forKey: "compat.clipboardPort")
 
         let settings = MBCompatibilitySettings(defaults: defaults)
 
-        XCTAssertEqual(settings.messagePort, 15101)
-        XCTAssertEqual(settings.clipboardPort, 15100)
+        #expect(settings.messagePort == 15101)
+        #expect(settings.clipboardPort == 15100)
     }
 
-    func testPersistedSettingsAreReadBackFromInjectedDefaults() {
-        let (defaults, suiteName) = self.makeDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+    @Test func persistedSettingsAreReadBackFromInjectedDefaults() {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
         let settings = MBCompatibilitySettings(defaults: defaults)
         settings.shareClipboard = false
         settings.transferFiles = true
@@ -49,29 +52,24 @@ final class CompatibilitySettingsTests: XCTestCase {
 
         let restored = MBCompatibilitySettings(defaults: defaults)
 
-        XCTAssertFalse(restored.shareClipboard)
-        XCTAssertTrue(restored.transferFiles)
-        XCTAssertEqual(restored.messagePort, 15111)
-        XCTAssertEqual(restored.clipboardPort, 15110)
-        XCTAssertEqual(restored.securityKey, "1234567890ABCDEF")
+        #expect(!restored.shareClipboard)
+        #expect(restored.transferFiles)
+        #expect(restored.messagePort == 15111)
+        #expect(restored.clipboardPort == 15110)
+        #expect(restored.securityKey == "1234567890ABCDEF")
     }
 
-    func testSecurityKeyValidationReportsSuccessAndFailure() {
-        let (defaults, suiteName) = self.makeDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+    @Test func securityKeyValidationReportsTypedStatus() {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
         let settings = MBCompatibilitySettings(defaults: defaults)
 
         settings.securityKey = "short"
-        XCTAssertFalse(settings.validateSecurityKey())
-        XCTAssertNotNil(settings.validationMessage)
+        #expect(!settings.validateSecurityKey())
+        #expect(settings.validationStatus == .tooShort)
 
         settings.securityKey = "1234567890ABCDEF"
-        XCTAssertTrue(settings.validateSecurityKey())
-        XCTAssertEqual(settings.validationMessage, "Success")
-    }
-
-    private func makeDefaults() -> (UserDefaults, String) {
-        let suiteName = "MagicBorderTests.\(UUID().uuidString)"
-        return (UserDefaults(suiteName: suiteName)!, suiteName)
+        #expect(settings.validateSecurityKey())
+        #expect(settings.validationStatus == .valid)
     }
 }

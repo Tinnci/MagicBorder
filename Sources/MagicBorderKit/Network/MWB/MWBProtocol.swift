@@ -1,6 +1,6 @@
-import Foundation
+public import Foundation
 
-public enum MWBPacketType: UInt8 {
+public enum MWBPacketType: UInt8, Sendable {
     case invalid = 0xFF
     case error = 0xFE
 
@@ -39,11 +39,11 @@ public enum MWBPacketType: UInt8 {
     case matrix = 128
 }
 
-public struct MWBPacket {
+public struct MWBPacket: Equatable, Sendable {
     public static let baseSize = 32
     public static let extendedSize = 64
 
-    /// Raw data storage (Fixed 64 bytes to accommodate all cases)
+    /// Raw data storage (fixed 64 bytes to accommodate all packet layouts).
     public var data: Data
 
     public init() {
@@ -79,20 +79,17 @@ public struct MWBPacket {
         set { self.data[1] = newValue }
     }
 
-    // Magic Number occupies data[2] and data[3]
     public var magicHigh16: UInt16 {
         get {
             guard self.data.count >= 4 else { return 0 }
             return self.data.withUnsafeBytes { raw -> UInt16 in
-                guard let base = raw.baseAddress else { return 0 }
-                let bytes = base.assumingMemoryBound(to: UInt8.self)
-                let b2 = UInt16(bytes[2])
-                let b3 = UInt16(bytes[3])
+                let b2 = UInt16(raw[2])
+                let b3 = UInt16(raw[3])
                 return (b3 << 8) | b2
             }
         }
         set {
-            if self.data.count < 4 { return }
+            guard self.data.count >= 4 else { return }
             self.data[2] = UInt8(newValue & 0xFF)
             self.data[3] = UInt8((newValue >> 8) & 0xFF)
         }
@@ -115,14 +112,13 @@ public struct MWBPacket {
         set { self.setInt32(newValue, at: 12) }
     }
 
-    // MARK: - Payload (16-31) [Union Area]
+    // MARK: - Payload (16-31)
 
     public var timeStamp: Int64 {
         get { self.getInt64(at: 16) }
         set { self.setInt64(newValue, at: 16) }
     }
 
-    // Mouse Mode (MOUSEDATA)
     public var mouseX: Int32 {
         get { self.getInt32(at: 16) }
         set { self.setInt32(newValue, at: 16) }
@@ -143,8 +139,6 @@ public struct MWBPacket {
         set { self.setInt32(newValue, at: 28) }
     }
 
-    // Keyboard Mode (KEYBDDATA)
-    // C# DATA layout uses DateTime at offset 16 (8 bytes), then KEYBDDATA at offset 24.
     public var keyCode: Int32 {
         get { self.getInt32(at: 24) }
         set { self.setInt32(newValue, at: 24) }
@@ -155,7 +149,6 @@ public struct MWBPacket {
         set { self.setInt32(newValue, at: 28) }
     }
 
-    // Machine IDs / Matrix data (overlaps)
     public var machine1: Int32 {
         get { self.getInt32(at: 16) }
         set { self.setInt32(newValue, at: 16) }
@@ -180,7 +173,7 @@ public struct MWBPacket {
     public var clipboardPayload: Data {
         get {
             let start = MWBPacket.extendedSize - 48
-            return self.data.subdata(in: start ..< MWBPacket.extendedSize)
+            return self.data.subdata(in: start..<MWBPacket.extendedSize)
         }
         set {
             let start = MWBPacket.extendedSize - 48
@@ -188,14 +181,14 @@ public struct MWBPacket {
             if payload.count < 48 {
                 payload.append(Data(count: 48 - payload.count))
             }
-            self.data.replaceSubrange(start ..< MWBPacket.extendedSize, with: payload.prefix(48))
+            self.data.replaceSubrange(start..<MWBPacket.extendedSize, with: payload.prefix(48))
         }
     }
 
     // Machine name is ASCII, 32 bytes at offset 32 (big packet only)
     public var machineName: String {
         get {
-            let nameData = self.data.subdata(in: 32 ..< 64)
+            let nameData = self.data.subdata(in: 32..<64)
             return String(bytes: nameData, encoding: .ascii)?.trimmingCharacters(
                 in: .whitespacesAndNewlines) ?? ""
         }
@@ -208,7 +201,7 @@ public struct MWBPacket {
             } else if bytes.count < 32 {
                 bytes.append(Data(count: 32 - bytes.count))
             }
-            self.data.replaceSubrange(32 ..< 64, with: bytes)
+            self.data.replaceSubrange(32..<64, with: bytes)
         }
     }
 
@@ -216,38 +209,42 @@ public struct MWBPacket {
 
     private func getInt32(at offset: Int) -> Int32 {
         guard self.data.count >= offset + 4 else { return 0 }
-        return self.data.withUnsafeBytes { $0.load(fromByteOffset: offset, as: Int32.self) }
+        let raw = self.data.withUnsafeBytes {
+            $0.loadUnaligned(fromByteOffset: offset, as: Int32.self)
+        }
+        return Int32(littleEndian: raw)
     }
 
     private mutating func setInt32(_ value: Int32, at offset: Int) {
-        // Ensure data is large enough
-        if self.data.count < offset + 4 {
-            if self.data.count < MWBPacket.extendedSize {
-                self.data.append(Data(count: MWBPacket.extendedSize - self.data.count))
-            }
-            // Re-check
-            if self.data.count < offset + 4 { return }
+        self.ensureCapacity(offset + 4)
+        guard self.data.count >= offset + 4 else { return }
+        var leValue = value.littleEndian
+        withUnsafeBytes(of: &leValue) { raw in
+            self.data.replaceSubrange(offset..<offset + 4, with: raw)
         }
-        var val = value
-        let bytes = Data(bytes: &val, count: 4)
-        self.data.replaceSubrange(offset ..< offset + 4, with: bytes)
     }
 
     private func getInt64(at offset: Int) -> Int64 {
         guard self.data.count >= offset + 8 else { return 0 }
-        return self.data.withUnsafeBytes { $0.load(fromByteOffset: offset, as: Int64.self) }
+        let raw = self.data.withUnsafeBytes {
+            $0.loadUnaligned(fromByteOffset: offset, as: Int64.self)
+        }
+        return Int64(littleEndian: raw)
     }
 
     private mutating func setInt64(_ value: Int64, at offset: Int) {
-        if self.data.count < offset + 8 {
-            if self.data.count < MWBPacket.extendedSize {
-                self.data.append(Data(count: MWBPacket.extendedSize - self.data.count))
-            }
-            if self.data.count < offset + 8 { return }
+        self.ensureCapacity(offset + 8)
+        guard self.data.count >= offset + 8 else { return }
+        var leValue = value.littleEndian
+        withUnsafeBytes(of: &leValue) { raw in
+            self.data.replaceSubrange(offset..<offset + 8, with: raw)
         }
-        var val = value
-        let bytes = Data(bytes: &val, count: 8)
-        self.data.replaceSubrange(offset ..< offset + 8, with: bytes)
+    }
+
+    private mutating func ensureCapacity(_ minLength: Int) {
+        if self.data.count < minLength, self.data.count < MWBPacket.extendedSize {
+            self.data.append(Data(count: MWBPacket.extendedSize - self.data.count))
+        }
     }
 
     public var isMatrixPacket: Bool {
@@ -256,15 +253,7 @@ public struct MWBPacket {
     }
 
     public var isBigPackage: Bool {
-        if self.type == .invalid { return false }
-        if self.isMatrixPacket { return true }
-        switch self.type {
-        case .hello, .awake, .heartbeat, .heartbeatEx, .handshake, .handshakeAck, .clipboardPush,
-             .clipboard, .clipboardAsk, .clipboardImage, .clipboardText, .clipboardDataEnd:
-            return true
-        default:
-            return false
-        }
+        Self.isBigType(rawType: self.rawType)
     }
 
     public static func isBigType(rawType: UInt8) -> Bool {
@@ -273,27 +262,23 @@ public struct MWBPacket {
         }
         switch MWBPacketType(rawValue: rawType) ?? .invalid {
         case .hello, .awake, .heartbeat, .heartbeatEx, .handshake, .handshakeAck, .clipboardPush,
-             .clipboard, .clipboardAsk, .clipboardImage, .clipboardText, .clipboardDataEnd:
+            .clipboard, .clipboardAsk, .clipboardImage, .clipboardText, .clipboardDataEnd:
             return true
         default:
             return false
         }
     }
 
-    /// Prepare for sending: Calculate checksum and fill Magic
+    /// Prepare for sending: fill magic high-16 and compute checksum over bytes `2 ..< 32`.
     public mutating func finalizeForSend(magicNumber: UInt32) {
-        // bytes[3] = (magic >> 24), bytes[2] = (magic >> 16)
         self.data[3] = UInt8((magicNumber >> 24) & 0xFF)
         self.data[2] = UInt8((magicNumber >> 16) & 0xFF)
-
-        // Clear checksum for calculation
         self.data[1] = 0
 
-        // C# computes checksum only over the first 32 bytes even for big packets.
         let endIndex = MWBPacket.baseSize
         var sum: UInt8 = 0
-        for i in 2 ..< endIndex {
-            sum = sum &+ self.data[i]
+        for index in 2..<endIndex {
+            sum = sum &+ self.data[index]
         }
         self.data[1] = sum
     }
@@ -302,29 +287,15 @@ public struct MWBPacket {
         guard self.data.count >= MWBPacket.baseSize else { return false }
 
         let expected = UInt16((magicNumber >> 16) & 0xFFFF)
-        var b2: UInt8 = 0
-        var b3: UInt8 = 0
-        let headerOK = self.data.withUnsafeBytes { raw -> Bool in
-            guard let base = raw.baseAddress, raw.count >= 4 else { return false }
-            b2 = base.load(fromByteOffset: 2, as: UInt8.self)
-            b3 = base.load(fromByteOffset: 3, as: UInt8.self)
-            return true
-        }
-        guard headerOK else { return false }
-        let actual = UInt16((UInt16(b3) << 8) | UInt16(b2))
-        if actual != expected {
-            return false
-        }
+        guard self.magicHigh16 == expected else { return false }
 
         let endIndex = MWBPacket.baseSize
         return self.data.withUnsafeBytes { raw -> Bool in
-            guard let base = raw.baseAddress else { return false }
-            let bytes = base.assumingMemoryBound(to: UInt8.self)
             var sum: UInt8 = 0
-            for i in 2 ..< endIndex {
-                sum = sum &+ bytes[i]
+            for index in 2..<endIndex {
+                sum = sum &+ raw[index]
             }
-            return bytes[1] == sum
+            return raw[1] == sum
         }
     }
 }

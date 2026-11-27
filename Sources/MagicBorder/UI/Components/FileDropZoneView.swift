@@ -24,9 +24,9 @@ struct FileDropZoneView: View {
             Image(systemName: "tray.and.arrow.up")
                 .font(.system(size: AppTheme.Layout.dropZoneIconSize, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
-            Text(MBLocalized("Drag files here to send"))
+            Text(localizedString("Drag files here to send"))
                 .font(.headline)
-            Text(MBLocalized("Supports files and folders"))
+            Text(localizedString("Supports files and folders"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -37,7 +37,8 @@ struct FileDropZoneView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: AppTheme.Layout.dropZoneCornerRadius)
                         .strokeBorder(
-                            Color.accentColor.opacity(0.35), lineWidth: AppTheme.Layout.dropZoneBorderWidth)))
+                            Color.accentColor.opacity(0.35), lineWidth: AppTheme.Layout.dropZoneBorderWidth))
+        )
         .shadow(radius: AppTheme.Layout.dropZoneShadowRadius)
         .padding(AppTheme.Layout.extraLargePadding)
     }

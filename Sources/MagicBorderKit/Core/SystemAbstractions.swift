@@ -1,0 +1,195 @@
+import AppKit
+public import CoreGraphics
+public import Foundation
+private import os
+
+final class CancellableTaskSlot: Sendable {
+    private let task = OSAllocatedUnfairLock<Task<Void, Never>?>(initialState: nil)
+
+    var isActive: Bool {
+        self.task.withLock { current in
+            guard let current else { return false }
+            return !current.isCancelled
+        }
+    }
+
+    func replace(with newTask: Task<Void, Never>?) {
+        let previous = self.task.withLock { current -> Task<Void, Never>? in
+            let old = current
+            current = newTask
+            return old
+        }
+        previous?.cancel()
+    }
+
+    func cancel() {
+        self.replace(with: nil)
+    }
+}
+
+// MARK: - Clock
+
+/// Monotonic/wall time source injected to keep edge-switch timing deterministic in tests.
+public protocol ClockProviding: Sendable {
+    func now() -> TimeInterval
+}
+
+public struct SystemClock: ClockProviding {
+    public init() {}
+
+    public func now() -> TimeInterval {
+        CFAbsoluteTimeGetCurrent()
+    }
+}
+
+// MARK: - Screen Geometry
+
+/// Abstracts macOS display bounds so coordinate math and edge detection are unit-testable.
+@MainActor
+public protocol ScreenGeometryProviding: AnyObject {
+    var mainScreenFrame: CGRect? { get }
+    var allScreenFrames: [CGRect] { get }
+}
+
+@MainActor
+public final class SystemScreenGeometryProvider: ScreenGeometryProviding {
+    public init() {}
+
+    public var mainScreenFrame: CGRect? {
+        (NSScreen.main ?? NSScreen.screens.first)?.frame
+    }
+
+    public var allScreenFrames: [CGRect] {
+        NSScreen.screens.map(\.frame)
+    }
+}
+
+// MARK: - Cursor Control
+
+/// Abstracts local cursor visibility and warping.
+@MainActor
+public protocol CursorControlling: AnyObject {
+    func hide()
+    func unhide()
+    func warp(to point: CGPoint)
+}
+
+@MainActor
+public final class SystemCursorController: CursorControlling {
+    public init() {}
+
+    public func hide() {
+        NSCursor.hide()
+    }
+
+    public func unhide() {
+        NSCursor.unhide()
+    }
+
+    public func warp(to point: CGPoint) {
+        CGWarpMouseCursorPosition(point)
+    }
+}
+
+// MARK: - Pasteboard
+
+/// Abstracts `NSPasteboard` access so clipboard syncing can be tested without touching the OS clipboard.
+@MainActor
+public protocol PasteboardAccessing: AnyObject {
+    var changeCount: Int { get }
+    func readFileURLs() -> [URL]?
+    func readString() -> String?
+    func readPNGData() -> Data?
+    func readImageTIFFData() -> Data?
+    func writeString(_ string: String)
+    @discardableResult
+    func writeImageData(_ data: Data) -> Bool
+    func writeFileURLs(_ urls: [URL])
+}
+
+@MainActor
+public final class SystemPasteboard: PasteboardAccessing {
+    private let pasteboard: NSPasteboard
+
+    public convenience init() {
+        self.init(pasteboard: .general)
+    }
+
+    init(pasteboard: NSPasteboard) {
+        self.pasteboard = pasteboard
+    }
+
+    public var changeCount: Int {
+        self.pasteboard.changeCount
+    }
+
+    public func readFileURLs() -> [URL]? {
+        guard let urls = self.pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL],
+            !urls.isEmpty
+        else { return nil }
+        return urls
+    }
+
+    public func readString() -> String? {
+        guard let string = self.pasteboard.string(forType: .string), !string.isEmpty else {
+            return nil
+        }
+        return string
+    }
+
+    public func readPNGData() -> Data? {
+        guard let data = self.pasteboard.data(forType: .png), !data.isEmpty else {
+            return nil
+        }
+        return data
+    }
+
+    public func readImageTIFFData() -> Data? {
+        guard let image = NSImage(pasteboard: self.pasteboard),
+            let tiff = image.tiffRepresentation,
+            !tiff.isEmpty
+        else { return nil }
+        return tiff
+    }
+
+    public func writeString(_ string: String) {
+        self.pasteboard.clearContents()
+        self.pasteboard.setString(string, forType: .string)
+    }
+
+    @discardableResult
+    public func writeImageData(_ data: Data) -> Bool {
+        guard let image = NSImage(data: data) else { return false }
+        self.pasteboard.clearContents()
+        return self.pasteboard.writeObjects([image])
+    }
+
+    public func writeFileURLs(_ urls: [URL]) {
+        self.pasteboard.clearContents()
+        self.pasteboard.writeObjects(urls as [NSURL])
+    }
+}
+
+// MARK: - Screen Capture
+
+/// Abstracts main-display PNG capture for MWB screen capture requests.
+@MainActor
+public protocol ScreenCapturing: AnyObject {
+    func captureMainScreenPNG() -> Data?
+}
+
+@MainActor
+public final class CGScreenCapturer: ScreenCapturing {
+    public init() {}
+
+    public func captureMainScreenPNG() -> Data? {
+        guard let screen = NSScreen.main,
+            let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+                as? NSNumber
+        else { return nil }
+        let displayID = CGDirectDisplayID(truncating: screenNumber)
+        guard let cgImage = CGDisplayCreateImage(displayID) else { return nil }
+        let rep = NSBitmapImageRep(cgImage: cgImage)
+        return rep.representation(using: .png, properties: [:])
+    }
+}

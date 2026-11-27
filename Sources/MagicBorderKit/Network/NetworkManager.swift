@@ -1,43 +1,38 @@
-import AppKit
-import Foundation
-import Network
-import Observation
-import OSLog
+public import Foundation
+public import Network
+private import OSLog
+public import Observation
 
 @MainActor
 @Observable
-public class MBNetworkManager: Observation.Observable {
-    public static let shared = MBNetworkManager()
+public final class MBNetworkManager: Observation.Observable {
     public static let localMachineUUID = UUID(uuidString: "00000000-0000-0000-0000-000000000001") ?? UUID()
-
-    public struct MBToastState: Equatable {
-        public let message: String
-        public let systemImage: String
-    }
 
     public typealias SwitchState = MBSessionCoordinator.SwitchState
     public typealias SwitchReason = MBSessionCoordinator.SwitchReason
 
-    // Config
-    let port: NWEndpoint.Port = 12345
-    let serviceType = "_magicborder._tcp"
+    private struct AppliedConfiguration: Equatable {
+        let protocolMode: MBProtocolMode
+        let securityKey: String
+        let messagePort: UInt16
+        let clipboardPort: UInt16
+    }
+
+    public let port: NWEndpoint.Port = 12345
+    public let serviceType = "_magicborder._tcp"
 
     public var connectedMachines: [Machine] = []
-
-    // MARK: - Discovery (delegated to MBDiscoveryService)
-
-    private var discoveryService: MBDiscoveryService?
-
-    /// Mirror of `MBDiscoveryService.discoveredPeers` — kept as observable for the UI.
     public var discoveredPeers: [DiscoveredPeer] = []
 
-    // Identity
-    let localID: UUID
-    let localName: String
-    let localNumericID: Int32
+    public let localID: UUID
+    public let localName: String
+    public let localNumericID: Int32
     public var localDisplayName: String { self.localName }
 
-    public private(set) var sessionCoordinator: MBSessionCoordinator!
+    public let inputManager: MBInputManager
+    public let sessionCoordinator: MBSessionCoordinator
+    public let clipboardBridge: MBClipboardBridge
+
     public var switchState: SwitchState { self.sessionCoordinator.switchState }
     public var activeMachineId: UUID? {
         get { self.sessionCoordinator.activeMachineId }
@@ -46,212 +41,282 @@ public class MBNetworkManager: Observation.Observable {
 
     public var activeMachineName: String { self.sessionCoordinator.activeMachineName }
     public var lastSwitchTimestamp: Date? { self.sessionCoordinator.lastSwitchTimestamp }
-    public var toast: MBToastState?
+    public var toast: MBToastEvent?
 
     public var protocolMode: MBProtocolMode = .mwbCompatibility
-    public var securityKey: String = "" {
-        didSet {
-            self.currentTransportIfAvailable?.updateConfiguration(
-                securityKey: self.securityKey,
-                settings: self.compatibilitySettings)
-        }
-    }
-
-    public var compatibilitySettings = MBCompatibilitySettings()
+    public var securityKey: String = ""
+    public var compatibilitySettings: MBCompatibilitySettings
 
     public var pairingDebugLog: [String] = []
     public var pairingError: String?
 
     /// Spatial arrangement of machines in the grid.
     public var arrangement: MachineArrangement = .init()
-    private var toastTask: Task<Void, Never>?
-    public private(set) var clipboardBridge: MBClipboardBridge!
 
-    private var modernTransport: (any MBTransport)!
-    private var compatibilityTransport: (any MBTransport)!
-    private var currentTransportIfAvailable: (any MBTransport)? {
-        self.protocolMode == .modern ? self.modernTransport : self.compatibilityTransport
-    }
+    private var discoveryService: MBDiscoveryService?
+    private let discoveryEventsTask = CancellableTaskSlot()
+    private let modernEventsTask = CancellableTaskSlot()
+    private let compatibilityEventsTask = CancellableTaskSlot()
+    private let toastTask = CancellableTaskSlot()
+    private var lastAppliedConfiguration: AppliedConfiguration?
+
+    private let modernTransport: any MBTransport
+    private let compatibilityTransport: any MBTransport
+    private let screenCapturer: any ScreenCapturing
+    private let cursorController: any CursorControlling
 
     private var currentTransport: any MBTransport {
         self.protocolMode == .modern ? self.modernTransport : self.compatibilityTransport
     }
 
-    convenience init() {
+    public convenience init(
+        inputManager: MBInputManager = MBInputManager(),
+        compatibilitySettings: MBCompatibilitySettings = MBCompatibilitySettings()
+    ) {
         self.init(
             localName: Host.current().localizedName ?? "Unknown Mac",
             localID: UUID(),
-            localNumericID: .random(in: 1000 ... 999999),
-            compatibilitySettings: MBCompatibilitySettings(),
+            localNumericID: .random(in: 1000...999999),
+            compatibilitySettings: compatibilitySettings,
+            inputManager: inputManager,
             startDiscovery: true,
             startTransports: true,
             startClipboardMonitoring: true)
     }
 
-    init(
+    public init(
         localName: String,
         localID: UUID,
         localNumericID: Int32,
         compatibilitySettings settings: MBCompatibilitySettings,
+        inputManager: MBInputManager,
         modernTransport: (any MBTransport)? = nil,
         compatibilityTransport: (any MBTransport)? = nil,
+        pasteboard: any PasteboardAccessing = SystemPasteboard(),
+        screenGeometry: any ScreenGeometryProviding = SystemScreenGeometryProvider(),
+        clock: any ClockProviding = SystemClock(),
+        cursorController: any CursorControlling = SystemCursorController(),
+        screenCapturer: any ScreenCapturing = CGScreenCapturer(),
         startDiscovery: Bool,
         startTransports: Bool,
-        startClipboardMonitoring: Bool)
-    {
+        startClipboardMonitoring: Bool
+    ) {
         self.localName = localName
         self.localID = localID
         self.localNumericID = localNumericID
         self.compatibilitySettings = settings
-        self.securityKey = ""
-        self.connectedMachines = []
-        self.discoveredPeers = []
-        self.pairingDebugLog = []
-        self.pairingError = nil
-        self.arrangement = .init()
+        self.securityKey = settings.securityKey
+        self.inputManager = inputManager
+        self.screenCapturer = screenCapturer
+        self.cursorController = cursorController
 
-        self.modernTransport = modernTransport ?? MBModernTransport(
-            serviceType: self.serviceType,
-            localName: self.localName,
-            localID: self.localID,
-            securityKey: settings.securityKey)
-        self.compatibilityTransport = compatibilityTransport ?? MBMWBTransport(
-            localName: self.localName,
-            localID: self.localNumericID,
-            settings: settings)
+        let resolvedModern =
+            modernTransport
+            ?? MBModernTransport(
+                serviceType: self.serviceType,
+                localName: localName,
+                localID: localID,
+                securityKey: settings.securityKey,
+                port: self.port,
+                screenGeometry: screenGeometry)
+        let resolvedCompatibility =
+            compatibilityTransport
+            ?? MBMWBTransport(
+                localName: localName,
+                localID: localNumericID,
+                settings: settings,
+                screenGeometry: screenGeometry,
+                clock: clock)
+
+        self.modernTransport = resolvedModern
+        self.compatibilityTransport = resolvedCompatibility
+
+        // Placeholder closures replaced after `self` initialization via weak capture.
+        var coordinatorBox: (() -> MBNetworkManager?) = { nil }
+
+        let coordinatorDeps = MBSessionCoordinator.Dependencies(
+            connectedMachines: { coordinatorBox()?.connectedMachines ?? [] },
+            arrangement: { coordinatorBox()?.arrangement ?? .init() },
+            settings: { coordinatorBox()?.compatibilitySettings ?? settings },
+            updateRemoteTarget: { target in inputManager.setRemoteTarget(target) },
+            emitToast: { event in coordinatorBox()?.showToast(event) },
+            appendLog: { message in coordinatorBox()?.appendPairingLog(message) },
+            activateRemoteMachine: { machine in
+                guard let owner = coordinatorBox(),
+                    let remoteTransport = owner.currentTransport as? any MBRemoteActivationTransport
+                else { return false }
+                remoteTransport.activate(machine: machine)
+                return true
+            },
+            centerRemoteCursor: {
+                guard let owner = coordinatorBox(),
+                    let remoteTransport = owner.currentTransport as? any MBRemoteActivationTransport
+                else { return }
+                remoteTransport.centerRemoteCursor()
+            })
+
         self.sessionCoordinator = MBSessionCoordinator(
             localMachineID: MBNetworkManager.localMachineUUID,
-            localMachineName: self.localName,
-            connectedMachinesProvider: { [weak self] in self?.connectedMachines ?? [] },
-            arrangementProvider: { [weak self] in self?.arrangement ?? .init() },
-            settingsProvider: { [weak self] in self?.compatibilitySettings ?? MBCompatibilitySettings() },
-            protocolModeProvider: { [weak self] in self?.protocolMode ?? .mwbCompatibility },
-            updateRemoteTarget: { target in MBInputManager.shared.setRemoteTarget(target) },
-            showToast: { [weak self] message, systemImage in
-                self?.showToast(message: message, systemImage: systemImage)
-            },
-            appendLog: { [weak self] message in self?.appendPairingLog(message) },
-            activateCompatibilityMachine: { [weak self] machine in
-                self?.compatibilityTransport.activate(machine: machine)
-            },
-            centerRemoteCursor: { [weak self] in self?.compatibilityTransport.centerRemoteCursor() })
-        self.clipboardBridge = MBClipboardBridge(
-            showToast: { [weak self] message, systemImage in
-                self?.showToast(message: message, systemImage: systemImage)
-            },
-            sendClipboardText: { [weak self] text in self?.sendClipboardText(text) },
-            sendClipboardImage: { [weak self] data in self?.sendClipboardImage(data) },
-            sendFileDrop: { [weak self] urls in self?.sendFileDrop(urls) })
+            localMachineName: localName,
+            dependencies: coordinatorDeps,
+            screenGeometry: screenGeometry,
+            clock: clock,
+            cursorController: cursorController)
 
-        // Pull persisted compatibility key instead of overwriting it with a placeholder.
-        self.securityKey = settings.securityKey
+        self.clipboardBridge = MBClipboardBridge(
+            pasteboard: pasteboard,
+            ignoreNextLocalChange: { inputManager.ignoreNextClipboardChange() },
+            emitToast: { event in coordinatorBox()?.showToast(event) },
+            sendClipboardText: { text in coordinatorBox()?.sendClipboardText(text) },
+            sendClipboardImage: { data in coordinatorBox()?.sendClipboardImage(data) },
+            sendFileDrop: { urls in coordinatorBox()?.sendFileDrop(urls) })
+
+        coordinatorBox = { [weak self] in self }
+
+        inputManager.routingDelegate = self
+        inputManager.syncTapConfiguration(wrapCursor: settings.wrapCursor)
 
         if startDiscovery {
-            let svc = MBDiscoveryService(serviceType: serviceType, localName: localName)
-            self.discoveryService = svc
-            svc.startBrowsing()
-            svc.startSubnetScanning()
-            Task { @MainActor [weak self] in await self?.consumeDiscoveryEvents(svc) }
+            let service = MBDiscoveryService(serviceType: self.serviceType, localName: localName)
+            self.discoveryService = service
+            service.startBrowsing()
+            service.startSubnetScanning()
+            let task = Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.consumeDiscoveryEvents(service)
+            }
+            self.discoveryEventsTask.replace(with: task)
         }
-
-        // Break circular dep: InputManager calls back through MBInputRoutingDelegate.
-        MBInputManager.shared.routingDelegate = self
 
         if startTransports {
             self.modernTransport.start()
             self.compatibilityTransport.start()
         }
-        Task { @MainActor [weak self] in await self?.consumeTransportEvents(self?.modernTransport) }
-        Task { @MainActor [weak self] in await self?.consumeTransportEvents(self?.compatibilityTransport) }
-        self.configureCompatibility()
-        if startClipboardMonitoring {
-            self.setupPasteboardMonitoring()
+
+        let modernTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.consumeTransportEvents(resolvedModern)
         }
+        self.modernEventsTask.replace(with: modernTask)
+
+        let compatTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.consumeTransportEvents(resolvedCompatibility)
+        }
+        self.compatibilityEventsTask.replace(with: compatTask)
+
+        self.applyCompatibilitySettings()
+
+        if startClipboardMonitoring {
+            inputManager.startClipboardSync()
+        }
+    }
+
+    deinit {
+        self.discoveryEventsTask.cancel()
+        self.modernEventsTask.cancel()
+        self.compatibilityEventsTask.cancel()
+        self.toastTask.cancel()
     }
 
     static func testing(
         localName: String = "Test Mac",
-        compatibilitySettings: MBCompatibilitySettings = MBCompatibilitySettings(),
+        compatibilitySettings: MBCompatibilitySettings,
+        inputManager: MBInputManager,
         modernTransport: (any MBTransport)? = nil,
-        compatibilityTransport: (any MBTransport)? = nil)
-        -> MBNetworkManager
-    {
+        compatibilityTransport: (any MBTransport)? = nil,
+        pasteboard: any PasteboardAccessing,
+        screenGeometry: any ScreenGeometryProviding,
+        clock: any ClockProviding,
+        cursorController: any CursorControlling,
+        screenCapturer: any ScreenCapturing
+    ) -> MBNetworkManager {
         MBNetworkManager(
             localName: localName,
             localID: UUID(),
             localNumericID: 1234,
             compatibilitySettings: compatibilitySettings,
+            inputManager: inputManager,
             modernTransport: modernTransport,
             compatibilityTransport: compatibilityTransport,
+            pasteboard: pasteboard,
+            screenGeometry: screenGeometry,
+            clock: clock,
+            cursorController: cursorController,
+            screenCapturer: screenCapturer,
             startDiscovery: false,
             startTransports: false,
             startClipboardMonitoring: false)
     }
 
-    private func consumeDiscoveryEvents(_ svc: MBDiscoveryService) async {
-        for await event in svc.events {
-            switch event {
-            case .found: self.discoveredPeers = svc.discoveredPeers
-            case .lost: self.discoveredPeers = svc.discoveredPeers
-            }
+    // MARK: - Event Streams
+
+    private func consumeDiscoveryEvents(_ service: MBDiscoveryService) async {
+        for await _ in service.events {
+            self.discoveredPeers = service.discoveredPeers
         }
     }
 
-    private func consumeTransportEvents(_ transport: MBTransport?) async {
-        guard let transport else { return }
+    private func consumeTransportEvents(_ transport: any MBTransport) async {
         for await event in transport.events {
             if self.clipboardBridge.handleTransportEvent(event, settings: self.compatibilitySettings) {
                 continue
             }
-            switch event {
-            case .machineConnected(let machine):
-                if let index = self.connectedMachines.firstIndex(where: { $0.id == machine.id }) {
-                    self.connectedMachines[index] = machine
-                } else {
-                    self.connectedMachines.append(machine)
-                }
-            case .machineDisconnected(let id):
-                let disconnected = self.connectedMachines.first(where: { $0.id == id })
-                self.connectedMachines.removeAll { $0.id == id }
-                if self.sessionCoordinator.activeMachineId == id {
-                    self.forceReturnToLocal(reason: "disconnect")
-                }
-                if let disconnected {
-                    self.showToast(message: "已断开 \(disconnected.name)", systemImage: "link.slash")
-                }
-            case .activeMachineChanged(let id, let name):
-                self.sessionCoordinator.handleTransportActiveMachineChanged(id: id, name: name)
-            case .arrangementReceived(let matrix):
-                self.updateLocalMatrix(names: matrix)
-            case .arrangementOptionsUpdated(let twoRow, let swap):
-                self.compatibilitySettings.matrixOneRow = !twoRow
-                self.compatibilitySettings.matrixCircle = swap
-            case .remoteEvent(let event):
-                MBInputManager.shared.simulateRemoteEvent(event)
-            case .mwbMouse(let event):
-                MBInputManager.shared.simulateMouseEvent(event)
-            case .mwbKey(let event):
-                MBInputManager.shared.simulateKeyEvent(event)
-            case .clipboardText, .clipboardImage, .clipboardFiles, .dragDropStateChanged:
-                break
-            case .hideMouse:
-                NSCursor.hide()
-            case .screenCaptureRequested(let sourceID):
-                self.sendScreenCapture(to: sourceID)
-            case .reconnectAttempt(let host):
-                self.showToast(message: "正在重连 \(host)", systemImage: "arrow.clockwise")
-            case .reconnectStopped(let host):
-                self.showToast(message: "已停止重连 \(host)", systemImage: "pause.circle")
-            case .log(let message):
-                self.appendPairingLog(message)
-            case .error(let message):
-                self.setPairingError(message)
-            }
+            self.handleNonClipboardEvent(event)
         }
     }
 
+    private func handleNonClipboardEvent(_ event: MBTransportEvent) {
+        switch event {
+        case .machineConnected(let machine):
+            if let index = self.connectedMachines.firstIndex(where: { $0.id == machine.id }) {
+                self.connectedMachines[index] = machine
+            } else {
+                self.connectedMachines.append(machine)
+            }
+        case .machineDisconnected(let id):
+            let disconnected = self.connectedMachines.first(where: { $0.id == id })
+            self.connectedMachines.removeAll { $0.id == id }
+            if self.sessionCoordinator.activeMachineId == id {
+                self.forceReturnToLocal(reason: "disconnect")
+            }
+            if let disconnected {
+                self.showToast(.disconnected(disconnected.name))
+            }
+        case .activeMachineChanged(let id, let name):
+            self.sessionCoordinator.handleTransportActiveMachineChanged(id: id, name: name)
+        case .arrangementReceived(let matrix):
+            self.updateLocalMatrix(names: matrix)
+        case .arrangementOptionsUpdated(let twoRow, let swap):
+            self.compatibilitySettings.matrixOneRow = !twoRow
+            self.compatibilitySettings.matrixCircle = swap
+        case .remoteEvent(let remoteEvent):
+            self.inputManager.simulateRemoteEvent(remoteEvent)
+        case .mwbMouse(let mouseEvent):
+            self.inputManager.simulateMouseEvent(mouseEvent)
+        case .mwbKey(let keyEvent):
+            self.inputManager.simulateKeyEvent(keyEvent)
+        case .clipboardText, .clipboardImage, .clipboardFiles, .dragDropStateChanged:
+            break
+        case .hideMouse:
+            self.cursorController.hide()
+        case .screenCaptureRequested(let sourceID):
+            self.sendScreenCapture(to: sourceID)
+        case .reconnectAttempt(let host):
+            self.showToast(.reconnecting(host))
+        case .reconnectStopped(let host):
+            self.showToast(.reconnectStopped(host))
+        case .log(let message):
+            self.appendPairingLog(message)
+        case .error(let message):
+            self.setPairingError(message)
+        }
+    }
+
+    // MARK: - Diagnostics & Toasts
+
     public func appendPairingLog(_ message: String) {
-        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let timestamp = Date.now.formatted(.iso8601)
         self.pairingDebugLog.append("[\(timestamp)] \(message)")
         if self.pairingDebugLog.count > 200 {
             self.pairingDebugLog.removeFirst(self.pairingDebugLog.count - 200)
@@ -268,95 +333,68 @@ public class MBNetworkManager: Observation.Observable {
         self.pairingDebugLog.removeAll()
     }
 
-    private func configureCompatibility() {
-        self.currentTransport.updateConfiguration(
-            securityKey: self.securityKey,
-            settings: self.compatibilitySettings)
+    public func showToast(_ event: MBToastEvent, duration: Duration = .milliseconds(2600)) {
+        self.toast = event
+        let task = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled, let self else { return }
+            self.toast = nil
+        }
+        self.toastTask.replace(with: task)
     }
 
-    private func setupPasteboardMonitoring() {
-        MBInputManager.shared.startClipboardSync()
-    }
+    // MARK: - Routing & Switching
 
     public func handleLocalPasteboard(_ content: MBPasteboardContent) {
         self.clipboardBridge.handleLocalPasteboard(content, settings: self.compatibilitySettings)
     }
 
     private func sendScreenCapture(to sourceId: Int32?) {
-        guard let image = captureMainScreenPNG() else { return }
-        self.compatibilityTransport.sendScreenCapture(image, to: sourceId)
-    }
-
-    private func captureMainScreenPNG() -> Data? {
-        guard let screen = NSScreen.main,
-              let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
-              as? NSNumber
-        else { return nil }
-        let displayId = CGDirectDisplayID(truncating: screenNumber)
-        guard let cgImage = CGDisplayCreateImage(displayId) else { return nil }
-        let rep = NSBitmapImageRep(cgImage: cgImage)
-        return rep.representation(using: .png, properties: [:])
+        guard let image = self.screenCapturer.captureMainScreenPNG(),
+            let remoteTransport = self.compatibilityTransport as? any MBRemoteActivationTransport
+        else { return }
+        remoteTransport.sendScreenCapture(image, to: sourceId)
     }
 
     public func requestSwitch(to machineId: UUID, reason: SwitchReason = .manual) {
         self.sessionCoordinator.requestSwitch(to: machineId, reason: reason)
     }
 
-    public func forceReturnToLocal(reason: String) {
-        self.sessionCoordinator.forceReturnToLocal(reason: reason)
-    }
-
-    public func showToast(
-        message: String, systemImage: String = "arrow.left.arrow.right",
-        duration: TimeInterval = 2.6)
-    {
-        self.toast = MBToastState(message: message, systemImage: systemImage)
-        self.toastTask?.cancel()
-        self.toastTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(duration))
-            await MainActor.run { [weak self] in
-                self?.toast = nil
-            }
-        }
-    }
-
     public func requestSwitch(toMachineNamed name: String, reason: SwitchReason = .manual) {
         self.sessionCoordinator.requestSwitch(toMachineNamed: name, reason: reason)
+    }
+
+    public func forceReturnToLocal(reason: String) {
+        self.sessionCoordinator.forceReturnToLocal(reason: reason)
     }
 
     public func sendMachineMatrix(names: [String], twoRow: Bool = false, swap: Bool = false) {
         let uppercased = names.map { $0.uppercased() }
         self.updateLocalMatrix(names: uppercased)
-        self.currentTransport.sendMachineMatrix(names: uppercased, twoRow: twoRow, swap: swap)
+        if let matrixTransport = self.currentTransport as? any MBMatrixSyncTransport {
+            matrixTransport.sendMachineMatrix(names: uppercased, twoRow: twoRow, swap: swap)
+        }
     }
 
     public func syncArrangement(machineIDs: [UUID], twoRow: Bool, swap: Bool) {
         self.updateArrangement(machineIDs: machineIDs)
         let names = self.visibleMachines().map { $0.name.uppercased() }
-        self.currentTransport.sendMachineMatrix(names: names, twoRow: twoRow, swap: swap)
+        if let matrixTransport = self.currentTransport as? any MBMatrixSyncTransport {
+            matrixTransport.sendMachineMatrix(names: names, twoRow: twoRow, swap: swap)
+        }
     }
 
     @discardableResult
     public func sendFileDrop(_ urls: [URL]) -> Bool {
         guard self.compatibilitySettings.transferFiles else {
-            self.showToast(message: "文件传输已关闭", systemImage: "nosign")
+            self.showToast(.fileTransferDisabled)
             return false
         }
-        guard !urls.isEmpty else { return false }
-        self.currentTransport.sendFileDrop(urls)
-        return true
-    }
-
-    public func presentFilePickerAndSend() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = true
-
-        let response = panel.runModal()
-        if response == .OK {
-            self.sendFileDrop(panel.urls)
+        guard !urls.isEmpty, let fileTransport = self.currentTransport as? any MBFileDropTransport else {
+            return false
         }
+        fileTransport.sendFileDrop(urls)
+        return true
     }
 
     public func updateLocalMatrix(names: [String]) {
@@ -382,11 +420,6 @@ public class MBNetworkManager: Observation.Observable {
             arrangement: self.arrangement)
     }
 
-    public func handleLocalMouseEvent(_ event: CGEvent, type: CGEventType) {
-        let snapshot = EventSnapshot(from: event, type: type)
-        self.handleLocalMouseEvent(snapshot: snapshot)
-    }
-
     public func handleLocalMouseEvent(snapshot: EventSnapshot) {
         self.sessionCoordinator.handleLocalMouseEvent(snapshot: snapshot)
     }
@@ -395,7 +428,7 @@ public class MBNetworkManager: Observation.Observable {
         self.sessionCoordinator.handleRemoteMouseEvent(snapshot: snapshot)
     }
 
-    // MARK: - Connection Handling
+    // MARK: - Connection & Configuration
 
     public func connect(to result: NWBrowser.Result) {
         self.currentTransport.connect(to: result)
@@ -407,15 +440,17 @@ public class MBNetworkManager: Observation.Observable {
 
     public func connectToHost(ip: String, port: UInt16? = nil) {
         guard !ip.isEmpty else { return }
-        let resolvedPort = port ?? {
-            switch self.protocolMode {
-            case .modern:
-                15101
-            case .mwbCompatibility:
-                self.compatibilitySettings.messagePort
-            }
-        }()
-        self.showToast(message: "正在连接 \(ip)", systemImage: "arrow.right.circle")
+        let resolvedPort =
+            port
+            ?? {
+                switch self.protocolMode {
+                case .modern:
+                    self.port.rawValue
+                case .mwbCompatibility:
+                    self.compatibilitySettings.messagePort
+                }
+            }()
+        self.showToast(.connecting(ip))
         self.currentTransport.connectToHost(ip: ip, port: resolvedPort)
     }
 
@@ -430,15 +465,20 @@ public class MBNetworkManager: Observation.Observable {
     }
 
     public func applyCompatibilitySettings() {
-        self.securityKey = self.compatibilitySettings.securityKey
-        self.currentTransport.updateConfiguration(
-            securityKey: self.securityKey,
-            settings: self.compatibilitySettings)
-    }
+        self.inputManager.syncTapConfiguration(wrapCursor: self.compatibilitySettings.wrapCursor)
 
-    public func sendRemoteInput(event: CGEvent, type: CGEventType) {
-        let snapshot = EventSnapshot(from: event, type: type)
-        self.sendRemoteInput(snapshot: snapshot)
+        let nextConfig = AppliedConfiguration(
+            protocolMode: self.protocolMode,
+            securityKey: self.compatibilitySettings.securityKey,
+            messagePort: self.compatibilitySettings.messagePort,
+            clipboardPort: self.compatibilitySettings.clipboardPort)
+        guard nextConfig != self.lastAppliedConfiguration else { return }
+        self.lastAppliedConfiguration = nextConfig
+
+        self.securityKey = nextConfig.securityKey
+        self.currentTransport.updateConfiguration(
+            securityKey: nextConfig.securityKey,
+            settings: self.compatibilitySettings)
     }
 
     public func sendRemoteInput(snapshot: EventSnapshot) {
