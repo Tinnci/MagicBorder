@@ -326,18 +326,19 @@ public final class MBInputManager: Observation.Observable {
         let screenLockName = NSWorkspace.sessionDidResignActiveNotification
         let didWakeName = NSWorkspace.didWakeNotification
         let task = Task.detached { [weak self] in
+            let owner = self
             await withTaskGroup(of: Void.self) { group in
                 group.addTask {
-                    await Self.observeScreenChanges(name: screenChangedName, owner: self)
+                    await Self.observeScreenChanges(name: screenChangedName, owner: owner)
                 }
                 group.addTask {
-                    await Self.observeSleepOrLock(name: willSleepName, owner: self)
+                    await Self.observeSleepOrLock(name: willSleepName, owner: owner)
                 }
                 group.addTask {
-                    await Self.observeSleepOrLock(name: screenLockName, owner: self)
+                    await Self.observeSleepOrLock(name: screenLockName, owner: owner)
                 }
                 group.addTask {
-                    await Self.observeWake(name: didWakeName, owner: self)
+                    await Self.observeWake(name: didWakeName, owner: owner)
                 }
             }
         }
