@@ -1,0 +1,2 @@
+"NSLocalNetworkUsageDescription" = "MagicBorder uses the local network to discover and connect to nearby Mac and Windows computers.";
+"NSScreenCaptureUsageDescription" = "MagicBorder uses screen capture only when responding to a remote Mouse Without Borders screenshot request.";

@@ -8,6 +8,10 @@
     <string>MagicBorder</string>
     <key>CFBundleExecutable</key>
     <string>MagicBorder</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.tinnci.MagicBorder</string>
     <key>CFBundleName</key>
@@ -22,13 +26,19 @@
     <string>public.app-category.utilities</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 MagicBorder Contributors</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>MagicBorder 需要访问本地网络以发现和连接其它设备。</string>
+    <string>MagicBorder uses the local network to discover and connect to nearby Mac and Windows computers.</string>
     <key>NSBonjourServices</key>
     <array>
         <string>_magicborder._tcp</string>
     </array>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>MagicBorder uses screen capture only when responding to a remote Mouse Without Borders screenshot request.</string>
 </dict>
 </plist>

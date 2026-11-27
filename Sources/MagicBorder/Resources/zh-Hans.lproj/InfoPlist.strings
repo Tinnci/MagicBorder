@@ -1,0 +1,2 @@
+"NSLocalNetworkUsageDescription" = "MagicBorder 需要访问本地网络以发现并连接附近的 Mac 和 Windows 电脑。";
+"NSScreenCaptureUsageDescription" = "MagicBorder 仅在响应远程 Mouse Without Borders 截屏请求时使用屏幕录制权限。";

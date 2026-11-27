@@ -27,7 +27,10 @@ let package = Package(
         .executableTarget(
             name: "MagicBorder",
             dependencies: ["MagicBorderKit"],
-            exclude: ["Resources/Info.plist"],
+            exclude: [
+                "Resources/Info.plist",
+                "Resources/MagicBorder.entitlements",
+            ],
             resources: [
                 .process("Resources/en.lproj"),
                 .process("Resources/zh-Hans.lproj"),
