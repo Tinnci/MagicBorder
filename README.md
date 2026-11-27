@@ -113,48 +113,47 @@ swift run MagicBorderCLI <WINDOWS_IP_ADDRESS> <SECURITY_KEY>
 
 ## Development & Quality Gates
 
-MagicBorder enforces Swift 6 strict concurrency and upcoming language features (`ExistentialAny`, `InternalImportsByDefault`, `MemberImportVisibility`) with zero warnings allowed in CI:
+MagicBorder enforces Swift 6 strict concurrency and upcoming language features (`ExistentialAny`, `InternalImportsByDefault`, `MemberImportVisibility`) with zero warnings allowed in CI. Use the included `Makefile` (or run commands directly):
 
 ```bash
-# Check formatting strictly
-swift format lint --strict --recursive Sources Tests
+# Run full local CI gate (static checks, swift format lint, debug build, tests, TSan)
+make check
 
-# Auto-format in place
-swift format format --in-place --recursive Sources Tests
-
-# Optional SwiftLint check (if installed)
-swiftlint lint --strict
-
-# Debug & Release builds with warnings as errors
-swift build -Xswiftc -warnings-as-errors
-swift build -c release -Xswiftc -warnings-as-errors
-
-# Run Swift Testing suite with code coverage & Thread Sanitizer
-swift test --enable-code-coverage
-swift test --sanitize=thread
+# Individual checks & helpers
+make format        # Format Swift sources and tests in place
+make format-lint   # Strict swift-format lint
+make static-check  # Localization key parity, Info.plist validation, architecture guardrails
+make coverage      # Run Swift Testing suite and print MagicBorderKit llvm-cov report
+make package       # Build Universal (arm64 + x86_64) MagicBorder.app and DMG into dist/
 ```
 
-## Release Packaging
+If [SwiftLint](https://github.com/realm/SwiftLint) is installed locally, you can also run `swiftlint lint --strict`.
 
-Create distributable `.app` / CLI zip archives (and optional `.dmg` / `.pkg` installers) locally using [`scripts/release_package.sh`](scripts/release_package.sh):
+## Release Packaging & Homebrew Cask
+
+Create distributable Universal (`arm64` + `x86_64`) `.app` / CLI archives and a drag-to-Applications `.dmg` locally using [`scripts/release_package.sh`](scripts/release_package.sh):
 
 ```bash
-./scripts/release_package.sh
+CREATE_DMG=1 ./scripts/release_package.sh
 ```
 
 Supported environment flags:
 
-- `CREATE_DMG=1` — also build a compressed `.dmg` image
+- `ARCH_MODE=universal|native` — build Universal (`arm64` + `x86_64`, default) or host-native binary
+- `RELEASE_VERSION=0.1.0` — override bundle version (defaults to latest git tag)
+- `CREATE_DMG=1` — build a compressed `.dmg` with an `/Applications` link
 - `CREATE_PKG=1` — also build a `.pkg` installer
-- `SIGN_IDENTITY="Developer ID Application: <Name>"` — codesign the `.app` bundle
-- `NOTARY_PROFILE=<keychain-profile>` — notarize and staple the `.app` bundle
+- `SIGN_IDENTITY="Developer ID Application: <Name>"` — codesign with hardened runtime & [`MagicBorder.entitlements`](Sources/MagicBorder/Resources/MagicBorder.entitlements)
+- `NOTARY_PROFILE=<keychain-profile>` — notarize via `notarytool` and staple the `.app` bundle
 - `PKG_SIGN_IDENTITY="Developer ID Installer: <Name>"` — codesign the `.pkg`
 
-Artifacts and `SHA256SUMS.txt` are written to `dist/`. Pushing a `v*` tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml).
+Artifacts and `SHA256SUMS.txt` are written to `dist/`. Pushing a `v*` tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml), which gates releases on full CI and attaches SLSA build provenance attestations. A Homebrew Cask formula template is maintained at [`Packaging/homebrew/magicborder.rb`](Packaging/homebrew/magicborder.rb).
 
 > **Note:** Unsigned builds are blocked by macOS Gatekeeper on first launch; allow them in **System Settings → Privacy & Security** or sign with a Developer ID certificate.
 
 ## Security Notes
+
+See [SECURITY.md](SECURITY.md) for responsible disclosure and full threat-model notes.
 
 - **MWB Compatibility Mode** reproduces the legacy Mouse Without Borders cryptographic scheme (PBKDF2-HMAC-SHA512 key derivation + AES-256-CBC with a fixed IV derived from MWB's protocol constant) solely for interoperability with Windows MWB on trusted LANs.
 - **Modern Mode** signs handshakes with HMAC-SHA256 (constant-time verification, rejecting missing/invalid signatures whenever a security key is configured) and enforces a 32 MB maximum frame size.
@@ -166,13 +165,13 @@ Artifacts and `SHA256SUMS.txt` are written to `dist/`. Pushing a `v*` tag trigge
 - **Cannot connect to Windows PC**: Confirm both machines share the same Security Key (≥ 16 non-space characters), TCP ports `15100` and `15101` are open in Windows Firewall, and both devices are on the same subnet.
 - **Stuck on remote machine**: Press **`Esc`** to force-return input control to your local Mac.
 
-## Contributing
+## Contributing & Community
 
-Contributions are welcome! Please:
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md) before opening a Pull Request, and track notable changes in [CHANGELOG.md](CHANGELOG.md).
 
 1. Fork the repository and create a feature branch.
 2. Keep changes focused and well-tested (prefer injected abstractions over OS globals).
-3. Ensure `swift format lint --strict --recursive Sources Tests`, `swift build -Xswiftc -warnings-as-errors`, and `swift test --sanitize=thread` pass before opening a Pull Request.
+3. Ensure `make check` passes with zero errors or warnings before opening a Pull Request.
 
 ## License
 

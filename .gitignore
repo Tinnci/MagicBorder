@@ -19,5 +19,8 @@ Package.resolved
 /findings.md
 /progress.md
 
+# Build / Release artifacts
+dist/
+
 # Examples (Reference code)
 examples_MouseWithoutBorders/

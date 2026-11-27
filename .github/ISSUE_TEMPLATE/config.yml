@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & Setup Help (GitHub Discussions)
+    url: https://github.com/Tinnci/MagicBorder/discussions
+    about: Ask pairing, firewall, or usage questions here instead of opening a bug report.
+  - name: Report a Security Vulnerability
+    url: https://github.com/Tinnci/MagicBorder/blob/main/SECURITY.md
+    about: Please read SECURITY.md for responsible vulnerability disclosure.
