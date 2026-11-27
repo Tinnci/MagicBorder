@@ -82,7 +82,7 @@ public struct MWBPacket: Equatable, Sendable {
     public var magicHigh16: UInt16 {
         get {
             guard self.data.count >= 4 else { return 0 }
-            return self.data.withUnsafeBytes { raw -> UInt16 in
+            return self.data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> UInt16 in
                 let b2 = UInt16(raw[2])
                 let b3 = UInt16(raw[3])
                 return (b3 << 8) | b2
@@ -290,7 +290,7 @@ public struct MWBPacket: Equatable, Sendable {
         guard self.magicHigh16 == expected else { return false }
 
         let endIndex = MWBPacket.baseSize
-        return self.data.withUnsafeBytes { raw -> Bool in
+        return self.data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Bool in
             var sum: UInt8 = 0
             for index in 2..<endIndex {
                 sum = sum &+ raw[index]
