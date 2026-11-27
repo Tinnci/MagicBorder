@@ -6,13 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-28
+
 ### Added
-- Redesigned macOS `AppIcon` asset catalog across all 10 standard icon slots and wired `actool` compilation (`AppIcon.icns` + `Assets.car`) into `.app` release packaging.
-- Universal (`arm64` + `x86_64`) release packaging, drag-to-Applications `.dmg` layout, `MagicBorder.entitlements`, localized `InfoPlist.strings` (`en`, `zh-Hans`), and Homebrew Cask template (`Packaging/homebrew/magicborder.rb`).
-- Parallelized GitHub Actions CI (`static-checks`, `quality-and-coverage`, `tsan-and-package`) with `llvm-cov` step summaries, Dependabot updates, and release gating with SLSA build provenance attestation.
-- Repository governance and developer tooling: `Makefile`, `scripts/check_static.sh`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, GitHub issue/PR templates, and `.swift-format`.
-- Segregated transport protocols, `MBSessionCoordinator`, `MBClipboardBridge`, `MBDiscoveryService`, `MBConnectionRegistry`, `MWBStreamFramer`, `MWBSessionChannel`, `MWBHandshakeStateMachine`, `MWBReconnectPolicy`, and `SystemAbstractions` test seams.
-- Expanded Swift Testing suite (`Testing`) covering protocol framing, compression, crypto, key mapping, edge transitions, clipboard bridging, pasteboard monitoring, and live loopback transports.
+- **End-to-End AES-256-GCM Encryption for Modern (`macOS ↔ macOS`) Mode**: Derives a 256-bit key via `HKDF<SHA256>` from the shared Security Key and seals every JSON frame with `AES.GCM` (rejecting wrong keys, tampering, and plaintext downgrade frames).
+- **Per-Peer Input Profiles**: Customize modifier remapping (`⌘ ↔ Ctrl`), scroll inversion, and scroll speed independently per remote machine in `MachineDetailView` (`MBPeerProfileStore`).
+- **Live Peer Telemetry & Channel Health**: Reports live Message/Clipboard channel connectivity, heartbeat timestamps, and RTT latency (`ms`) in `MachineDetailView`, `SpatialArrangementView`, and `MenuBarView`.
+- **Proportional 2D Spatial Display Canvas**: Toggle between Grid and Spatial monitor views (`SpatialArrangementView`), plus directional crossing arrows, active control badges, right-click actions, and multi-monitor outer-perimeter edge detection.
+- **Customizable Global Hotkeys & Lock All Screens**: Interactive hotkey recorder in Input settings (`⌃⌥1–4` machine jump, `⌃⌥L` cursor lock, `⌃⌥P` pause switching, `⌃⌥⌘L` Lock All Screens via `Win+L` + `pmset displaysleepnow`).
+- **First-Run Setup Assistant & 3-Stage Connection Doctor**: Guided permissions/pairing wizard, local LAN IP discovery, TCP port probing, saved hosts, and key-redacted diagnostic export.
+- **Privacy-Safe Clipboard & Background Lifecycle**: Filters `ConcealedType` / `TransientType` / password-manager entries, enforces max clipboard size limits, promotes `DragDropOverlayView` to a floating `NSPanel`, and adds Launch at Login + Menu Bar Only mode.
+- **Redesigned AppIcon & Universal Release Pipeline**: Compiled `AppIcon.icns` / `Assets.car`, localized `InfoPlist.strings`, Universal (`arm64` + `x86_64`) `.dmg` packaging, Homebrew Cask template, parallel CI/CD, and expanded Swift Testing coverage.
 
 ### Changed
 - Removed unused external `swift-crypto` dependency (zero external SwiftPM dependencies).

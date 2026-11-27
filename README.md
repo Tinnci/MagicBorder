@@ -40,8 +40,9 @@
 | **Wire Format** | 32/64-byte binary packets (`MWBPacket`) | Length-prefixed JSON (`ModernPacketCodec`, 32 MB frame cap) |
 | **Transport & Ports** | Dual TCP channels (`15101` message / `15100` clipboard, configurable) | TCP (`12345` default) + Bonjour (`_magicborder._tcp`) |
 | **Discovery** | Bounded subnet port scan + manual IP entry | Bonjour (`NWBrowser`) + manual IP / endpoint |
-| **Security** | PBKDF2-HMAC-SHA512 (50k rounds) + AES-256-CBC stream cipher + magic checksum | HMAC-SHA256 handshake authentication (constant-time verification) |
-| **Input Forwarding** | Relative or normalized mouse, scroll wheel, VK-mapped keyboard | Normalized/absolute mouse, drag, scroll wheel, `CGKeyCode` |
+| **Security** | PBKDF2-HMAC-SHA512 (50k rounds) + AES-256-CBC stream cipher + magic checksum | HMAC-SHA256 handshake authentication + HKDF-SHA256 / AES-256-GCM frame encryption |
+| **Input Forwarding** | Relative or normalized mouse, middle click, scroll scaling/inversion, per-peer `⌘↔Ctrl` swap, stuck-modifier release | Normalized/absolute mouse, drag, scroll scaling/inversion, `CGKeyCode` |
+| **Ergonomics & Controls** | Configurable Escape (`Double-Tap Esc` / `⌃⌥Esc`), custom global hotkeys, multi-monitor perimeter detection, Lock All Screens | Same |
 | **Clipboard & Files** | UTF-16LE + zlib text, PNG images, file drag-drop, screen capture | UTF-8 text, image data |
 | **Matrix Layout Sync** | 4-slot matrix sync (`twoRow` & `swap` flags) | Local arrangement |
 
