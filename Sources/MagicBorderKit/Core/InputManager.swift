@@ -1,5 +1,5 @@
 @preconcurrency import AppKit
-public import CoreGraphics
+import CoreGraphics
 public import Foundation
 private import OSLog
 public import Observation
@@ -294,28 +294,36 @@ public final class MBInputManager: Observation.Observable {
     }
 
     private func startAppStateObservers() {
-        let task = Task { @MainActor [weak self] in
-            async let becameActive: Void = Self.observeNotification(
-                name: NSApplication.didBecomeActiveNotification,
-                isActive: true,
-                owner: self)
-            async let resignedActive: Void = Self.observeNotification(
-                name: NSApplication.didResignActiveNotification,
-                isActive: false,
-                owner: self)
-            _ = await (becameActive, resignedActive)
+        let tapState = self.tapState
+        let becameActiveName = NSApplication.didBecomeActiveNotification
+        let resignedActiveName = NSApplication.didResignActiveNotification
+        let task = Task.detached {
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    await Self.observeNotification(
+                        name: becameActiveName,
+                        isActive: true,
+                        tapState: tapState)
+                }
+                group.addTask {
+                    await Self.observeNotification(
+                        name: resignedActiveName,
+                        isActive: false,
+                        tapState: tapState)
+                }
+            }
         }
         self.appLifecycleTask.replace(with: task)
     }
 
-    private static func observeNotification(
+    private nonisolated static func observeNotification(
         name: Notification.Name,
         isActive: Bool,
-        owner: MBInputManager?
+        tapState: OSAllocatedUnfairLock<TapState>
     ) async {
         for await _ in NotificationCenter.default.notifications(named: name) {
-            guard !Task.isCancelled, let owner else { break }
-            owner.tapState.withLock { $0.isAppActive = isActive }
+            guard !Task.isCancelled else { break }
+            tapState.withLock { $0.isAppActive = isActive }
         }
     }
 }

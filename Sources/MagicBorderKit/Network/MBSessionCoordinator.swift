@@ -1,4 +1,4 @@
-public import CoreGraphics
+import CoreGraphics
 public import Foundation
 private import OSLog
 public import Observation
