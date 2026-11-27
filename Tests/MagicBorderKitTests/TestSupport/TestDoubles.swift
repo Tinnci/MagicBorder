@@ -176,6 +176,7 @@ final class FakeMWBCompatibilityService: MWBCompatibilityServicing {
 @MainActor
 final class FakePasteboard: PasteboardAccessing {
     var changeCount = 0
+    var isConcealedOrTransient = false
     var storedString: String?
     var storedPNGData: Data?
     var storedTIFFData: Data?
