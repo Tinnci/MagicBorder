@@ -2,24 +2,85 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-and-test:
-    runs-on: macos-latest
+  static-checks:
+    name: Static & Localization Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - name: Select Swift
-        run: swift --version
-      - name: Format Lint
+      - uses: actions/checkout@v7
+      - name: Run static guardrails
+        run: bash scripts/check_static.sh
+
+  quality-and-coverage:
+    name: Lint, Build & Coverage
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain info
+        run: |
+          swift --version
+          xcodebuild -version
+      - name: Format lint
         run: swift format lint --strict --recursive Sources Tests
-      - name: Build (debug, warnings as errors)
-        run: swift build -Xswiftc -warnings-as-errors
-      - name: Run Tests (with coverage)
-        run: swift test --enable-code-coverage
-      - name: Run Tests (Thread Sanitizer)
+      - name: SwiftLint
+        run: |
+          if command -v swiftlint >/dev/null 2>&1; then
+            swiftlint lint --strict --reporter github-actions-logging
+          else
+            echo "swiftlint not installed on runner; skipping"
+          fi
+      - name: Build executables (warnings as errors)
+        run: swift build --product MagicBorder --product MagicBorderCLI -Xswiftc -warnings-as-errors
+      - name: Run tests with coverage
+        run: swift test --enable-code-coverage -Xswiftc -warnings-as-errors
+      - name: Publish coverage summary
+        run: |
+          BIN_DIR="$(swift build --show-bin-path)"
+          XCTEST_BUNDLE="$(find "$BIN_DIR" -maxdepth 1 -name '*.xctest' | head -n 1)"
+          TEST_BIN="$(find "$XCTEST_BUNDLE/Contents/MacOS" -maxdepth 1 -type f | head -n 1)"
+          PROF_DATA="$BIN_DIR/codecov/default.profdata"
+          {
+            echo '## Code Coverage Summary (`MagicBorderKit`)'
+            echo ""
+            echo '```'
+            xcrun llvm-cov report "$TEST_BIN" -instr-profile="$PROF_DATA" --ignore-filename-regex="\.build|Tests"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  tsan-and-package:
+    name: Thread Sanitizer & Universal Package
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run tests (Thread Sanitizer)
         run: swift test --sanitize=thread
-      - name: Build (release, warnings as errors)
-        run: swift build -c release -Xswiftc -warnings-as-errors
+      - name: Smoke-test Universal .app bundle
+        run: ARCH_MODE=universal CREATE_DMG=0 bash scripts/release_package.sh
+      - name: Verify bundle integrity
+        run: |
+          APP="dist/MagicBorder.app"
+          ARCHS="$(lipo -archs "$APP/Contents/MacOS/MagicBorder")"
+          echo "Architectures: $ARCHS"
+          echo "$ARCHS" | grep -q "arm64"
+          echo "$ARCHS" | grep -q "x86_64"
+          test -f "$APP/Contents/Resources/AppIcon.icns"
+          test -f "$APP/Contents/Resources/Assets.car"
+          test -f "$APP/Contents/Resources/en.lproj/InfoPlist.strings"
+          test -f "$APP/Contents/Resources/zh-Hans.lproj/InfoPlist.strings"
+          plutil -lint "$APP/Contents/Info.plist"
+          codesign --verify --strict --verbose=2 "$APP"

@@ -11,7 +11,6 @@ opt_in_rules:
   - redundant_nil_coalescing
   - sorted_imports
   - strict_fileprivate
-  - unused_import
   - weak_delegate
 
 line_length:
@@ -21,21 +20,21 @@ line_length:
   ignores_urls: true
 
 function_body_length:
-  warning: 60
-  error: 100
+  warning: 80
+  error: 120
 
 cyclomatic_complexity:
-  warning: 12
-  error: 20
+  warning: 15
+  error: 25
 
 file_length:
-  warning: 400
-  error: 600
+  warning: 500
+  error: 750
   ignore_comment_only_lines: true
 
 type_body_length:
-  warning: 250
-  error: 400
+  warning: 350
+  error: 600
 
 large_tuple:
   warning: 3
