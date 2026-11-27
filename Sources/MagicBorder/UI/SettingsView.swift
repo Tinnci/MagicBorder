@@ -1,15 +1,22 @@
+import AppKit
 import MagicBorderKit
 import SwiftUI
 
 struct SettingsView: View {
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
-    private let settingsWindowWidth: CGFloat = 500
+    private let settingsWindowWidth: CGFloat = 540
 
     var body: some View {
         TabView {
             GeneralSettingsTab()
                 .tabItem {
                     Label(localizedString("General"), systemImage: "gear")
+                }
+                .frame(width: self.settingsWindowWidth)
+
+            InputSettingsTab()
+                .tabItem {
+                    Label(localizedString("Input"), systemImage: "keyboard")
                 }
                 .frame(width: self.settingsWindowWidth)
 
@@ -25,22 +32,10 @@ struct SettingsView: View {
                 }
                 .frame(width: self.settingsWindowWidth)
         }
-        .padding(20)  // Global padding for visually pleasing layout
-        .onChange(of: self.networkManager.compatibilitySettings.securityKey) { _, _ in
-            self.networkManager.applyCompatibilitySettings()
-        }
-        .onChange(of: self.networkManager.compatibilitySettings.messagePort) { _, _ in
-            self.networkManager.applyCompatibilitySettings()
-        }
-        .onChange(of: self.networkManager.compatibilitySettings.clipboardPort) { _, _ in
-            self.networkManager.applyCompatibilitySettings()
-        }
+        .padding(20)
     }
 }
 
-// MARK: - Components
-
-/// A container that mimics a Form Section but calculates its own height
 private struct SettingsSection<Content: View>: View {
     let title: String
     let content: Content
@@ -51,7 +46,7 @@ private struct SettingsSection<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(self.title)
                 .font(.headline)
                 .foregroundStyle(.primary)
@@ -64,184 +59,136 @@ private struct SettingsSection<Content: View>: View {
     }
 }
 
-// MARK: - Tabs
-
 private struct GeneralSettingsTab: View {
+    @Environment(MBAppController.self) private var controller
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
-    @Environment(MBAccessibilityService.self) private var accessibilityService
-    @AppStorage("captureInput") private var captureInput = true
+    @State private var showOnboarding = false
 
-    private var matrixModeBinding: Binding<Int> {
+    private var launchBinding: Binding<Bool> {
         Binding(
-            get: { self.networkManager.compatibilitySettings.matrixOneRow ? 0 : 1 },
-            set: { self.networkManager.compatibilitySettings.matrixOneRow = ($0 == 0) })
+            get: { self.controller.launchAtLogin },
+            set: { self.controller.setLaunchAtLogin($0) })
     }
 
     var body: some View {
+        @Bindable var controller = controller
         @Bindable var networkManager = networkManager
 
-        VStack(alignment: .leading, spacing: 24) {
-            SettingsSection(localizedString("Clipboard & Files")) {
+        VStack(alignment: .leading, spacing: 20) {
+            SettingsSection(localizedString("Startup & Menu Bar")) {
+                Toggle(localizedString("Launch at Login"), isOn: self.launchBinding)
+                if let error = self.controller.launchAtLoginError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+                Toggle(localizedString("Menu Bar Only (Hide Dock Icon)"), isOn: $controller.hideDockIcon)
+            }
+
+            Divider()
+
+            SettingsSection(localizedString("Clipboard & Privacy")) {
                 Toggle(
                     localizedString("Share Clipboard"),
                     isOn: $networkManager.compatibilitySettings.shareClipboard)
                 Toggle(
                     localizedString("Transfer Files"),
                     isOn: $networkManager.compatibilitySettings.transferFiles)
+                Toggle(
+                    localizedString("Ignore Password Manager Items"),
+                    isOn: $networkManager.compatibilitySettings.ignoreConcealedClipboard)
+
+                HStack {
+                    Text(localizedString("Max Clipboard Size"))
+                    Picker("", selection: $networkManager.compatibilitySettings.maxClipboardSizeMB) {
+                        Text("2 MB").tag(2)
+                        Text("5 MB").tag(5)
+                        Text("10 MB").tag(10)
+                        Text("25 MB").tag(25)
+                    }
+                    .frame(width: 110)
+                }
             }
 
             Divider()
 
-            SettingsSection(localizedString("Cursor Control")) {
-                Toggle(localizedString("Capture Local Input"), isOn: self.$captureInput)
-                    .disabled(!self.accessibilityService.isTrusted)
-
-                if !self.accessibilityService.isTrusted {
-                    HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                            .font(.title3)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(localizedString("Permission Required"))
-                                .font(.headline)
-                            Text(
-                                localizedString(
-                                    "MagicBorder needs accessibility access to share mouse and keyboard input.")
-                            )
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            Button(localizedString("Open System Settings")) {
-                                self.accessibilityService.openSystemSettings()
-                            }
-                            .controlSize(.small)
-                        }
-                    }
-                    .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.1)))
+            SettingsSection(localizedString("Setup Guide")) {
+                Button(localizedString("Open Setup Assistant...")) {
+                    self.showOnboarding = true
                 }
-
-                Toggle(
-                    localizedString("Switch by Moving to Edge"),
-                    isOn: $networkManager.compatibilitySettings.switchByMouse)
-                Toggle(
-                    localizedString("Block Corner Switching"),
-                    isOn: $networkManager.compatibilitySettings.blockCorners)
-                Toggle(
-                    localizedString("Center Cursor on Manual Switch"),
-                    isOn: $networkManager.compatibilitySettings.centerCursorOnManualSwitch)
-
-                Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 8) {
-                    GridRow {
-                        Text(localizedString("Edge Switch Lock"))
-                        HStack {
-                            Slider(
-                                value: $networkManager.compatibilitySettings.edgeSwitchLockSeconds,
-                                in: 0.1...1.0
-                            )
-                            .frame(width: 120)
-                            Text(
-                                "\(networkManager.compatibilitySettings.edgeSwitchLockSeconds, specifier: "%.2fs")"
-                            )
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                        }
-                    }
-                    GridRow {
-                        Text(localizedString("Edge Safe Margin"))
-                        HStack {
-                            Slider(
-                                value: $networkManager.compatibilitySettings.edgeSwitchSafeMargin,
-                                in: 4...40, step: 2
-                            )
-                            .frame(width: 120)
-                            Text(
-                                "\(Int(networkManager.compatibilitySettings.edgeSwitchSafeMargin))px"
-                            )
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .padding(.leading, 24)  // Indent controls slightly
-
-                Toggle(
-                    localizedString("Wrap Mouse at Screen Edge"),
-                    isOn: $networkManager.compatibilitySettings.wrapCursor)
-                Toggle(
-                    localizedString("Relative Mouse Movement"),
-                    isOn: $networkManager.compatibilitySettings.moveMouseRelatively)
             }
-
-            Divider()
-
-            SettingsSection(localizedString("Matrix Configuration")) {
-                Picker(localizedString("Layout Mode"), selection: self.matrixModeBinding) {
-                    Text(localizedString("Single Row")).tag(0)
-                    Text(localizedString("Grid (2 Rows)")).tag(1)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()  // Segmented picker shows labels inside
-                .frame(width: 250)
-
-                Toggle(
-                    localizedString("Cycle Through Screens"),
-                    isOn: $networkManager.compatibilitySettings.matrixCircle)
-
-                Text(
-                    networkManager.compatibilitySettings.matrixOneRow
-                        ? localizedString("Machines are arranged in a single horizontal line.")
-                        : localizedString("Machines are arranged in a 2-row grid layout.")
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
+        }
+        .sheet(isPresented: self.$showOnboarding) {
+            OnboardingView()
         }
     }
 }
 
 private struct NetworkSettingsTab: View {
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
+    @State private var doctorHost = ""
+    @State private var showDoctor = false
 
     var body: some View {
         @Bindable var networkManager = networkManager
 
-        VStack(alignment: .leading, spacing: 24) {
-            SettingsSection(localizedString("Security")) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading) {
-                        SecureField(
-                            localizedString("Security Key"),
-                            text: $networkManager.compatibilitySettings.securityKey
-                        )
-                        .textContentType(.password)
-                        .frame(width: 240)
+        VStack(alignment: .leading, spacing: 20) {
+            SettingsSection(localizedString("Protocol Mode")) {
+                Picker(
+                    localizedString("Mode"),
+                    selection: $networkManager.compatibilitySettings.protocolMode
+                ) {
+                    Text(localizedString("Windows (MWB Compatibility)")).tag(MBProtocolMode.mwbCompatibility)
+                    Text(localizedString("Mac-to-Mac (Modern)")).tag(MBProtocolMode.modern)
+                }
+                .pickerStyle(.segmented)
 
-                        if let status = networkManager.compatibilitySettings.validationStatus {
-                            Text(status.localizedMessage)
-                                .font(.caption)
-                                .foregroundStyle(status == .valid ? .green : .red)
+                if let ip = self.networkManager.localIPv4Addresses().first {
+                    HStack {
+                        Text(localizedString("This Mac LAN IP: %@", arguments: [ip]))
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                        Button(localizedString("Copy")) {
+                            let pasteboard = NSPasteboard.general
+                            pasteboard.clearContents()
+                            pasteboard.setString(ip, forType: .string)
                         }
-                    }
-
-                    Button(localizedString("Validate")) {
-                        _ = networkManager.compatibilitySettings.validateSecurityKey()
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
                     }
                 }
             }
 
             Divider()
 
-            SettingsSection(localizedString("Ports")) {
-                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 12) {
+            SettingsSection(localizedString("Security")) {
+                PairingCardView(securityKey: $networkManager.compatibilitySettings.securityKey)
+
+                HStack {
+                    Button(localizedString("Validate")) {
+                        _ = networkManager.compatibilitySettings.validateSecurityKey()
+                    }
+                    if let status = networkManager.compatibilitySettings.validationStatus {
+                        Text(status.localizedMessage)
+                            .font(.caption)
+                            .foregroundStyle(status == .valid ? .green : .red)
+                    }
+                }
+            }
+
+            Divider()
+
+            SettingsSection(localizedString("Ports & Diagnostics")) {
+                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
                     GridRow {
                         Text(localizedString("Message Port"))
                         TextField(
                             localizedString("15101"),
                             value: $networkManager.compatibilitySettings.messagePort,
-                            formatter: NumberFormatter()
+                            format: .number.grouping(.never)
                         )
                         .monospacedDigit()
-                        .frame(width: 80)
+                        .frame(width: 90)
                         Text(localizedString("Default: 15101"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -251,21 +198,30 @@ private struct NetworkSettingsTab: View {
                         TextField(
                             localizedString("15100"),
                             value: $networkManager.compatibilitySettings.clipboardPort,
-                            formatter: NumberFormatter()
+                            format: .number.grouping(.never)
                         )
                         .monospacedDigit()
-                        .frame(width: 80)
+                        .frame(width: 90)
                         Text(localizedString("Default: 15100"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                Button(localizedString("Run Connection Doctor...")) {
+                    self.doctorHost = self.networkManager.savedHosts.hosts.first?.address ?? ""
+                    self.showDoctor = true
+                }
             }
+        }
+        .sheet(isPresented: self.$showDoctor) {
+            ConnectionDoctorView(initialHost: self.doctorHost)
         }
     }
 }
 
 private struct OverlaySettingsTab: View {
+    @Environment(MBAppController.self) private var controller
     @Environment(MBOverlayPreferencesStore.self) private var overlayPreferences
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
 
@@ -278,9 +234,16 @@ private struct OverlaySettingsTab: View {
     @State private var selectedDevice: String = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 20) {
             SettingsSection(localizedString("Global Defaults")) {
-                Toggle(localizedString("Show Overlay"), isOn: self.$dragDropOverlayEnabled)
+                HStack {
+                    Toggle(localizedString("Show Overlay"), isOn: self.$dragDropOverlayEnabled)
+                    Spacer()
+                    Button(localizedString("Preview Overlay")) {
+                        self.controller.previewDragDropOverlay()
+                    }
+                    .controlSize(.small)
+                }
 
                 VStack(alignment: .leading, spacing: 10) {
                     Toggle(localizedString("Show Device Name"), isOn: self.$dragDropOverlayShowDevice)
@@ -290,10 +253,8 @@ private struct OverlaySettingsTab: View {
                         GridRow {
                             Text(localizedString("Size"))
                             HStack {
-                                Slider(
-                                    value: self.$dragDropOverlayScale, in: 0.85...1.3, step: 0.05
-                                )
-                                .frame(width: 120)
+                                Slider(value: self.$dragDropOverlayScale, in: 0.85...1.3, step: 0.05)
+                                    .frame(width: 120)
                                 Text("\(Int(self.dragDropOverlayScale * 100))%")
                                     .monospacedDigit()
                                     .foregroundStyle(.secondary)
@@ -302,17 +263,7 @@ private struct OverlaySettingsTab: View {
 
                         GridRow {
                             Text(localizedString("Position"))
-                            Picker("", selection: self.$dragDropOverlayPosition) {
-                                Text(localizedString("Top")).tag("top")
-                                Text(localizedString("Bottom")).tag("bottom")
-                                Text(localizedString("Top Left")).tag("topLeading")
-                                Text(localizedString("Top Right")).tag("topTrailing")
-                                Text(localizedString("Bottom Left")).tag(
-                                    "bottomLeading")
-                                Text(localizedString("Bottom Right")).tag(
-                                    "bottomTrailing")
-                            }
-                            .frame(width: 140)
+                            self.positionPicker(selection: self.$dragDropOverlayPosition)
                         }
                     }
                 }
@@ -330,7 +281,7 @@ private struct OverlaySettingsTab: View {
                             Text(device).tag(device)
                         }
                     }
-                    .frame(width: 200)
+                    .frame(width: 220)
                 }
 
                 if !self.selectedDevice.isEmpty {
@@ -350,6 +301,11 @@ private struct OverlaySettingsTab: View {
                                     .monospacedDigit()
                                     .foregroundStyle(.secondary)
                             }
+
+                            HStack {
+                                Text(localizedString("Position"))
+                                self.positionPicker(selection: self.positionBinding)
+                            }
                         }
                         .padding(.leading, 20)
                     }
@@ -363,17 +319,28 @@ private struct OverlaySettingsTab: View {
         }
     }
 
-    // MARK: - Helpers
+    @ViewBuilder
+    private func positionPicker(selection: Binding<String>) -> some View {
+        Picker("", selection: selection) {
+            Text(localizedString("Top")).tag("top")
+            Text(localizedString("Bottom")).tag("bottom")
+            Text(localizedString("Top Left")).tag("topLeading")
+            Text(localizedString("Top Right")).tag("topTrailing")
+            Text(localizedString("Bottom Left")).tag("bottomLeading")
+            Text(localizedString("Bottom Right")).tag("bottomTrailing")
+        }
+        .frame(width: 150)
+    }
 
     private var deviceOptions: [String] {
         let connected = self.networkManager.connectedMachines.map(\.name)
         let stored = self.overlayPreferences.allDeviceNames()
-        let base = [networkManager.localDisplayName] + connected
+        let base = [self.networkManager.localDisplayName] + connected
         return Array(Set(base + stored)).sorted()
     }
 
     private var defaultOverlayPreferences: MBOverlayPreferences {
-        let position = MBOverlayPosition(rawValue: dragDropOverlayPosition) ?? .top
+        let position = MBOverlayPosition(rawValue: self.dragDropOverlayPosition) ?? .top
         return MBOverlayPreferences(
             showDevice: self.dragDropOverlayShowDevice,
             showProgress: self.dragDropOverlayShowProgress,
@@ -382,8 +349,7 @@ private struct OverlaySettingsTab: View {
     }
 
     private var currentDevicePreferences: MBOverlayPreferences {
-        self.overlayPreferences.preferences(
-            for: self.selectedDevice, default: self.defaultOverlayPreferences)
+        self.overlayPreferences.preferences(for: self.selectedDevice, default: self.defaultOverlayPreferences)
     }
 
     private var useOverrideBinding: Binding<Bool> {
@@ -391,8 +357,7 @@ private struct OverlaySettingsTab: View {
             get: { self.overlayPreferences.hasOverride(for: self.selectedDevice) },
             set: { enabled in
                 if enabled {
-                    self.overlayPreferences.setOverride(
-                        self.currentDevicePreferences, for: self.selectedDevice)
+                    self.overlayPreferences.setOverride(self.currentDevicePreferences, for: self.selectedDevice)
                 } else {
                     self.overlayPreferences.clearOverride(for: self.selectedDevice)
                 }
@@ -417,16 +382,18 @@ private struct OverlaySettingsTab: View {
             set: { val in self.updateDevicePreferences { $0.scale = val } })
     }
 
+    private var positionBinding: Binding<String> {
+        Binding(
+            get: { self.currentDevicePreferences.position.rawValue },
+            set: { raw in
+                let position = MBOverlayPosition(rawValue: raw) ?? .top
+                self.updateDevicePreferences { $0.position = position }
+            })
+    }
+
     private func updateDevicePreferences(_ update: (inout MBOverlayPreferences) -> Void) {
         var prefs = self.currentDevicePreferences
         update(&prefs)
         self.overlayPreferences.setOverride(prefs, for: self.selectedDevice)
     }
-}
-
-#Preview {
-    SettingsView()
-        .environment(MagicBorderKit.MBNetworkManager())
-        .environment(MBAccessibilityService())
-        .environment(MBOverlayPreferencesStore())
 }

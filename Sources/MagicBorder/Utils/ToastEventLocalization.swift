@@ -17,6 +17,14 @@ extension MBToastEvent {
             localizedString("Reconnecting to %@...", arguments: [host])
         case .reconnectStopped(let host):
             localizedString("Stopped reconnecting to %@", arguments: [host])
+        case .cursorLocked:
+            localizedString("Cursor locked to current screen")
+        case .cursorUnlocked:
+            localizedString("Cursor unlocked")
+        case .inputPaused:
+            localizedString("Input sharing paused")
+        case .inputResumed:
+            localizedString("Input sharing resumed")
         case .clipboardSyncedText:
             localizedString("Synced clipboard text")
         case .clipboardSyncedImage:
@@ -29,6 +37,10 @@ extension MBToastEvent {
             localizedString("Received clipboard image")
         case .clipboardReceivedFiles:
             localizedString("Received clipboard files")
+        case .clipboardTooLarge(let limitMB):
+            localizedString("Clipboard item exceeded %d MB limit", arguments: [limitMB])
+        case .clipboardEmpty:
+            localizedString("Clipboard is empty or protected")
         case .fileTransferDisabled:
             localizedString("File transfer is disabled")
         case .filesSent(let summary):

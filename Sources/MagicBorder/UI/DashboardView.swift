@@ -21,21 +21,13 @@ import MagicBorderKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-// MARK: - Main View
-
 struct DashboardView: View {
-    @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager: MagicBorderKit.MBNetworkManager
-    @Environment(MBAccessibilityService.self) private var accessibilityService: MBAccessibilityService
-    @Environment(MBOverlayPreferencesStore.self) private var overlayPreferences
+    @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
+    @Environment(MBAccessibilityService.self) private var accessibilityService
     @State private var selection: SidebarItem? = .arrangement
     @State private var searchText = ""
-    @AppStorage("dragDropOverlayEnabled") private var dragDropOverlayEnabled = true
-    @AppStorage("dragDropOverlayShowDevice") private var dragDropOverlayShowDevice = true
-    @AppStorage("dragDropOverlayShowProgress") private var dragDropOverlayShowProgress = true
-    @AppStorage("dragDropOverlayScale") private var dragDropOverlayScale = 1.0
-    @AppStorage("dragDropOverlayPosition") private var dragDropOverlayPosition = "top"
-
     @State private var machines: [Machine] = []
+    @State private var showOnboarding = false
 
     var filteredMachines: [Machine] {
         if self.searchText.isEmpty {
@@ -46,8 +38,6 @@ struct DashboardView: View {
     }
 
     var body: some View {
-        @Bindable var clipboardBridge = self.networkManager.clipboardBridge
-
         NavigationSplitView {
             List(selection: self.$selection) {
                 Section {
@@ -64,12 +54,14 @@ struct DashboardView: View {
                             .listRowSeparator(.hidden)
                     } else {
                         ForEach(self.filteredMachines) { machine in
-                            NavigationLink(destination: MachineDetailView(machine: machine)) {
+                            NavigationLink(destination: MachineDetailView(machineID: machine.id)) {
                                 HStack {
-                                    Image(systemName: "desktopcomputer")
+                                    Image(
+                                        systemName: machine.state == .local
+                                            ? "macbook" : (machine.mwbPeerID != nil ? "pc" : "desktopcomputer"))
                                     Text(machine.name)
                                     Spacer()
-                                    StatusDot(active: machine.isOnline)
+                                    StatusDot(active: machine.isOnline || machine.state == .local)
                                 }
                             }
                         }
@@ -85,17 +77,29 @@ struct DashboardView: View {
             )
             .toolbar {
                 ToolbarItem {
-                    Button(action: { self.selection = .machines }) {
+                    Button {
+                        self.selection = .machines
+                    } label: {
                         Image(systemName: "plus")
                     }
                     .help(localizedString("Add Machine"))
+                }
+                ToolbarItem {
+                    Button {
+                        self.showOnboarding = true
+                    } label: {
+                        Image(systemName: "sparkles")
+                    }
+                    .help(localizedString("Open Setup Assistant..."))
                 }
             }
         } detail: {
             if let selection {
                 switch selection {
                 case .arrangement:
-                    ArrangementDetailView(machines: self.$machines)
+                    ArrangementDetailView(
+                        machines: self.$machines,
+                        onSelectDiscovered: { self.selection = .machines })
                 case .machines:
                     DiscoveredMachinesListView(networkManager: self.networkManager)
                 }
@@ -104,27 +108,16 @@ struct DashboardView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .overlay(alignment: self.effectiveOverlayPreferences.position.alignment) {
-            if self.dragDropOverlayEnabled, let state = clipboardBridge.dragDropState {
-                DragDropOverlayView(
-                    state: state,
-                    sourceName: clipboardBridge.dragDropSourceName,
-                    fileSummary: clipboardBridge.dragDropFileSummary,
-                    progress: clipboardBridge.dragDropProgress,
-                    showDevice: self.effectiveOverlayPreferences.showDevice,
-                    showProgress: self.effectiveOverlayPreferences.showProgress
-                )
-                .scaleEffect(self.effectiveOverlayPreferences.scale)
-                .padding(self.effectiveOverlayPreferences.position.padding)
-            }
+        .frame(minWidth: 820, minHeight: 620)
+        .sheet(isPresented: self.$showOnboarding) {
+            OnboardingView()
         }
-        .frame(minWidth: 800, minHeight: 600)
         .onAppear {
             self.networkManager.applyCompatibilitySettings()
             self.updateMachines()
-        }
-        .onChange(of: self.networkManager.compatibilitySettings.securityKey) { _, _ in
-            self.networkManager.applyCompatibilitySettings()
+            if !self.networkManager.compatibilitySettings.onboardingCompleted {
+                self.showOnboarding = true
+            }
         }
         .onChange(of: self.networkManager.connectedMachines, initial: true) { _, _ in
             self.updateMachines()
@@ -137,59 +130,17 @@ struct DashboardView: View {
     private func updateMachines() {
         self.machines = self.networkManager.visibleMachines()
     }
-
-    private var defaultOverlayPreferences: MBOverlayPreferences {
-        let position = MBOverlayPosition(rawValue: dragDropOverlayPosition) ?? .top
-        return MBOverlayPreferences(
-            showDevice: self.dragDropOverlayShowDevice,
-            showProgress: self.dragDropOverlayShowProgress,
-            scale: self.dragDropOverlayScale,
-            position: position)
-    }
-
-    private var effectiveOverlayPreferences: MBOverlayPreferences {
-        let deviceName =
-            self.networkManager.clipboardBridge.dragDropSourceName ?? self.networkManager.localDisplayName
-        return self.overlayPreferences.preferences(
-            for: deviceName, default: self.defaultOverlayPreferences)
-    }
 }
-
-extension MBOverlayPosition {
-    fileprivate var alignment: Alignment {
-        switch self {
-        case .top: .top
-        case .topLeading: .topLeading
-        case .topTrailing: .topTrailing
-        case .bottom: .bottom
-        case .bottomLeading: .bottomLeading
-        case .bottomTrailing: .bottomTrailing
-        }
-    }
-
-    fileprivate var padding: EdgeInsets {
-        switch self {
-        case .bottom, .bottomLeading, .bottomTrailing:
-            EdgeInsets(
-                top: 0, leading: AppTheme.Layout.overlayPadding, bottom: AppTheme.Layout.overlayPadding,
-                trailing: AppTheme.Layout.overlayPadding)
-        default:
-            EdgeInsets(
-                top: AppTheme.Layout.overlayPadding, leading: AppTheme.Layout.overlayPadding, bottom: 0,
-                trailing: AppTheme.Layout.overlayPadding)
-        }
-    }
-}
-
-// MARK: - Detail Views
 
 struct ArrangementDetailView: View {
     @Binding var machines: [Machine]
-    @Environment(MBAccessibilityService.self) private var accessibilityService: MBAccessibilityService
-    @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager: MagicBorderKit.MBNetworkManager
+    var onSelectDiscovered: () -> Void
+    @Environment(MBAccessibilityService.self) private var accessibilityService
+    @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
 
     @State private var isInspectorPresented = true
     @State private var isFileDropTargeted = false
+    @State private var selectedMachineID: UUID?
 
     private var matrixTwoRowBinding: Binding<Bool> {
         Binding(
@@ -207,23 +158,47 @@ struct ArrangementDetailView: View {
         @Bindable var networkManager = networkManager
 
         VStack(spacing: 0) {
-            // Hero Canvas Area
             ZStack {
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: 20) {
                         if !self.accessibilityService.isTrusted {
                             AccessibilityWarningBanner(service: self.accessibilityService)
                                 .padding(.top)
                         }
 
-                        MachineMatrixView(
-                            machines: self.$machines,
-                            columns: self.matrixTwoRowBinding.wrappedValue
-                                ? 2 : max(1, self.machines.count)
+                        StatusHeaderStrip(
+                            networkManager: self.networkManager,
+                            activeName: self.networkManager.sessionCoordinator.activeMachineName
                         )
                         .padding(.horizontal)
 
-                        Spacer()
+                        MachineMatrixView(
+                            machines: self.$machines,
+                            columns: self.matrixTwoRowBinding.wrappedValue ? 2 : max(1, self.machines.count),
+                            activeMachineID: self.networkManager.activeMachineId,
+                            selectedMachineID: self.selectedMachineID,
+                            onSelect: { self.selectedMachineID = $0.id },
+                            onSwitch: { machine in
+                                if machine.state == .local {
+                                    self.networkManager.forceReturnToLocal(reason: "topology-double-click")
+                                } else {
+                                    self.networkManager.requestSwitch(to: machine.id)
+                                }
+                            },
+                            onSendClipboard: { self.networkManager.pushCurrentClipboard() },
+                            onReconnect: { self.networkManager.reconnect(machineId: $0.id) },
+                            onDisconnect: { self.networkManager.disconnect(machineId: $0.id) },
+                            onAddMachine: self.onSelectDiscovered
+                        )
+                        .padding(.horizontal)
+
+                        Text(
+                            localizedString(
+                                "Drag cards to match physical monitor order. Double-click or right-click a card to switch."
+                            )
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
                     .padding(.vertical)
                 }
@@ -240,25 +215,27 @@ struct ArrangementDetailView: View {
         .inspector(isPresented: self.$isInspectorPresented) {
             ArrangementInspector(
                 networkManager: networkManager,
-                machines: self.machines,
                 matrixTwoRowBinding: self.matrixTwoRowBinding,
                 matrixSwapBinding: self.matrixSwapBinding)
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button(action: { self.isInspectorPresented.toggle() }) {
+                Button {
+                    self.isInspectorPresented.toggle()
+                } label: {
                     Label(localizedString("Inspector"), systemImage: "sidebar.right")
                 }
             }
 
             ToolbarItem {
-                Button(action: {
+                Button {
                     self.presentFilePickerAndSend()
-                }) {
+                } label: {
                     Label(localizedString("Send Files"), systemImage: "square.and.arrow.up")
                 }
                 .help(localizedString("Send Files via MWB"))
             }
+
             ToolbarItem {
                 SettingsLink {
                     Label(localizedString("Settings"), systemImage: "gear")
@@ -313,9 +290,7 @@ struct ArrangementDetailView: View {
     private func extractFileURLs(from providers: [NSItemProvider]) async -> [URL] {
         var urls: [URL] = []
         for provider in providers {
-            guard provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else {
-                continue
-            }
+            guard provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else { continue }
             if let url = await self.loadURL(from: provider) {
                 urls.append(url)
             }
@@ -325,37 +300,61 @@ struct ArrangementDetailView: View {
 
     private func loadURL(from provider: NSItemProvider) async -> URL? {
         await withCheckedContinuation { continuation in
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) {
-                item, _ in
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
                 if let url = item as? URL {
                     continuation.resume(returning: url)
-                    return
-                }
-                if let data = item as? Data,
-                    let url = URL(dataRepresentation: data, relativeTo: nil)
-                {
+                } else if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
                     continuation.resume(returning: url)
-                    return
-                }
-                if let string = item as? String, let url = URL(string: string) {
+                } else if let string = item as? String, let url = URL(string: string) {
                     continuation.resume(returning: url)
-                    return
+                } else {
+                    continuation.resume(returning: nil)
                 }
-                continuation.resume(returning: nil)
             }
         }
     }
 
     private func fileSummary(_ urls: [URL]) -> String {
         guard let first = urls.first else { return "" }
-        if urls.count == 1 {
-            return " \(first.lastPathComponent)"
-        }
-        return " \(first.lastPathComponent) +\(urls.count - 1)"
+        return urls.count == 1 ? " \(first.lastPathComponent)" : " \(first.lastPathComponent) +\(urls.count - 1)"
     }
 }
 
-// MARK: - Subviews
+private struct StatusHeaderStrip: View {
+    var networkManager: MBNetworkManager
+    var activeName: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            StatusDot(active: !self.networkManager.isInputPaused)
+            Text(localizedString("Active: %@", arguments: [self.activeName]))
+                .font(.subheadline.weight(.medium))
+
+            Spacer()
+
+            Button {
+                self.networkManager.toggleCursorLock()
+            } label: {
+                Label(
+                    self.networkManager.isCursorLocked ? localizedString("Unlock") : localizedString("Lock Screen"),
+                    systemImage: self.networkManager.isCursorLocked ? "lock.fill" : "lock.open")
+            }
+            .controlSize(.small)
+
+            Button {
+                self.networkManager.toggleInputPause()
+            } label: {
+                Label(
+                    self.networkManager.isInputPaused ? localizedString("Resume") : localizedString("Pause"),
+                    systemImage: self.networkManager.isInputPaused ? "play.fill" : "pause.fill")
+            }
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
 
 struct AccessibilityWarningBanner: View {
     let service: MBAccessibilityService
@@ -390,7 +389,6 @@ struct AccessibilityWarningBanner: View {
 
 struct ArrangementInspector: View {
     @Bindable var networkManager: MagicBorderKit.MBNetworkManager
-    var machines: [Machine]
     var matrixTwoRowBinding: Binding<Bool>
     var matrixSwapBinding: Binding<Bool>
 
@@ -399,17 +397,18 @@ struct ArrangementInspector: View {
 
         Form {
             Section(localizedString("Status")) {
-                LabeledContent(
-                    localizedString("Active Machine"),
-                    value: sessionCoordinator.activeMachineName)
-                LabeledContent(
-                    localizedString("State"),
-                    value: sessionCoordinator.switchState.rawValue.capitalized)
+                LabeledContent(localizedString("Active Machine"), value: sessionCoordinator.activeMachineName)
+                LabeledContent(localizedString("State"), value: sessionCoordinator.switchState.rawValue.capitalized)
+                Picker(localizedString("Protocol Mode"), selection: $networkManager.compatibilitySettings.protocolMode)
+                {
+                    Text(localizedString("Windows (MWB)")).tag(MBProtocolMode.mwbCompatibility)
+                    Text(localizedString("Mac-to-Mac")).tag(MBProtocolMode.modern)
+                }
             }
 
             Section(localizedString("Layout Options")) {
                 Toggle(localizedString("Two Row Matrix"), isOn: self.matrixTwoRowBinding)
-                Toggle(localizedString("Swap Order"), isOn: self.matrixSwapBinding)
+                Toggle(localizedString("Cycle Through Screens"), isOn: self.matrixSwapBinding)
             }
 
             Section(localizedString("Pairing")) {
@@ -436,45 +435,6 @@ struct ArrangementInspector: View {
                 }
             }
         }
-        .inspectorColumnWidth(min: 300, ideal: 350, max: 450)
-    }
-}
-
-struct DiscoveredMachinesListView: View {
-    var networkManager: MBNetworkManager
-
-    var body: some View {
-        List(self.networkManager.discoveredPeers) { peer in
-            HStack {
-                Image(systemName: peer.type == .scanned ? "pc" : "laptopcomputer")
-                    .font(.title2)
-                    .foregroundStyle(.blue)
-
-                VStack(alignment: .leading) {
-                    Text(peer.name)
-                        .font(.headline)
-                    Text(String(describing: peer.endpoint))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Button(localizedString("Connect")) {
-                    self.networkManager.connect(to: peer.endpoint)
-                }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
-            }
-            .padding(.vertical, 4)
-        }
-        .navigationTitle(localizedString("Discovered Machines"))
-        .overlay {
-            if self.networkManager.discoveredPeers.isEmpty {
-                ContentUnavailableView(
-                    localizedString("Scanning for machines..."),
-                    systemImage: "antenna.radiowaves.left.and.right")
-            }
-        }
+        .inspectorColumnWidth(min: 310, ideal: 360, max: 460)
     }
 }

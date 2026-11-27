@@ -3,79 +3,103 @@ import SwiftUI
 
 struct MachineDetailView: View {
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
-    let machine: Machine
+    let machineID: UUID
 
-    private var isLocalMachine: Bool {
-        self.machine.state == .local
+    private var machine: Machine? {
+        self.networkManager.visibleMachines().first(where: { $0.id == self.machineID })
     }
 
     var body: some View {
-        Form {
-            Section {
-                MachineDetailHeader(machine: self.machine)
-            }
+        if let machine = self.machine {
+            let isLocal = machine.state == .local
+            let isFocused =
+                (isLocal && self.networkManager.activeMachineId == nil)
+                || (self.networkManager.activeMachineId == machine.id)
 
-            Section(localizedString("Connection")) {
-                LabeledContent(localizedString("Name"), value: self.machine.name)
-                LabeledContent(
-                    localizedString("Status"),
-                    value: self.machine.isOnline ? localizedString("Online") : localizedString("Offline"))
+            Form {
+                Section {
+                    MachineDetailHeader(machine: machine, isFocused: isFocused)
+                }
 
-                if self.machine.screenSize != .zero {
+                Section(localizedString("Connection")) {
+                    LabeledContent(localizedString("Name"), value: machine.name)
                     LabeledContent(
-                        localizedString("Screen Size"),
-                        value: self.screenSizeText)
+                        localizedString("Status"),
+                        value: machine.isOnline || isLocal ? localizedString("Online") : localizedString("Offline"))
+
+                    if machine.screenSize != .zero {
+                        LabeledContent(
+                            localizedString("Screen Size"),
+                            value: "\(Int(machine.screenSize.width)) x \(Int(machine.screenSize.height))")
+                    }
+
+                    if let peerID = machine.mwbPeerID {
+                        LabeledContent(localizedString("MWB Peer ID"), value: "\(peerID)")
+                    }
                 }
 
-                if let peerID = self.machine.mwbPeerID {
-                    LabeledContent(localizedString("MWB Peer ID"), value: "\(peerID)")
+                Section(localizedString("Actions")) {
+                    Button {
+                        if isLocal {
+                            self.networkManager.forceReturnToLocal(reason: "detail-view")
+                        } else {
+                            self.networkManager.requestSwitch(to: machine.id)
+                        }
+                    } label: {
+                        Label(
+                            isLocal ? localizedString("Return Control Here") : localizedString("Switch to Machine"),
+                            systemImage: "arrow.right.circle")
+                    }
+                    .disabled(!isLocal && !machine.isOnline)
+
+                    Button {
+                        self.networkManager.pushCurrentClipboard()
+                    } label: {
+                        Label(localizedString("Send Clipboard Now"), systemImage: "doc.on.clipboard")
+                    }
+                    .disabled(self.networkManager.connectedMachines.isEmpty)
+
+                    if !isLocal {
+                        Button {
+                            self.networkManager.reconnect(machineId: machine.id)
+                        } label: {
+                            Label(localizedString("Restart Connection"), systemImage: "restart")
+                        }
+
+                        Button(role: .destructive) {
+                            self.networkManager.disconnect(machineId: machine.id)
+                        } label: {
+                            Label(localizedString("Disconnect"), systemImage: "xmark.circle")
+                        }
+                    }
                 }
             }
-
-            Section(localizedString("Actions")) {
-                Button {
-                    self.networkManager.requestSwitch(to: self.machine.id)
-                } label: {
-                    Label(localizedString("Switch to Machine"), systemImage: "arrow.right.circle")
-                }
-                .disabled(self.isLocalMachine || !self.machine.isOnline)
-
-                Button {
-                    self.networkManager.reconnect(machineId: self.machine.id)
-                } label: {
-                    Label(localizedString("Restart Connection"), systemImage: "restart")
-                }
-                .disabled(self.isLocalMachine)
-
-                Button(role: .destructive) {
-                    self.networkManager.disconnect(machineId: self.machine.id)
-                } label: {
-                    Label(localizedString("Disconnect"), systemImage: "xmark.circle")
-                }
-                .disabled(self.isLocalMachine)
-            }
+            .formStyle(.grouped)
+            .navigationTitle(machine.name)
+        } else {
+            ContentUnavailableView(
+                localizedString("Device Offline"),
+                systemImage: "desktopcomputer.trianglebadge.exclamationmark")
         }
-        .formStyle(.grouped)
-        .navigationTitle(self.machine.name)
-    }
-
-    private var screenSizeText: String {
-        "\(Int(self.machine.screenSize.width)) x \(Int(self.machine.screenSize.height))"
     }
 }
 
 private struct MachineDetailHeader: View {
     let machine: Machine
+    let isFocused: Bool
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: self.machine.state == .local ? "macbook" : "desktopcomputer")
-                .font(.system(size: 36))
-                .foregroundStyle(
-                    self.machine.isOnline || self.machine.state == .local
-                        ? Color.accentColor : Color.secondary
-                )
-                .frame(width: 48)
+            Image(
+                systemName: self.machine.state == .local
+                    ? "macbook" : (self.machine.mwbPeerID != nil ? "pc" : "desktopcomputer")
+            )
+            .font(.system(size: 36))
+            .foregroundStyle(
+                self.isFocused || self.machine.isOnline || self.machine.state == .local
+                    ? Color.accentColor : Color.secondary
+            )
+            .frame(width: 48)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(self.machine.name)
@@ -94,17 +118,20 @@ private struct MachineDetailHeader: View {
     }
 
     private var statusText: String {
+        if self.isFocused {
+            return localizedString("Controlling")
+        }
         switch self.machine.state {
         case .local:
-            localizedString("Local Machine")
+            return localizedString("Local Machine")
         case .discovered:
-            localizedString("Discovered")
+            return localizedString("Discovered")
         case .connecting:
-            localizedString("Connecting...")
+            return localizedString("Connecting...")
         case .connected:
-            localizedString("Online")
+            return localizedString("Online")
         case .active:
-            localizedString("Active")
+            return localizedString("Active")
         }
     }
 }

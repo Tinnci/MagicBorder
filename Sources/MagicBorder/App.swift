@@ -16,25 +16,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import AppKit
 import MagicBorderKit
 import SwiftUI
 
 @main
 struct MagicBorderApp: App {
-    @State private var accessibilityService = MBAccessibilityService()
-    @State private var inputManager: MBInputManager
-    @State private var networkManager: MBNetworkManager
-    @State private var overlayPreferences = MBOverlayPreferencesStore()
-    @State private var toastPresenter = MBToastPresenter()
-    @AppStorage("captureInput") private var captureInput = true
-
-    init() {
-        let input = MBInputManager()
-        let network = MBNetworkManager(inputManager: input)
-        self._inputManager = State(initialValue: input)
-        self._networkManager = State(initialValue: network)
-    }
+    @State private var controller = MBAppController()
 
     private var currentLocale: Locale {
         if let languageCode = Locale.preferredLanguages.first {
@@ -46,57 +33,31 @@ struct MagicBorderApp: App {
     var body: some Scene {
         WindowGroup(id: "main") {
             DashboardView()
-                .environment(self.accessibilityService)
-                .environment(self.inputManager)
-                .environment(self.networkManager)
-                .environment(self.overlayPreferences)
+                .environment(self.controller)
+                .environment(self.controller.accessibilityService)
+                .environment(self.controller.inputManager)
+                .environment(self.controller.networkManager)
+                .environment(self.controller.overlayPreferences)
                 .environment(\.locale, self.currentLocale)
-                .onAppear {
-                    NSApp.setActivationPolicy(.regular)
-                    NSApp.activate(ignoringOtherApps: true)
-                    self.accessibilityService.startPolling()
-                    self.syncInputCapture()
-                }
-                .onChange(of: self.accessibilityService.isTrusted) { _, _ in
-                    self.syncInputCapture()
-                }
-                .onChange(of: self.captureInput) { _, _ in
-                    self.syncInputCapture()
-                }
-                .onChange(of: self.networkManager.compatibilitySettings.wrapCursor) { _, _ in
-                    self.networkManager.applyCompatibilitySettings()
-                }
-                .onChange(of: self.networkManager.toast) { _, toast in
-                    if let toast {
-                        self.toastPresenter.show(
-                            message: toast.localizedMessage,
-                            systemImage: toast.defaultSystemImage)
-                    } else {
-                        self.toastPresenter.hide()
-                    }
-                }
         }
 
         Settings {
             SettingsView()
-                .environment(self.accessibilityService)
-                .environment(self.networkManager)
-                .environment(self.overlayPreferences)
+                .environment(self.controller)
+                .environment(self.controller.accessibilityService)
+                .environment(self.controller.networkManager)
+                .environment(self.controller.overlayPreferences)
                 .environment(\.locale, self.currentLocale)
         }
         .windowResizability(.contentSize)
 
-        MenuBarExtra("MagicBorder", systemImage: "rectangle.and.cursor.arrow") {
+        MenuBarExtra("MagicBorder", systemImage: self.controller.menuBarIconName) {
             MenuBarView()
-                .environment(self.accessibilityService)
-                .environment(self.networkManager)
-                .environment(self.overlayPreferences)
+                .environment(self.controller)
+                .environment(self.controller.accessibilityService)
+                .environment(self.controller.networkManager)
+                .environment(self.controller.overlayPreferences)
                 .environment(\.locale, self.currentLocale)
         }
-    }
-
-    private func syncInputCapture() {
-        let shouldCapture = self.captureInput && self.accessibilityService.isTrusted
-        self.inputManager.toggleInterception(shouldCapture)
     }
 }

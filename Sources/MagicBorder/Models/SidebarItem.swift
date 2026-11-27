@@ -16,7 +16,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .arrangement: "square.grid.2x2"
-        case .machines: "laptopcomputer.and.iphone"
+        case .machines: "network"
         }
     }
 }
