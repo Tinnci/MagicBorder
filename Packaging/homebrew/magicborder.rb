@@ -1,6 +1,6 @@
 cask "magicborder" do
-  version "0.1.0"
-  sha256 :no_check
+  version "0.2.0"
+  sha256 "81c5e8d5ab1c76d3885e1d304470791f6916f6666b7e8e87627769e1a5d89bcd"
 
   url "https://github.com/Tinnci/MagicBorder/releases/download/v#{version}/MagicBorder-macos-#{version}.dmg",
       verified: "github.com/Tinnci/MagicBorder/"
