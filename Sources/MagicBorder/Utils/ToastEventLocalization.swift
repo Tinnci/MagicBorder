@@ -25,6 +25,8 @@ extension MBToastEvent {
             localizedString("Input sharing paused")
         case .inputResumed:
             localizedString("Input sharing resumed")
+        case .lockedAllScreens:
+            localizedString("Locked all screens")
         case .clipboardSyncedText:
             localizedString("Synced clipboard text")
         case .clipboardSyncedImage:

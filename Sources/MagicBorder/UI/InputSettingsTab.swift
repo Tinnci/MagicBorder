@@ -1,3 +1,4 @@
+import AppKit
 import MagicBorderKit
 import SwiftUI
 
@@ -6,6 +7,7 @@ struct InputSettingsTab: View {
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
     @Environment(MBAccessibilityService.self) private var accessibilityService
     @State private var showAdvancedEdge = false
+    @State private var showCustomizeHotkeys = false
 
     private var matrixModeBinding: Binding<Int> {
         Binding(
@@ -115,9 +117,39 @@ struct InputSettingsTab: View {
                         localizedString("Enable Global Hotkeys"),
                         isOn: $networkManager.compatibilitySettings.globalHotkeysEnabled)
 
-                    Text("⌃⌥1–4 Switch Machine • ⌃⌥L Lock Cursor • ⌃⌥P Pause Switching")
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
+                    DisclosureGroup(localizedString("Customize Global Hotkeys"), isExpanded: self.$showCustomizeHotkeys)
+                    {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HotkeyRecorderRow(
+                                title: localizedString("Lock Cursor to Current Screen"),
+                                binding: $networkManager.compatibilitySettings.hotkeys.toggleCursorLock)
+                            HotkeyRecorderRow(
+                                title: localizedString("Pause Edge Switching"),
+                                binding: $networkManager.compatibilitySettings.hotkeys.toggleInputPause)
+                            HotkeyRecorderRow(
+                                title: localizedString("Lock All Screens"),
+                                binding: $networkManager.compatibilitySettings.hotkeys.lockAllScreens)
+                            HotkeyRecorderRow(
+                                title: localizedString("Switch to Machine 1 (Local)"),
+                                binding: $networkManager.compatibilitySettings.hotkeys.slot1)
+                            HotkeyRecorderRow(
+                                title: localizedString("Switch to Machine 2"),
+                                binding: $networkManager.compatibilitySettings.hotkeys.slot2)
+                            HotkeyRecorderRow(
+                                title: localizedString("Switch to Machine 3"),
+                                binding: $networkManager.compatibilitySettings.hotkeys.slot3)
+                            HotkeyRecorderRow(
+                                title: localizedString("Switch to Machine 4"),
+                                binding: $networkManager.compatibilitySettings.hotkeys.slot4)
+
+                            Button(localizedString("Reset Default Hotkeys")) {
+                                networkManager.compatibilitySettings.hotkeys = .default
+                            }
+                            .controlSize(.small)
+                            .padding(.top, 4)
+                        }
+                        .padding(.top, 6)
+                    }
                 }
 
                 Divider()
@@ -209,6 +241,68 @@ struct InputSettingsTab: View {
             }
             .padding(.vertical, 6)
         }
-        .frame(height: 460)
+        .frame(height: 480)
+    }
+}
+
+private struct HotkeyRecorderRow: View {
+    let title: String
+    @Binding var binding: MBHotkeyBinding
+    @State private var isRecording = false
+    @State private var monitorToken: Any?
+
+    var body: some View {
+        HStack {
+            Text(self.title)
+                .font(.caption)
+            Spacer()
+            Button {
+                self.isRecording ? self.stopRecording() : self.startRecording()
+            } label: {
+                Text(self.isRecording ? localizedString("Press shortcut...") : self.binding.displayLabel)
+                    .font(.caption.monospaced())
+                    .frame(minWidth: 96)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .onDisappear {
+            self.stopRecording()
+        }
+    }
+
+    private func startRecording() {
+        self.stopRecording()
+        self.isRecording = true
+        self.monitorToken = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53, event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty {
+                self.stopRecording()
+                return nil
+            }
+            let cgFlags = Self.cgFlags(from: event.modifierFlags)
+            guard !cgFlags.intersection(MBHotkeyBinding.relevantModifierMask).isEmpty else {
+                return nil
+            }
+            self.binding = MBHotkeyBinding(keyCode: Int64(event.keyCode), flags: cgFlags)
+            self.stopRecording()
+            return nil
+        }
+    }
+
+    private func stopRecording() {
+        self.isRecording = false
+        if let token = self.monitorToken {
+            NSEvent.removeMonitor(token)
+            self.monitorToken = nil
+        }
+    }
+
+    private static func cgFlags(from flags: NSEvent.ModifierFlags) -> CGEventFlags {
+        var result = CGEventFlags()
+        if flags.contains(.control) { result.insert(.maskControl) }
+        if flags.contains(.option) { result.insert(.maskAlternate) }
+        if flags.contains(.command) { result.insert(.maskCommand) }
+        if flags.contains(.shift) { result.insert(.maskShift) }
+        return result
     }
 }

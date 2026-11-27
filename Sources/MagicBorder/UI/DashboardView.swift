@@ -138,6 +138,7 @@ struct ArrangementDetailView: View {
     @Environment(MBAccessibilityService.self) private var accessibilityService
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
 
+    @AppStorage("ui.arrangementCanvasMode") private var canvasMode = "grid"
     @State private var isInspectorPresented = true
     @State private var isFileDropTargeted = false
     @State private var selectedMachineID: UUID?
@@ -168,29 +169,50 @@ struct ArrangementDetailView: View {
 
                         StatusHeaderStrip(
                             networkManager: self.networkManager,
-                            activeName: self.networkManager.sessionCoordinator.activeMachineName
+                            activeName: self.networkManager.sessionCoordinator.activeMachineName,
+                            canvasMode: self.$canvasMode
                         )
                         .padding(.horizontal)
 
-                        MachineMatrixView(
-                            machines: self.$machines,
-                            columns: self.matrixTwoRowBinding.wrappedValue ? 2 : max(1, self.machines.count),
-                            activeMachineID: self.networkManager.activeMachineId,
-                            selectedMachineID: self.selectedMachineID,
-                            onSelect: { self.selectedMachineID = $0.id },
-                            onSwitch: { machine in
-                                if machine.state == .local {
-                                    self.networkManager.forceReturnToLocal(reason: "topology-double-click")
-                                } else {
-                                    self.networkManager.requestSwitch(to: machine.id)
-                                }
-                            },
-                            onSendClipboard: { self.networkManager.pushCurrentClipboard() },
-                            onReconnect: { self.networkManager.reconnect(machineId: $0.id) },
-                            onDisconnect: { self.networkManager.disconnect(machineId: $0.id) },
-                            onAddMachine: self.onSelectDiscovered
-                        )
-                        .padding(.horizontal)
+                        if self.canvasMode == "spatial" {
+                            SpatialArrangementView(
+                                machines: self.machines,
+                                twoRow: self.matrixTwoRowBinding.wrappedValue,
+                                activeMachineID: self.networkManager.activeMachineId,
+                                telemetryByID: self.networkManager.peerTelemetry,
+                                onSwitch: { machine in
+                                    if machine.state == .local {
+                                        self.networkManager.forceReturnToLocal(reason: "spatial-double-click")
+                                    } else {
+                                        self.networkManager.requestSwitch(to: machine.id)
+                                    }
+                                },
+                                onSendClipboard: { self.networkManager.pushCurrentClipboard() },
+                                onReconnect: { self.networkManager.reconnect(machineId: $0.id) },
+                                onDisconnect: { self.networkManager.disconnect(machineId: $0.id) }
+                            )
+                            .padding(.horizontal)
+                        } else {
+                            MachineMatrixView(
+                                machines: self.$machines,
+                                columns: self.matrixTwoRowBinding.wrappedValue ? 2 : max(1, self.machines.count),
+                                activeMachineID: self.networkManager.activeMachineId,
+                                selectedMachineID: self.selectedMachineID,
+                                onSelect: { self.selectedMachineID = $0.id },
+                                onSwitch: { machine in
+                                    if machine.state == .local {
+                                        self.networkManager.forceReturnToLocal(reason: "topology-double-click")
+                                    } else {
+                                        self.networkManager.requestSwitch(to: machine.id)
+                                    }
+                                },
+                                onSendClipboard: { self.networkManager.pushCurrentClipboard() },
+                                onReconnect: { self.networkManager.reconnect(machineId: $0.id) },
+                                onDisconnect: { self.networkManager.disconnect(machineId: $0.id) },
+                                onAddMachine: self.onSelectDiscovered
+                            )
+                            .padding(.horizontal)
+                        }
 
                         Text(
                             localizedString(
@@ -323,14 +345,22 @@ struct ArrangementDetailView: View {
 private struct StatusHeaderStrip: View {
     var networkManager: MBNetworkManager
     var activeName: String
+    @Binding var canvasMode: String
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             StatusDot(active: !self.networkManager.isInputPaused)
             Text(localizedString("Active: %@", arguments: [self.activeName]))
                 .font(.subheadline.weight(.medium))
 
             Spacer()
+
+            Picker("", selection: self.$canvasMode) {
+                Text(localizedString("Grid")).tag("grid")
+                Text(localizedString("Spatial")).tag("spatial")
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 120)
 
             Button {
                 self.networkManager.toggleCursorLock()
@@ -347,6 +377,13 @@ private struct StatusHeaderStrip: View {
                 Label(
                     self.networkManager.isInputPaused ? localizedString("Resume") : localizedString("Pause"),
                     systemImage: self.networkManager.isInputPaused ? "play.fill" : "pause.fill")
+            }
+            .controlSize(.small)
+
+            Button {
+                self.networkManager.lockAllScreens()
+            } label: {
+                Label(localizedString("Lock All"), systemImage: "lock.shield")
             }
             .controlSize(.small)
         }

@@ -37,7 +37,9 @@ struct MenuBarView: View {
                 Button {
                     networkManager.requestSwitch(to: machine.id)
                 } label: {
-                    let title = index < 3 ? "\(machine.name)  ⌃⌥\(index + 2)" : machine.name
+                    let rttSuffix = networkManager.peerTelemetry[machine.id]?.rttMs.map { " (\($0) ms)" } ?? ""
+                    let shortcutSuffix = index < 3 ? "  ⌃⌥\(index + 2)" : ""
+                    let title = "\(machine.name)\(rttSuffix)\(shortcutSuffix)"
                     if sessionCoordinator.activeMachineId == machine.id {
                         Label(title, systemImage: "checkmark")
                     } else {
@@ -67,6 +69,10 @@ struct MenuBarView: View {
             networkManager.pushCurrentClipboard()
         }
         .disabled(networkManager.connectedMachines.isEmpty)
+
+        Button(localizedString("Lock All Screens")) {
+            networkManager.lockAllScreens()
+        }
 
         Divider()
 

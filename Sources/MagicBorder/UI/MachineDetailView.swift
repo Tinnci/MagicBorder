@@ -15,6 +15,7 @@ struct MachineDetailView: View {
             let isFocused =
                 (isLocal && self.networkManager.activeMachineId == nil)
                 || (self.networkManager.activeMachineId == machine.id)
+            let telemetry = self.networkManager.peerTelemetry[machine.id]
 
             Form {
                 Section {
@@ -35,6 +36,33 @@ struct MachineDetailView: View {
 
                     if let peerID = machine.mwbPeerID {
                         LabeledContent(localizedString("MWB Peer ID"), value: "\(peerID)")
+                    }
+                }
+
+                if !isLocal {
+                    Section(localizedString("Telemetry & Channels")) {
+                        LabeledContent(
+                            localizedString("Message Channel"),
+                            value: (telemetry?.messageChannelConnected ?? machine.isOnline)
+                                ? localizedString("Connected") : localizedString("Disconnected"))
+                        if machine.mwbPeerID != nil {
+                            LabeledContent(
+                                localizedString("Clipboard Channel"),
+                                value: (telemetry?.clipboardChannelConnected ?? false)
+                                    ? localizedString("Connected") : localizedString("Pending"))
+                        }
+                        LabeledContent(
+                            localizedString("Latency (RTT)"),
+                            value: telemetry?.rttMs.map { "\($0) ms" } ?? "—")
+                        if let lastHeartbeat = telemetry?.lastHeartbeatAt {
+                            LabeledContent(
+                                localizedString("Last Heartbeat"),
+                                value: lastHeartbeat.formatted(date: .omitted, time: .standard))
+                        }
+                    }
+
+                    Section(localizedString("Per-Peer Input Profile")) {
+                        self.profileSection(for: machine)
                     }
                 }
 
@@ -80,6 +108,68 @@ struct MachineDetailView: View {
             ContentUnavailableView(
                 localizedString("Device Offline"),
                 systemImage: "desktopcomputer.trianglebadge.exclamationmark")
+        }
+    }
+
+    @ViewBuilder
+    private func profileSection(for machine: Machine) -> some View {
+        let store = self.networkManager.peerProfiles
+        let fallback = self.networkManager.defaultInputProfile()
+        let activeProfile = store.profile(for: machine.name, default: fallback)
+
+        Toggle(
+            localizedString("Override Global Input Settings"),
+            isOn: Binding(
+                get: { store.hasOverride(for: machine.name) },
+                set: { enabled in
+                    if enabled {
+                        store.setOverride(activeProfile, for: machine.name)
+                    } else {
+                        store.clearOverride(for: machine.name)
+                    }
+                }))
+
+        if store.hasOverride(for: machine.name) {
+            Picker(
+                localizedString("Modifier Mapping"),
+                selection: Binding(
+                    get: { activeProfile.modifierRemapMode },
+                    set: { mode in
+                        var updated = activeProfile
+                        updated.modifierRemapMode = mode
+                        store.setOverride(updated, for: machine.name)
+                    })
+            ) {
+                Text(localizedString("Standard (Ctrl->Ctrl, Cmd->Win)")).tag(MBModifierRemapMode.standard)
+                Text(localizedString("Mac Shortcuts (Swap Cmd <-> Ctrl)")).tag(MBModifierRemapMode.swapCommandControl)
+            }
+
+            Toggle(
+                localizedString("Invert Remote Scroll Direction"),
+                isOn: Binding(
+                    get: { activeProfile.invertRemoteScroll },
+                    set: { inverted in
+                        var updated = activeProfile
+                        updated.invertRemoteScroll = inverted
+                        store.setOverride(updated, for: machine.name)
+                    }))
+
+            HStack {
+                Text(localizedString("Remote Scroll Speed"))
+                Slider(
+                    value: Binding(
+                        get: { activeProfile.remoteScrollSpeed },
+                        set: { speed in
+                            var updated = activeProfile
+                            updated.remoteScrollSpeed = speed
+                            store.setOverride(updated, for: machine.name)
+                        }),
+                    in: 0.25...2.5,
+                    step: 0.25)
+                Text("\(activeProfile.remoteScrollSpeed, specifier: "%.2fx")")
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
