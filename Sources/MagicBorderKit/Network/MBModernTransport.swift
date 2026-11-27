@@ -14,6 +14,7 @@ public final class MBModernTransport: MBTransport {
     private var securityKey: String
     private var invertScroll: Bool = false
     private var scrollSpeed: Double = 1.0
+    public var resolveInputProfile: ((UUID?) -> PeerInputProfile)?
     private let screenGeometry: any ScreenGeometryProviding
     private let codec = ModernPacketCodec()
     private let continuation: AsyncStream<MBTransportEvent>.Continuation
@@ -97,11 +98,14 @@ public final class MBModernTransport: MBTransport {
     }
 
     public func sendRemoteInput(snapshot: EventSnapshot, activeMachineId: UUID?) {
+        let profile = self.resolveInputProfile?(activeMachineId)
+        let invert = profile?.invertRemoteScroll ?? self.invertScroll
+        let speed = profile?.remoteScrollSpeed ?? self.scrollSpeed
         guard
             let remoteEvent = MBRemoteEventConverter.convert(
                 snapshot: snapshot,
-                invertScroll: self.invertScroll,
-                scrollSpeed: self.scrollSpeed)
+                invertScroll: invert,
+                scrollSpeed: speed)
         else { return }
         self.sendPacket(.inputEvent(remoteEvent), activeMachineId: activeMachineId)
     }
@@ -142,7 +146,7 @@ public final class MBModernTransport: MBTransport {
 
     private func send(_ packet: PacketType, to connection: NWConnection) {
         do {
-            let frame = try self.codec.encodeFrame(packet)
+            let frame = try self.codec.encodeFrame(packet, securityKey: self.securityKey)
             connection.send(
                 content: frame,
                 completion: .contentProcessed { error in
@@ -194,7 +198,7 @@ public final class MBModernTransport: MBTransport {
 
     private func handlePacketData(_ data: Data, from connection: NWConnection) {
         do {
-            let packet = try self.codec.decodePacket(data)
+            let packet = try self.codec.decodePacket(data, securityKey: self.securityKey)
             switch packet {
             case .handshake(let info):
                 guard
@@ -215,6 +219,14 @@ public final class MBModernTransport: MBTransport {
                     screenSize: CGSize(width: info.screenWidth, height: info.screenHeight))
                 self.registry.register(connection, for: info.id)
                 self.continuation.yield(.machineConnected(machine))
+                self.continuation.yield(
+                    .peerTelemetryUpdated(
+                        info.id,
+                        PeerTelemetry(
+                            messageChannelConnected: true,
+                            clipboardChannelConnected: true,
+                            lastHeartbeatAt: Date(),
+                            rttMs: nil)))
 
             case .inputEvent(let event):
                 self.continuation.yield(.remoteEvent(event))
@@ -232,6 +244,9 @@ public final class MBModernTransport: MBTransport {
             case .heartbeat, .bye:
                 break
             }
+        } catch ModernPacketCodec.CodecError.authenticationFailed {
+            MBLogger.security.error("[ModernTransport] AEAD frame authentication failed; closing connection")
+            connection.cancel()
         } catch {
             MBLogger.network.error("[ModernTransport] Decoding error: \(error.localizedDescription)")
         }

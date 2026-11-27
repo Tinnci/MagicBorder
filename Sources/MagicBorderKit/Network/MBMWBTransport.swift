@@ -15,10 +15,12 @@ public final class MBMWBTransport:
     private let screenGeometry: any ScreenGeometryProviding
     private let clock: any ClockProviding
     private var settings: MBCompatibilitySettings
+    public var resolveInputProfile: ((UUID?) -> PeerInputProfile)?
     private let continuation: AsyncStream<MBTransportEvent>.Continuation
     private let serviceEventsTask = CancellableTaskSlot()
     private var peerIDs: [Int32: UUID] = [:]
     private var lastMouseLocation: CGPoint?
+    private var lastProfile = PeerInputProfile()
     private var mouseCoalescer: MBMouseCoalescer?
 
     public init(
@@ -140,7 +142,17 @@ public final class MBMWBTransport:
         self.service.sendMouseEvent(x: 32767, y: 32767, wheel: 0, flags: 0x200)
     }
 
-    public func sendRemoteInput(snapshot: EventSnapshot, activeMachineId _: UUID?) {
+    public func sendHideMouse() {
+        self.service.sendHideMouse()
+    }
+
+    public func sendLockScreen() {
+        self.service.sendLockScreen()
+        self.releaseModifiers()
+    }
+
+    public func sendRemoteInput(snapshot: EventSnapshot, activeMachineId: UUID?) {
+        self.lastProfile = self.currentProfile(for: activeMachineId)
         switch snapshot.type {
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
             self.mouseCoalescer?.update(snapshot: snapshot)
@@ -195,26 +207,27 @@ public final class MBMWBTransport:
         case .otherMouseUp:
             self.service.sendMouseEvent(x: normalizedX, y: normalizedY, wheel: 0, flags: 0x208)
         case .scrollWheel:
-            let speed = max(0.25, min(3.0, self.settings.remoteScrollSpeed))
-            let sign: Double = self.settings.invertRemoteScroll ? -1.0 : 1.0
+            let profile = self.lastProfile
+            let speed = max(0.25, min(3.0, profile.remoteScrollSpeed))
+            let sign: Double = profile.invertRemoteScroll ? -1.0 : 1.0
             let scaledWheel = Int32((Double(snapshot.scrollDeltaY) * speed * sign).rounded())
             self.service.sendMouseEvent(
                 x: normalizedX,
                 y: normalizedY,
                 wheel: scaledWheel == 0 && snapshot.scrollDeltaY != 0
-                    ? (self.settings.invertRemoteScroll ? -1 : 1) : scaledWheel,
+                    ? (profile.invertRemoteScroll ? -1 : 1) : scaledWheel,
                 flags: 0x20A)
         case .keyDown:
             if let key = MBKeyCodeMapper.windowsKeyCode(
                 for: CGKeyCode(snapshot.keyCode),
-                remapMode: self.settings.modifierRemapMode)
+                remapMode: self.lastProfile.modifierRemapMode)
             {
                 self.service.sendKeyEvent(keyCode: key, flags: 0)
             }
         case .keyUp:
             if let key = MBKeyCodeMapper.windowsKeyCode(
                 for: CGKeyCode(snapshot.keyCode),
-                remapMode: self.settings.modifierRemapMode)
+                remapMode: self.lastProfile.modifierRemapMode)
             {
                 self.service.sendKeyEvent(keyCode: key, flags: 0x80)
             }
@@ -223,13 +236,21 @@ public final class MBMWBTransport:
             guard
                 let key = MBKeyCodeMapper.windowsKeyCode(
                     for: macKey,
-                    remapMode: self.settings.modifierRemapMode)
+                    remapMode: self.lastProfile.modifierRemapMode)
             else { return }
             let isDown = MBKeyCodeMapper.isModifierDown(macKeyCode: macKey, flags: snapshot.flags)
             self.service.sendKeyEvent(keyCode: key, flags: isDown ? 0 : 0x80)
         default:
             break
         }
+    }
+
+    private func currentProfile(for activeMachineId: UUID?) -> PeerInputProfile {
+        let fallback = PeerInputProfile(
+            modifierRemapMode: self.settings.modifierRemapMode,
+            invertRemoteScroll: self.settings.invertRemoteScroll,
+            remoteScrollSpeed: self.settings.remoteScrollSpeed)
+        return self.resolveInputProfile?(activeMachineId) ?? fallback
     }
 
     private func sendMouseMotion(location: CGPoint, normalizedX: Int32, normalizedY: Int32) {
@@ -290,6 +311,8 @@ public final class MBMWBTransport:
             return .dragDropStateChanged(nil, sourceName: nil)
         case .captureScreen(let sourceID):
             return .screenCaptureRequested(sourceID)
+        case .telemetryUpdated(let peerID, let telemetry):
+            return .peerTelemetryUpdated(self.uuid(for: peerID), telemetry)
         case .reconnectAttempt(let host):
             return .reconnectAttempt(host)
         case .reconnectStopped(let host):

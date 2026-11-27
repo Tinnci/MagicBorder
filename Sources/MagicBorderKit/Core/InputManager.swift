@@ -199,7 +199,8 @@ public final class MBInputManager: Observation.Observable {
                 let shortcut = MBShortcutMatcher.matchShortcut(
                     keyCode: snapshot.keyCode,
                     flags: snapshot.flags,
-                    enabled: state.config.globalHotkeysEnabled)
+                    enabled: state.config.globalHotkeysEnabled,
+                    configuration: state.config.hotkeys)
             {
                 return (.triggerShortcut(shortcut), nil)
             }

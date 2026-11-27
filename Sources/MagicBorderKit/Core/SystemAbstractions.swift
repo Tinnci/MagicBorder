@@ -206,3 +206,25 @@ public final class CGScreenCapturer: ScreenCapturing {
         return rep.representation(using: .png, properties: [:])
     }
 }
+
+// MARK: - Screen Locking
+
+/// Abstracts locking the local Mac display so "Lock All Screens" is cleanly testable.
+@MainActor
+public protocol ScreenLocking: AnyObject {
+    func lockLocalScreen()
+}
+
+@MainActor
+public final class SystemScreenLocker: ScreenLocking {
+    public init() {}
+
+    public func lockLocalScreen() {
+        Task.detached(priority: .userInitiated) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+            process.arguments = ["displaysleepnow"]
+            try? process.run()
+        }
+    }
+}

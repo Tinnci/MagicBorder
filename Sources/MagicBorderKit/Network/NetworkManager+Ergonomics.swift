@@ -1,4 +1,4 @@
-import Foundation
+public import Foundation
 
 extension MBNetworkManager {
     public var isCursorLocked: Bool {
@@ -24,6 +24,31 @@ extension MBNetworkManager {
 
     public func toggleInputPause() {
         self.setInputPaused(!self.sessionCoordinator.isInputPaused)
+    }
+
+    public func lockAllScreens() {
+        if let remoteTransport = self.compatibilityTransport as? any MBRemoteActivationTransport {
+            remoteTransport.sendLockScreen()
+        }
+        if self.sessionCoordinator.activeMachineId != nil {
+            self.forceReturnToLocal(reason: "lock-all-screens")
+        }
+        self.showToast(.lockedAllScreens)
+        self.screenLocker.lockLocalScreen()
+    }
+
+    public func defaultInputProfile() -> PeerInputProfile {
+        PeerInputProfile(
+            modifierRemapMode: self.compatibilitySettings.modifierRemapMode,
+            invertRemoteScroll: self.compatibilitySettings.invertRemoteScroll,
+            remoteScrollSpeed: self.compatibilitySettings.remoteScrollSpeed)
+    }
+
+    public func effectiveInputProfile(for machineID: UUID?) -> PeerInputProfile {
+        let machineName = machineID.flatMap { id in
+            self.connectedMachines.first(where: { $0.id == id })?.name
+        }
+        return self.peerProfiles.profile(for: machineName, default: self.defaultInputProfile())
     }
 
     public func pushCurrentClipboard() {
@@ -68,6 +93,8 @@ extension MBNetworkManager {
             self.toggleCursorLock()
         case .toggleInputPause:
             self.toggleInputPause()
+        case .lockAllScreens:
+            self.lockAllScreens()
         }
     }
 

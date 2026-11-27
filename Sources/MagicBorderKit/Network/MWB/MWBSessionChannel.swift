@@ -47,6 +47,7 @@ final class MWBSessionChannel {
     private let processor: MWBChannelStreamProcessor
 
     private var hasLoggedWaiting = false
+    var lastHeartbeatSentAt: CFAbsoluteTime?
     private var clipboardAccumulator = Data()
     private var clipboardIsImage = false
     private var dragDropAccumulator = Data()
@@ -181,6 +182,7 @@ final class MWBSessionChannel {
         self.heartbeatTimer.cancel()
 
         if initial {
+            self.lastHeartbeatSentAt = CFAbsoluteTimeGetCurrent()
             self.send(self.makeControlPacket(type: .heartbeatEx))
         }
 
@@ -188,6 +190,7 @@ final class MWBSessionChannel {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
                 guard let self, !Task.isCancelled, !self.isClosed else { break }
+                self.lastHeartbeatSentAt = CFAbsoluteTimeGetCurrent()
                 self.send(self.makeControlPacket(type: .heartbeat))
             }
         }

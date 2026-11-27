@@ -28,6 +28,7 @@ public final class MBCompatibilitySettings {
         static let ignoreConcealedClipboard = "compat.ignoreConcealedClipboard"
         static let maxClipboardSizeMB = "compat.maxClipboardSizeMB"
         static let globalHotkeysEnabled = "compat.globalHotkeysEnabled"
+        static let hotkeys = "compat.hotkeys"
         static let lockCursorInFullscreenApps = "compat.lockCursorInFullscreenApps"
         static let onboardingCompleted = "compat.onboardingCompleted"
         static let matrixOneRow = "compat.matrixOneRow"
@@ -112,6 +113,14 @@ public final class MBCompatibilitySettings {
         didSet { self.defaults.set(self.globalHotkeysEnabled, forKey: Keys.globalHotkeysEnabled) }
     }
 
+    public var hotkeys: MBHotkeyConfiguration {
+        didSet {
+            if let data = try? JSONEncoder().encode(self.hotkeys) {
+                self.defaults.set(data, forKey: Keys.hotkeys)
+            }
+        }
+    }
+
     public var lockCursorInFullscreenApps: Bool {
         didSet { self.defaults.set(self.lockCursorInFullscreenApps, forKey: Keys.lockCursorInFullscreenApps) }
     }
@@ -172,6 +181,13 @@ public final class MBCompatibilitySettings {
         let rawMaxSize = defaults.integer(forKey: Keys.maxClipboardSizeMB)
         self.maxClipboardSizeMB = rawMaxSize > 0 ? rawMaxSize : 10
         self.globalHotkeysEnabled = defaults.object(forKey: Keys.globalHotkeysEnabled) as? Bool ?? true
+        if let hotkeyData = defaults.data(forKey: Keys.hotkeys),
+            let decodedHotkeys = try? JSONDecoder().decode(MBHotkeyConfiguration.self, from: hotkeyData)
+        {
+            self.hotkeys = decodedHotkeys
+        } else {
+            self.hotkeys = .default
+        }
         self.lockCursorInFullscreenApps =
             defaults.object(forKey: Keys.lockCursorInFullscreenApps) as? Bool ?? false
         self.onboardingCompleted = defaults.object(forKey: Keys.onboardingCompleted) as? Bool ?? false

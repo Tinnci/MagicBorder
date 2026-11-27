@@ -14,6 +14,7 @@ public enum MBToastEvent: Equatable, Sendable {
     case cursorUnlocked
     case inputPaused
     case inputResumed
+    case lockedAllScreens
     case clipboardSyncedText
     case clipboardSyncedImage
     case clipboardSyncedFiles
@@ -49,6 +50,8 @@ public enum MBToastEvent: Equatable, Sendable {
             "pause.circle.fill"
         case .inputResumed:
             "play.circle.fill"
+        case .lockedAllScreens:
+            "lock.shield.fill"
         case .clipboardSyncedText, .clipboardReceivedText:
             "doc.on.clipboard"
         case .clipboardSyncedImage, .clipboardReceivedImage:

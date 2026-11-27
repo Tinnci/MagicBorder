@@ -42,6 +42,26 @@ public struct MWBKeyEvent: Equatable, Sendable {
     }
 }
 
+/// Live transport health and latency telemetry reported per peer.
+public struct PeerTelemetry: Equatable, Sendable {
+    public var messageChannelConnected: Bool
+    public var clipboardChannelConnected: Bool
+    public var lastHeartbeatAt: Date?
+    public var rttMs: Int?
+
+    public init(
+        messageChannelConnected: Bool = false,
+        clipboardChannelConnected: Bool = false,
+        lastHeartbeatAt: Date? = nil,
+        rttMs: Int? = nil
+    ) {
+        self.messageChannelConnected = messageChannelConnected
+        self.clipboardChannelConnected = clipboardChannelConnected
+        self.lastHeartbeatAt = lastHeartbeatAt
+        self.rttMs = rttMs
+    }
+}
+
 public enum MWBSessionKind: Sendable {
     case message
     case clipboard
@@ -63,6 +83,7 @@ public enum MWBCompatibilityEvent: Sendable {
     case dragDropBegin(String?)
     case dragDropEnd
     case captureScreen(Int32?)
+    case telemetryUpdated(Int32, PeerTelemetry)
     case reconnectAttempt(String)
     case reconnectStopped(String)
     case log(String)
@@ -85,6 +106,7 @@ public protocol MWBCompatibilityServicing: AnyObject {
     func sendMouseEvent(x: Int32, y: Int32, wheel: Int32, flags: Int32)
     func sendKeyEvent(keyCode: Int32, flags: Int32)
     func sendHideMouse()
+    func sendLockScreen()
     func sendClipboardText(_ text: String)
     func sendClipboardImage(_ data: Data)
     func sendClipboardImage(_ data: Data, to peerId: Int32?)

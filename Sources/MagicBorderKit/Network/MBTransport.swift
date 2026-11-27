@@ -17,6 +17,7 @@ public enum MBTransportEvent: Sendable {
     case dragDropStateChanged(MBDragDropState?, sourceName: String?)
     case hideMouse
     case screenCaptureRequested(Int32?)
+    case peerTelemetryUpdated(UUID, PeerTelemetry)
     case reconnectAttempt(String)
     case reconnectStopped(String)
     case log(String)
@@ -60,5 +61,6 @@ public protocol MBFileDropTransport: MBTransport {
 public protocol MBRemoteActivationTransport: MBTransport {
     func activate(machine: Machine?)
     func centerRemoteCursor()
+    func sendLockScreen()
     func sendScreenCapture(_ data: Data, to peerID: Int32?)
 }

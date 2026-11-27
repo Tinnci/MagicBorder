@@ -223,6 +223,14 @@ public final class MWBCompatibilityService: MWBCompatibilityServicing {
         self.broadcast(packet, to: self.messageSessions)
     }
 
+    public func sendLockScreen() {
+        guard !self.messageSessions.isEmpty else { return }
+        self.sendKeyEvent(keyCode: 0x5B, flags: 0)  // Left Win down
+        self.sendKeyEvent(keyCode: 0x4C, flags: 0)  // L down
+        self.sendKeyEvent(keyCode: 0x4C, flags: 0x80)  // L up
+        self.sendKeyEvent(keyCode: 0x5B, flags: 0x80)  // Left Win up
+    }
+
     public func sendFileDrop(_ urls: [URL]) {
         guard !self.messageSessions.isEmpty else { return }
         let payload = MWBClipboardCodec.encodeFileDrop(urls)
@@ -353,6 +361,7 @@ public final class MWBCompatibilityService: MWBCompatibilityServicing {
         if let peer = session.peer {
             self.emit(.log("⚠ Connection lost from '\(peer.name)' (ID=\(peer.id))"))
             self.emit(.disconnected(peer))
+            self.emitTelemetry(for: peer.id)
         }
 
         if session.kind == .message {
@@ -465,6 +474,7 @@ public final class MWBCompatibilityService: MWBCompatibilityServicing {
                 self.emit(.log("✓ HandshakeAck VERIFIED from '\(peer.name)' (ID=\(peer.id))"))
                 self.emit(.connected(peer))
                 self.dedupeSessions(using: session)
+                self.emitTelemetry(for: peer.id)
                 session.startHeartbeat(initial: true)
                 if session.kind == .message {
                     session.startClipboardBeat()
@@ -478,10 +488,15 @@ public final class MWBCompatibilityService: MWBCompatibilityServicing {
         case .hello:
             self.ensurePeerConnected(packet, on: session)
             session.sendHeartbeatAck()
+            self.recordHeartbeatTelemetry(on: session)
         case .hi, .awake, .heartbeat, .heartbeatEx:
             self.ensurePeerConnected(packet, on: session)
+            self.recordHeartbeatTelemetry(on: session)
         case .heartbeatExL2:
             session.sendHeartbeatExL3()
+            self.recordHeartbeatTelemetry(on: session)
+        case .heartbeatExL3:
+            self.recordHeartbeatTelemetry(on: session)
         case .byeBye:
             if let peer = session.peer {
                 self.emit(.disconnected(peer))
@@ -528,6 +543,7 @@ public final class MWBCompatibilityService: MWBCompatibilityServicing {
             session.peer = peer
             self.emit(.log("Clipboard handshake received from '\(peer.name)' (ID=\(peer.id))"))
             self.emit(.connected(peer))
+            self.emitTelemetry(for: peer.id)
             session.sendClipboardHandshake(push: packet.type == .clipboardPush)
         case .clipboardText:
             session.appendClipboardChunk(packet.clipboardPayload, isImage: false)
@@ -565,7 +581,35 @@ public final class MWBCompatibilityService: MWBCompatibilityServicing {
         }
         if let peer = session.peer {
             self.emit(.connected(peer))
+            self.emitTelemetry(for: peer.id)
         }
+    }
+
+    private func recordHeartbeatTelemetry(on session: MWBSessionChannel) {
+        guard let peer = session.peer else { return }
+        var rttMs: Int?
+        if let sentAt = session.lastHeartbeatSentAt {
+            let elapsed = CFAbsoluteTimeGetCurrent() - sentAt
+            if elapsed >= 0, elapsed < 10 {
+                rttMs = max(1, Int((elapsed * 1000).rounded()))
+            }
+        }
+        self.emitTelemetry(for: peer.id, lastHeartbeatAt: Date(), rttMs: rttMs)
+    }
+
+    private func emitTelemetry(
+        for peerId: Int32,
+        lastHeartbeatAt: Date? = nil,
+        rttMs: Int? = nil
+    ) {
+        let hasMessage = self.messageSessions.contains { $0.peer?.id == peerId }
+        let hasClipboard = self.clipboardSessions.contains { $0.peer?.id == peerId }
+        let telemetry = PeerTelemetry(
+            messageChannelConnected: hasMessage,
+            clipboardChannelConnected: hasClipboard,
+            lastHeartbeatAt: lastHeartbeatAt,
+            rttMs: rttMs)
+        self.emit(.telemetryUpdated(peerId, telemetry))
     }
 
     private func sendClipboardFromPasteboard() {

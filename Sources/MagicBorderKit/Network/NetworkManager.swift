@@ -50,8 +50,10 @@ public final class MBNetworkManager: Observation.Observable {
     public var securityKey: String = ""
     public var compatibilitySettings: MBCompatibilitySettings
     public let savedHosts: MBSavedHostStore
+    public let peerProfiles: MBPeerProfileStore
 
     public var isConnectingHost: String?
+    public var peerTelemetry: [UUID: PeerTelemetry] = [:]
     public var pairingDebugLog: [String] = []
     public var pairingError: String?
 
@@ -67,10 +69,11 @@ public final class MBNetworkManager: Observation.Observable {
     private var lastAppliedConfiguration: AppliedConfiguration?
     private var pendingManualHost: String?
 
-    private let modernTransport: any MBTransport
-    private let compatibilityTransport: any MBTransport
+    let modernTransport: any MBTransport
+    let compatibilityTransport: any MBTransport
     private let screenCapturer: any ScreenCapturing
     private let cursorController: any CursorControlling
+    let screenLocker: any ScreenLocking
 
     private var currentTransport: any MBTransport {
         self.protocolMode == .modern ? self.modernTransport : self.compatibilityTransport
@@ -104,7 +107,9 @@ public final class MBNetworkManager: Observation.Observable {
         clock: any ClockProviding = SystemClock(),
         cursorController: any CursorControlling = SystemCursorController(),
         screenCapturer: any ScreenCapturing = CGScreenCapturer(),
+        screenLocker: any ScreenLocking = SystemScreenLocker(),
         savedHosts: MBSavedHostStore? = nil,
+        peerProfiles: MBPeerProfileStore? = nil,
         isFrontmostAppFullscreen: @escaping () -> Bool = { false },
         startDiscovery: Bool,
         startTransports: Bool,
@@ -117,9 +122,11 @@ public final class MBNetworkManager: Observation.Observable {
         self.protocolMode = settings.protocolMode
         self.securityKey = settings.securityKey
         self.savedHosts = savedHosts ?? MBSavedHostStore()
+        self.peerProfiles = peerProfiles ?? MBPeerProfileStore()
         self.inputManager = inputManager
         self.screenCapturer = screenCapturer
         self.cursorController = cursorController
+        self.screenLocker = screenLocker
 
         let resolvedModern =
             modernTransport
@@ -185,6 +192,17 @@ public final class MBNetworkManager: Observation.Observable {
 
         coordinatorBox = { [weak self] in self }
 
+        let profileLookup: (UUID?) -> PeerInputProfile = { [weak self] machineID in
+            guard let self else { return PeerInputProfile() }
+            return self.effectiveInputProfile(for: machineID)
+        }
+        if let modern = resolvedModern as? MBModernTransport {
+            modern.resolveInputProfile = profileLookup
+        }
+        if let compat = resolvedCompatibility as? MBMWBTransport {
+            compat.resolveInputProfile = profileLookup
+        }
+
         inputManager.routingDelegate = self
         inputManager.syncTapConfiguration(wrapCursor: settings.wrapCursor)
 
@@ -242,10 +260,11 @@ public final class MBNetworkManager: Observation.Observable {
         screenGeometry: any ScreenGeometryProviding,
         clock: any ClockProviding,
         cursorController: any CursorControlling,
-        screenCapturer: any ScreenCapturing
+        screenCapturer: any ScreenCapturing,
+        screenLocker: (any ScreenLocking)? = nil
     ) -> MBNetworkManager {
         let suiteName = "MagicBorderTests.hosts.\(UUID().uuidString)"
-        let hostDefaults = UserDefaults(suiteName: suiteName) ?? .standard
+        let isolatedDefaults = UserDefaults(suiteName: suiteName) ?? .standard
         return MBNetworkManager(
             localName: localName,
             localID: UUID(),
@@ -259,7 +278,9 @@ public final class MBNetworkManager: Observation.Observable {
             clock: clock,
             cursorController: cursorController,
             screenCapturer: screenCapturer,
-            savedHosts: MBSavedHostStore(defaults: hostDefaults),
+            screenLocker: screenLocker ?? SystemScreenLocker(),
+            savedHosts: MBSavedHostStore(defaults: isolatedDefaults),
+            peerProfiles: MBPeerProfileStore(defaults: isolatedDefaults),
             startDiscovery: false,
             startTransports: false,
             startClipboardMonitoring: false)
@@ -304,6 +325,7 @@ public final class MBNetworkManager: Observation.Observable {
         case .machineDisconnected(let id):
             let disconnected = self.connectedMachines.first(where: { $0.id == id })
             self.connectedMachines.removeAll { $0.id == id }
+            self.peerTelemetry.removeValue(forKey: id)
             if self.sessionCoordinator.activeMachineId == id {
                 self.forceReturnToLocal(reason: "disconnect")
             }
@@ -329,6 +351,13 @@ public final class MBNetworkManager: Observation.Observable {
             self.cursorController.hide()
         case .screenCaptureRequested(let sourceID):
             self.sendScreenCapture(to: sourceID)
+        case .peerTelemetryUpdated(let id, let incoming):
+            let previous = self.peerTelemetry[id]
+            self.peerTelemetry[id] = PeerTelemetry(
+                messageChannelConnected: incoming.messageChannelConnected,
+                clipboardChannelConnected: incoming.clipboardChannelConnected,
+                lastHeartbeatAt: incoming.lastHeartbeatAt ?? previous?.lastHeartbeatAt,
+                rttMs: incoming.rttMs ?? previous?.rttMs)
         case .reconnectAttempt(let host):
             self.showToast(.reconnecting(host))
         case .reconnectStopped(let host):
@@ -509,7 +538,8 @@ public final class MBNetworkManager: Observation.Observable {
             MBTapConfiguration(
                 wrapCursor: self.compatibilitySettings.wrapCursor,
                 escapeMode: self.compatibilitySettings.escapeMode,
-                globalHotkeysEnabled: self.compatibilitySettings.globalHotkeysEnabled))
+                globalHotkeysEnabled: self.compatibilitySettings.globalHotkeysEnabled,
+                hotkeys: self.compatibilitySettings.hotkeys))
         self.inputManager.setIgnoreConcealedClipboard(
             self.compatibilitySettings.ignoreConcealedClipboard)
 
