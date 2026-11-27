@@ -22,6 +22,7 @@ final class FakeTransport:
         case reconnect(UUID)
         case activate(UUID?)
         case centerRemoteCursor
+        case lockScreen
         case remoteInput(UUID?)
         case clipboardText(String, UUID?)
         case clipboardImage(Int, UUID?)
@@ -86,6 +87,10 @@ final class FakeTransport:
 
     func centerRemoteCursor() {
         self.calls.append(.centerRemoteCursor)
+    }
+
+    func sendLockScreen() {
+        self.calls.append(.lockScreen)
     }
 
     func sendRemoteInput(snapshot _: EventSnapshot, activeMachineId: UUID?) {
@@ -165,7 +170,10 @@ final class FakeMWBCompatibilityService: MWBCompatibilityServicing {
         self.sentKeyEvents.append(MWBKeyEvent(keyCode: keyCode, flags: flags))
     }
 
-    func sendHideMouse() {}
+    private(set) var sendHideMouseCount = 0
+    private(set) var sendLockScreenCount = 0
+    func sendHideMouse() { self.sendHideMouseCount += 1 }
+    func sendLockScreen() { self.sendLockScreenCount += 1 }
     func sendClipboardText(_: String) {}
     func sendClipboardImage(_: Data) {}
     func sendClipboardImage(_: Data, to _: Int32?) {}
@@ -260,6 +268,15 @@ final class FakeScreenCapturer: ScreenCapturing {
 
     func captureMainScreenPNG() -> Data? {
         self.capturedPNG
+    }
+}
+
+@MainActor
+final class FakeScreenLocker: ScreenLocking {
+    private(set) var lockCount = 0
+
+    func lockLocalScreen() {
+        self.lockCount += 1
     }
 }
 

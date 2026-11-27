@@ -28,6 +28,54 @@ struct ModernPacketCodecTests {
         #expect(decodedInfo == info)
     }
 
+    @Test func encryptedFrameRoundTripsAndRejectsTamperingOrDowngrade() throws {
+        let codec = ModernPacketCodec()
+        let key = "StrongSharedKey2026!"
+        let secretMessage = "ConfidentialClipboardPayload"
+        let packet = PacketType.clipboardData(
+            ClipboardPayload(content: Data(secretMessage.utf8), type: .text))
+
+        let encryptedFrame = try codec.encodeFrame(packet, securityKey: key)
+        let length = try #require(codec.decodeLengthHeader(Data(encryptedFrame.prefix(4))))
+        let body = Data(encryptedFrame.dropFirst(4))
+        #expect(length == body.count)
+        #expect(body.starts(with: Data("MBG1".utf8)))
+
+        // Wire payload must not leak plaintext JSON or secret text.
+        let wireText = String(decoding: body, as: UTF8.self)
+        #expect(!wireText.contains(secretMessage))
+
+        let decoded = try codec.decodePacket(body, securityKey: key)
+        guard case .clipboardData(let payload) = decoded else {
+            Issue.record("Expected clipboardData packet")
+            return
+        }
+        #expect(String(data: payload.content, encoding: .utf8) == secretMessage)
+
+        // Wrong key fails AEAD authentication.
+        #expect(throws: ModernPacketCodec.CodecError.authenticationFailed) {
+            try codec.decodePacket(body, securityKey: "WrongKey!")
+        }
+
+        // Empty key rejects encrypted frames.
+        #expect(throws: ModernPacketCodec.CodecError.authenticationFailed) {
+            try codec.decodePacket(body, securityKey: "")
+        }
+
+        // Tampered ciphertext fails AEAD authentication.
+        var tampered = body
+        tampered[tampered.count - 1] ^= 0xFF
+        #expect(throws: ModernPacketCodec.CodecError.authenticationFailed) {
+            try codec.decodePacket(tampered, securityKey: key)
+        }
+
+        // Plaintext downgrade frame is rejected when a key is configured.
+        let plaintextFrame = try codec.encodeFrame(packet, securityKey: "")
+        #expect(throws: ModernPacketCodec.CodecError.authenticationFailed) {
+            try codec.decodePacket(Data(plaintextFrame.dropFirst(4)), securityKey: key)
+        }
+    }
+
     @Test func decodeLengthHeaderRejectsZeroAndOversizedFrames() {
         let codec = ModernPacketCodec()
 

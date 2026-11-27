@@ -17,6 +17,11 @@ struct InputPreferencesAndErgonomicsTests {
             MBShortcutMatcher.matchShortcut(
                 keyCode: 37,
                 flags: [.maskControl, .maskAlternate, .maskCommand],
+                enabled: true) == .lockAllScreens)
+        #expect(
+            MBShortcutMatcher.matchShortcut(
+                keyCode: 18,
+                flags: [.maskControl, .maskAlternate, .maskCommand],
                 enabled: true) == nil)
         #expect(MBShortcutMatcher.matchShortcut(keyCode: 37, flags: ctrlOpt, enabled: false) == nil)
     }
