@@ -8,10 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 - **Unified Field UI Redesign**: Removed the legacy 3-pane `NavigationSplitView` sidebar and permanent right inspector in favor of a compact, sidebar-free **Field** window (`minWidth: 700, minHeight: 540`) with near-cursor popovers.
+- **Adaptive Liquid Glass UI (`macOS 26+`) & `macos-26` SDK CI/Release**: Added `AdaptiveGlass` (`glassEffect` + `GlassEffectContainer` on macOS 26/27 with `.ultraThinMaterial` fallback on macOS 14–15) across floating HUD overlays, Field Command Strip pills, clickable border seams, and Tiled List filter chips, while upgrading CI/Release runners to `macos-26`.
+- **Custom Monochrome Menu Bar Template Icon & Control Center Popover**: Upgraded `MenuBarExtra` to a crisp macOS Control Center–style `.window` popover (`MenuBarView`) with a custom `18×18pt` monochrome template icon (`MBMenuBarIconRenderer`) reflecting idle, connected, controlling-remote, locked, paused, and permission-needed states.
 - **Interactive Border Seams & Machine Popovers**: Clicking any display tile opens a unified `MachineInspectorPopover` (actions, telemetry, Per-Peer Input Profile, and Per-Device Overlay Override) directly next to the node; clicking any `↔` / `↕` border seam or header pill opens focused rule popovers (`EdgeBehaviorPopover`, `ProtocolAndPairingPopover`, `ClipboardQuickPopover`, `EscapeQuickPopover`).
 - **Seamless Tiled List Mode**: Consolidated Grid + Spatial drag-and-drop into `SpatialArrangementView` (`⌘1`) and added `TiledMachineListView` (`⌘2`) with interactive category filter chips (`All`, `Online`, `Windows`, `Mac`, `Saved`, `Nearby`) and one-click connection actions.
 
 ### Fixed
+- **Missing Status Bar Icon & Invalid SF Symbols**: Replaced invalid macOS SF Symbols (`rectangle.and.cursor.arrow` → `display.2`/custom template icon; `link.slash` → `network.slash`) and added automated `SystemSymbolAuditTests` to block broken SF Symbols in CI.
 - **Disconnected-State Accuracy & Quiet Clipboard Sync**: Prevented clipboard copy events from broadcasting or showing `"Synced clipboard ..."` toasts when no remote machines are connected, silenced routine automatic background copy toasts when connected (reserving toasts for explicit manual push actions), prevented redundant `"Returned to local machine"` and false `"Connection lost"` feedback when idle, gated manual file drop and MWB connect key validation honestly, refined `ToastOverlayView` HUD sizing with deduplication in `MBAppController`, and updated `DashboardView` / `MenuBarView` / machine tiles to reflect disconnected state accurately.
 
 ## [0.2.0] - 2026-11-28

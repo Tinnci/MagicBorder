@@ -13,12 +13,8 @@ struct ToastOverlayView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: Capsule())
+        .adaptiveGlass(in: Capsule())
         .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
-        .overlay(
-            Capsule()
-                .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
-        )
         .padding(16)  // Ensure window is large enough for shadow
         .accessibilityLabel(self.message)
     }

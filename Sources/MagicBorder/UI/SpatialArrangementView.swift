@@ -136,7 +136,7 @@ struct SpatialArrangementView: View {
                         .font(.caption2.monospacedDigit())
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
-                        .background(.ultraThinMaterial, in: Capsule())
+                        .adaptiveGlass(in: Capsule())
                         .padding(6)
                 }
             }
@@ -270,7 +270,9 @@ struct SpatialArrangementView: View {
             .foregroundStyle(self.seamTint)
             .padding(.horizontal, 7)
             .padding(.vertical, 5)
-            .background(.quaternary.opacity(self.activeSeamID == id ? 0.85 : 0.45), in: Capsule())
+            .adaptiveGlassPill(
+                tint: self.activeSeamID == id ? Color.accentColor.opacity(0.22) : nil,
+                interactive: true)
         }
         .buttonStyle(.plain)
         .help(localizedString("Configure Edge Crossing"))

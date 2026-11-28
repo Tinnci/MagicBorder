@@ -26,7 +26,7 @@ jobs:
 
   quality-and-coverage:
     name: Lint, Build & Coverage
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -63,7 +63,7 @@ jobs:
 
   tsan-and-package:
     name: Thread Sanitizer & Universal Package
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7

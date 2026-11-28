@@ -65,6 +65,6 @@ struct DragDropOverlayView: View {
         }
         .padding(AppTheme.Layout.mediumPadding)
         .frame(maxWidth: AppTheme.Layout.dragDropOverlayMaxWidth)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: AppTheme.Layout.cornerRadius))
+        .adaptiveGlass(in: RoundedRectangle(cornerRadius: AppTheme.Layout.cornerRadius))
     }
 }

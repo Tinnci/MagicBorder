@@ -150,40 +150,46 @@ struct TiledMachineListView: View {
     private func filterChipBar() -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                ForEach(TiledMachineFilter.allCases) { filter in
-                    let isSelected = self.activeFilter == filter
-                    let count = self.count(for: filter)
+                AdaptiveGlassContainer(spacing: 6) {
+                    HStack(spacing: 6) {
+                        ForEach(TiledMachineFilter.allCases) { filter in
+                            let isSelected = self.activeFilter == filter
+                            let count = self.count(for: filter)
 
-                    Button {
-                        withAnimation(.snappy(duration: 0.16)) {
-                            if filter != .all, isSelected {
-                                self.activeFilter = .all
-                            } else {
-                                self.activeFilter = filter
+                            Button {
+                                withAnimation(.snappy(duration: 0.16)) {
+                                    if filter != .all, isSelected {
+                                        self.activeFilter = .all
+                                    } else {
+                                        self.activeFilter = filter
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text(filter.title)
+                                        .font(.caption.weight(isSelected ? .semibold : .regular))
+                                    Text("\(count)")
+                                        .font(.caption2.monospacedDigit())
+                                        .foregroundStyle(
+                                            isSelected ? AnyShapeStyle(.background) : AnyShapeStyle(.secondary)
+                                        )
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 1)
+                                        .background(
+                                            isSelected ? Color.white.opacity(0.22) : Color.primary.opacity(0.08),
+                                            in: Capsule())
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .adaptiveGlassPill(
+                                    tint: isSelected ? Color.accentColor.opacity(0.85) : nil,
+                                    interactive: true
+                                )
+                                .foregroundStyle(isSelected ? .white : .primary)
                             }
+                            .buttonStyle(.plain)
                         }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(filter.title)
-                                .font(.caption.weight(isSelected ? .semibold : .regular))
-                            Text("\(count)")
-                                .font(.caption2.monospacedDigit())
-                                .foregroundStyle(isSelected ? AnyShapeStyle(.background) : AnyShapeStyle(.secondary))
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(
-                                    isSelected ? Color.white.opacity(0.22) : Color.primary.opacity(0.08),
-                                    in: Capsule())
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(
-                            isSelected ? Color.accentColor : Color.primary.opacity(0.06),
-                            in: Capsule()
-                        )
-                        .foregroundStyle(isSelected ? .white : .primary)
                     }
-                    .buttonStyle(.plain)
                 }
 
                 Spacer(minLength: 8)

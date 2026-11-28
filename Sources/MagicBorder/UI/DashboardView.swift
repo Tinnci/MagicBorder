@@ -229,72 +229,76 @@ struct DashboardView: View {
             Divider()
                 .frame(height: 16)
 
-            Button {
-                self.showPairingPopover.toggle()
-            } label: {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(self.isPairingKeyReady ? Color.green : Color.orange)
-                        .frame(width: 6, height: 6)
-                    Text(
-                        self.networkManager.compatibilitySettings.protocolMode == .mwbCompatibility
-                            ? "MWB" : localizedString("Mac-to-Mac")
-                    )
-                    .font(.caption.weight(.medium))
+            AdaptiveGlassContainer(spacing: 6) {
+                HStack(spacing: 6) {
+                    Button {
+                        self.showPairingPopover.toggle()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(self.isPairingKeyReady ? Color.green : Color.orange)
+                                .frame(width: 6, height: 6)
+                            Text(
+                                self.networkManager.compatibilitySettings.protocolMode == .mwbCompatibility
+                                    ? "MWB" : localizedString("Mac-to-Mac")
+                            )
+                            .font(.caption.weight(.medium))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .adaptiveGlassPill(interactive: true)
+                    }
+                    .buttonStyle(.plain)
+                    .help(localizedString("Protocol & Pairing"))
+                    .popover(isPresented: self.$showPairingPopover, arrowEdge: .bottom) {
+                        ProtocolAndPairingPopover()
+                    }
+
+                    Button {
+                        self.showEdgePopover.toggle()
+                    } label: {
+                        Label(self.edgePillTitle, systemImage: "arrow.left.arrow.right")
+                            .font(.caption.weight(.medium))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .adaptiveGlassPill(interactive: true)
+                    }
+                    .buttonStyle(.plain)
+                    .help(localizedString("Configure Edge Crossing"))
+                    .popover(isPresented: self.$showEdgePopover, arrowEdge: .bottom) {
+                        EdgeBehaviorPopover()
+                    }
+
+                    Button {
+                        self.showClipboardPopover.toggle()
+                    } label: {
+                        Label(self.clipboardPillTitle, systemImage: "doc.on.clipboard")
+                            .font(.caption.weight(.medium))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .adaptiveGlassPill(interactive: true)
+                    }
+                    .buttonStyle(.plain)
+                    .help(localizedString("Clipboard & Privacy"))
+                    .popover(isPresented: self.$showClipboardPopover, arrowEdge: .bottom) {
+                        ClipboardQuickPopover()
+                    }
+
+                    Button {
+                        self.showEscapePopover.toggle()
+                    } label: {
+                        Label(self.escapePillTitle, systemImage: "escape")
+                            .font(.caption.weight(.medium))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .adaptiveGlassPill(interactive: true)
+                    }
+                    .buttonStyle(.plain)
+                    .help(localizedString("Escape & Global Hotkeys"))
+                    .popover(isPresented: self.$showEscapePopover, arrowEdge: .bottom) {
+                        EscapeQuickPopover()
+                    }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(.quaternary.opacity(0.6), in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .help(localizedString("Protocol & Pairing"))
-            .popover(isPresented: self.$showPairingPopover, arrowEdge: .bottom) {
-                ProtocolAndPairingPopover()
-            }
-
-            Button {
-                self.showEdgePopover.toggle()
-            } label: {
-                Label(self.edgePillTitle, systemImage: "arrow.left.arrow.right")
-                    .font(.caption.weight(.medium))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.quaternary.opacity(0.6), in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .help(localizedString("Configure Edge Crossing"))
-            .popover(isPresented: self.$showEdgePopover, arrowEdge: .bottom) {
-                EdgeBehaviorPopover()
-            }
-
-            Button {
-                self.showClipboardPopover.toggle()
-            } label: {
-                Label(self.clipboardPillTitle, systemImage: "doc.on.clipboard")
-                    .font(.caption.weight(.medium))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.quaternary.opacity(0.6), in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .help(localizedString("Clipboard & Privacy"))
-            .popover(isPresented: self.$showClipboardPopover, arrowEdge: .bottom) {
-                ClipboardQuickPopover()
-            }
-
-            Button {
-                self.showEscapePopover.toggle()
-            } label: {
-                Label(self.escapePillTitle, systemImage: "escape")
-                    .font(.caption.weight(.medium))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.quaternary.opacity(0.6), in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .help(localizedString("Escape & Global Hotkeys"))
-            .popover(isPresented: self.$showEscapePopover, arrowEdge: .bottom) {
-                EscapeQuickPopover()
             }
 
             Spacer(minLength: 8)
