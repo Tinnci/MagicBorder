@@ -52,13 +52,17 @@ struct MagicBorderApp: App {
         }
         .windowResizability(.contentSize)
 
-        MenuBarExtra("MagicBorder", systemImage: self.controller.menuBarIconName) {
+        MenuBarExtra {
             MenuBarView()
                 .environment(self.controller)
                 .environment(self.controller.accessibilityService)
                 .environment(self.controller.networkManager)
                 .environment(self.controller.overlayPreferences)
                 .environment(\.locale, self.currentLocale)
+        } label: {
+            Image(nsImage: self.controller.menuBarIconImage)
+                .accessibilityLabel(localizedString("MagicBorder"))
         }
+        .menuBarExtraStyle(.window)
     }
 }

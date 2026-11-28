@@ -88,20 +88,42 @@ final class MBAppController {
         }
     }
 
-    var menuBarIconName: String {
+    var menuBarStatus: MBMenuBarStatus {
         if !self.accessibilityService.isTrusted {
-            return "exclamationmark.triangle"
+            return .permissionNeeded
         }
         if self.networkManager.isInputPaused || !self.captureInput {
-            return "pause.circle"
+            return .paused
         }
         if self.networkManager.isCursorLocked {
-            return "lock.display"
+            return .locked
         }
         if self.networkManager.activeMachineId != nil {
-            return "arrow.right.circle.fill"
+            return .controllingRemote
         }
-        return "rectangle.and.cursor.arrow"
+        if !self.networkManager.connectedMachines.isEmpty {
+            return .connected
+        }
+        return .idle
+    }
+
+    var menuBarIconName: String {
+        switch self.menuBarStatus {
+        case .permissionNeeded:
+            return "exclamationmark.triangle"
+        case .paused:
+            return "pause.circle"
+        case .locked:
+            return "lock.display"
+        case .controllingRemote:
+            return "arrow.right.circle.fill"
+        case .connected, .idle:
+            return "display.2"
+        }
+    }
+
+    var menuBarIconImage: NSImage {
+        MBMenuBarIconRenderer.image(for: self.menuBarStatus)
     }
 
     func previewDragDropOverlay() {

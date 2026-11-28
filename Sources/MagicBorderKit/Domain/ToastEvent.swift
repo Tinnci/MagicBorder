@@ -41,7 +41,7 @@ public enum MBToastEvent: Equatable, Sendable {
         case .connected:
             "link"
         case .disconnected, .noConnectedDevices:
-            "link.slash"
+            "network.slash"
         case .reconnecting:
             "arrow.clockwise"
         case .reconnectStopped:
