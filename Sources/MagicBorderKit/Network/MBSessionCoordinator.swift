@@ -93,6 +93,7 @@ public final class MBSessionCoordinator: Observation.Observable {
     }
 
     public func setActiveMachine(_ id: UUID?, nameHint: String? = nil, notify: Bool = true) {
+        let previousID = self.activeMachineId
         self.activeMachineId = id
         self.deps.updateRemoteTarget(id)
 
@@ -104,7 +105,7 @@ public final class MBSessionCoordinator: Observation.Observable {
             self.activeMachineName = machineName
             self.switchState = .active
             self.lastSwitchTimestamp = Date()
-            if notify {
+            if notify, previousID != id {
                 self.deps.emitToast(.switchedToMachine(machineName))
             }
             return
@@ -113,7 +114,7 @@ public final class MBSessionCoordinator: Observation.Observable {
         self.activeMachineName = self.localMachineName
         self.switchState = .idle
         self.lastSwitchTimestamp = Date()
-        if notify {
+        if notify, previousID != nil {
             self.deps.emitToast(.returnedToLocal)
         }
     }
@@ -177,7 +178,10 @@ public final class MBSessionCoordinator: Observation.Observable {
 
     public func handleLocalMouseEvent(snapshot: EventSnapshot) {
         let settings = self.deps.settings()
-        guard settings.switchByMouse, self.activeMachineId == nil else {
+        guard settings.switchByMouse,
+            self.activeMachineId == nil,
+            !self.deps.connectedMachines().isEmpty
+        else {
             self.resetEdgeDwell()
             return
         }

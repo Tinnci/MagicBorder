@@ -39,6 +39,10 @@ struct DashboardView: View {
     @State private var isNearbyRailExpanded = true
     @State private var copiedLocalIP = false
 
+    private var hasConnectedPeers: Bool {
+        !self.networkManager.connectedMachines.isEmpty
+    }
+
     private var isTwoRow: Bool {
         !self.networkManager.compatibilitySettings.matrixOneRow
     }
@@ -101,7 +105,11 @@ struct DashboardView: View {
                 .padding(16)
             }
 
-            if self.isFileDropTargeted {
+            if self.isFileDropTargeted,
+                self.hasConnectedPeers,
+                self.networkManager.protocolMode == .mwbCompatibility,
+                self.networkManager.compatibilitySettings.transferFiles
+            {
                 FileDropZoneView()
                     .transition(.opacity)
             }
@@ -146,6 +154,7 @@ struct DashboardView: View {
                     Label(localizedString("Send Files"), systemImage: "square.and.arrow.up")
                 }
                 .help(localizedString("Send Files via MWB"))
+                .disabled(!self.hasConnectedPeers || self.networkManager.protocolMode == .modern)
 
                 Button {
                     self.openDoctor(host: self.networkManager.savedHosts.hosts.first?.address ?? "")
@@ -204,13 +213,16 @@ struct DashboardView: View {
     private func fieldCommandStrip() -> some View {
         HStack(spacing: 8) {
             HStack(spacing: 6) {
-                StatusDot(active: !self.networkManager.isInputPaused)
+                StatusDot(active: self.hasConnectedPeers && !self.networkManager.isInputPaused)
                 Text(
-                    localizedString(
-                        "Active: %@",
-                        arguments: [self.networkManager.sessionCoordinator.activeMachineName])
+                    self.hasConnectedPeers
+                        ? localizedString(
+                            "Active: %@",
+                            arguments: [self.networkManager.sessionCoordinator.activeMachineName])
+                        : localizedString("No devices connected")
                 )
                 .font(.subheadline.weight(.medium))
+                .foregroundStyle(self.hasConnectedPeers ? .primary : .secondary)
                 .lineLimit(1)
             }
 
@@ -295,6 +307,7 @@ struct DashboardView: View {
                     systemImage: self.networkManager.isCursorLocked ? "lock.fill" : "lock.open")
             }
             .controlSize(.small)
+            .disabled(!self.hasConnectedPeers && !self.networkManager.isCursorLocked)
 
             Button {
                 self.networkManager.toggleInputPause()
@@ -304,6 +317,7 @@ struct DashboardView: View {
                     systemImage: self.networkManager.isInputPaused ? "play.fill" : "pause.fill")
             }
             .controlSize(.small)
+            .disabled(!self.hasConnectedPeers && !self.networkManager.isInputPaused)
 
             Button {
                 self.networkManager.lockAllScreens()
@@ -311,6 +325,7 @@ struct DashboardView: View {
                 Label(localizedString("Lock All"), systemImage: "lock.shield")
             }
             .controlSize(.small)
+            .disabled(!self.hasConnectedPeers)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

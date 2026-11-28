@@ -56,6 +56,7 @@ struct MenuBarView: View {
         ) {
             networkManager.toggleCursorLock()
         }
+        .disabled(networkManager.connectedMachines.isEmpty && !networkManager.isCursorLocked)
 
         Button(
             networkManager.isInputPaused
@@ -64,6 +65,7 @@ struct MenuBarView: View {
         ) {
             networkManager.toggleInputPause()
         }
+        .disabled(networkManager.connectedMachines.isEmpty && !networkManager.isInputPaused)
 
         Button(localizedString("Send Clipboard Now")) {
             networkManager.pushCurrentClipboard()
@@ -73,6 +75,7 @@ struct MenuBarView: View {
         Button(localizedString("Lock All Screens")) {
             networkManager.lockAllScreens()
         }
+        .disabled(networkManager.connectedMachines.isEmpty)
 
         Divider()
 
@@ -100,6 +103,9 @@ struct MenuBarView: View {
     private func statusLine(activeName: String) -> String {
         if !self.accessibilityService.isTrusted {
             return localizedString("Accessibility Permission Needed")
+        }
+        if self.networkManager.connectedMachines.isEmpty {
+            return localizedString("No devices connected")
         }
         if self.networkManager.isInputPaused {
             return localizedString("Paused • %@", arguments: [activeName])

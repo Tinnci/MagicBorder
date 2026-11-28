@@ -192,10 +192,10 @@ struct PairingFlowView: View {
         .sheet(isPresented: self.$showDoctor) {
             ConnectionDoctorView(initialHost: self.ipAddress)
         }
-        .onChange(of: self.networkManager.connectedMachines) { _, newValue in
-            if newValue.isEmpty {
+        .onChange(of: self.networkManager.connectedMachines) { oldValue, newValue in
+            if !oldValue.isEmpty, newValue.isEmpty {
                 self.showStatus(text: localizedString("Connection lost"), style: .warning)
-            } else {
+            } else if !newValue.isEmpty {
                 self.showStatus(text: localizedString("Connected successfully"), style: .success)
             }
         }

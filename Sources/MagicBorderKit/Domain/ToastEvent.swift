@@ -7,7 +7,9 @@ public enum MBToastEvent: Equatable, Sendable {
     case returnedToLocal
     case switchingToMachine(String)
     case connecting(String)
+    case connected(String)
     case disconnected(String)
+    case noConnectedDevices
     case reconnecting(String)
     case reconnectStopped(String)
     case cursorLocked
@@ -36,7 +38,9 @@ public enum MBToastEvent: Equatable, Sendable {
             "arrow.triangle.2.circlepath"
         case .connecting:
             "arrow.right.circle"
-        case .disconnected:
+        case .connected:
+            "link"
+        case .disconnected, .noConnectedDevices:
             "link.slash"
         case .reconnecting:
             "arrow.clockwise"

@@ -197,6 +197,38 @@ struct SessionCoordinatorTests {
         #expect(coordinator.switchState == .idle)
     }
 
+    @Test func alreadyLocalDoesNotEmitReturnToastAndEmptyPeersSkipsEdgeSwitch() {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
+        var toasts: [MBToastEvent] = []
+        let geometry = FakeScreenGeometry(mainScreenFrame: CGRect(x: 0, y: 0, width: 1920, height: 1080))
+        let coordinator = MBSessionCoordinator(
+            localMachineID: MBNetworkManager.localMachineUUID,
+            localMachineName: "Mac",
+            dependencies: MBSessionCoordinator.Dependencies(
+                connectedMachines: { [] },
+                arrangement: {
+                    MachineArrangement(slots: [MBNetworkManager.localMachineUUID], columns: 1)
+                },
+                settings: { MBCompatibilitySettings(defaults: defaults) },
+                updateRemoteTarget: { _ in },
+                emitToast: { toasts.append($0) },
+                appendLog: { _ in },
+                activateRemoteMachine: { _ in false },
+                centerRemoteCursor: {}),
+            screenGeometry: geometry,
+            clock: FakeClock(now: 100),
+            cursorController: FakeCursorController())
+
+        coordinator.setActiveMachine(nil, notify: true)
+        #expect(toasts.isEmpty)
+
+        coordinator.handleLocalMouseEvent(
+            snapshot: makeEventSnapshot(type: .mouseMoved, location: CGPoint(x: 1920, y: 540)))
+        #expect(coordinator.activeMachineId == nil)
+        #expect(toasts.isEmpty)
+    }
+
     private func makeCoordinator(
         machines: [Machine],
         isMWBMode: Bool,

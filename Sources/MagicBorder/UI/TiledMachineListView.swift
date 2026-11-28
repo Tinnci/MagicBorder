@@ -215,9 +215,11 @@ struct TiledMachineListView: View {
     @ViewBuilder
     private func machineTile(for machine: Machine) -> some View {
         let isLocal = machine.state == .local
+        let hasRemotePeers = self.machines.count > 1
         let isFocused =
-            (self.networkManager.activeMachineId == nil && isLocal)
-            || (self.networkManager.activeMachineId == machine.id)
+            hasRemotePeers
+            && ((self.networkManager.activeMachineId == nil && isLocal)
+                || (self.networkManager.activeMachineId == machine.id))
         let telemetry = self.networkManager.peerTelemetry[machine.id]
         let hasInputOverride = !isLocal && self.networkManager.peerProfiles.hasOverride(for: machine.name)
         let hasOverlayOverride = self.overlayPreferences.hasOverride(for: machine.name)
@@ -289,7 +291,10 @@ struct TiledMachineListView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
-                .disabled((!isLocal && !machine.isOnline) || isFocused)
+                .disabled(
+                    (!isLocal && !machine.isOnline)
+                        || isFocused
+                        || (isLocal && self.networkManager.activeMachineId == nil))
 
                 Button {
                     self.inspectedMachineID = machine.id

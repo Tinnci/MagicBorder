@@ -41,7 +41,7 @@ struct PrivacyAndDiagnosticsTests {
             emitToast: { toasts.append($0) },
             sendClipboardText: { sentTexts.append($0) },
             sendClipboardImage: { sentImages.append($0) },
-            sendFileDrop: { _ in })
+            sendFileDrop: { _ in true })
 
         let oversizedData = Data(repeating: 0xAA, count: 1_048_577)
         bridge.handleLocalPasteboard(.image(oversizedData), settings: settings)

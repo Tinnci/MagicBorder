@@ -76,7 +76,7 @@ struct NetworkManagerTests {
             })
     }
 
-    @Test func sendFileDropUsesCurrentTransportWhenEnabled() {
+    @Test func sendFileDropUsesCurrentTransportWhenEnabled() async {
         let (defaults, cleanup) = makeIsolatedDefaults()
         defer { cleanup() }
         let compatibility = FakeTransport()
@@ -86,12 +86,68 @@ struct NetworkManagerTests {
             defaults: defaults,
             settings: settings,
             compatibilityTransport: compatibility)
+        let remote = Machine(id: UUID(), name: "Windows", state: .connected, mwbPeerID: 42)
+        compatibility.emit(.machineConnected(remote))
+        await self.waitUntil { manager.connectedMachines.map(\.id) == [remote.id] }
         let url = URL(fileURLWithPath: "/tmp/file.txt")
 
         let sent = manager.sendFileDrop([url])
 
         #expect(sent)
         #expect(compatibility.calls.contains(.fileDrop([url])))
+    }
+
+    @Test func disconnectedManagerDoesNotSyncClipboardOrSendFiles() {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
+        let compatibility = FakeTransport()
+        let settings = MBCompatibilitySettings(defaults: defaults)
+        settings.shareClipboard = true
+        settings.transferFiles = true
+        let manager = self.makeManager(
+            defaults: defaults,
+            settings: settings,
+            compatibilityTransport: compatibility)
+
+        manager.handleLocalPasteboard(.text("offline-copy"))
+        #expect(manager.toast == nil)
+        #expect(
+            !compatibility.calls.contains { call in
+                if case .clipboardText = call { return true }
+                return false
+            })
+
+        let sent = manager.sendFileDrop([URL(fileURLWithPath: "/tmp/file.txt")])
+        #expect(!sent)
+        #expect(manager.toast == .noConnectedDevices)
+    }
+
+    @Test func newPeerConnectionEmitsConnectedToastAndShortKeyBlocksManualConnect() async {
+        let (defaults, cleanup) = makeIsolatedDefaults()
+        defer { cleanup() }
+        let compatibility = FakeTransport()
+        let settings = MBCompatibilitySettings(defaults: defaults)
+        settings.protocolMode = .mwbCompatibility
+        settings.securityKey = "too-short"
+        let manager = self.makeManager(
+            defaults: defaults,
+            settings: settings,
+            compatibilityTransport: compatibility)
+
+        manager.connectToHost(ip: "192.168.1.50")
+        #expect(manager.isConnectingHost == nil)
+        #expect(manager.toast == nil)
+        #expect(manager.pairingError != nil)
+        #expect(
+            !compatibility.calls.contains { call in
+                if case .connectHost = call { return true }
+                return false
+            })
+
+        let remote = Machine(id: UUID(), name: "Workstation", state: .connected, mwbPeerID: 7)
+        compatibility.emit(.machineConnected(remote))
+        await self.waitUntil { manager.connectedMachines.map(\.id) == [remote.id] }
+        #expect(manager.toast == .connected("Workstation"))
     }
 
     @Test func arrangementSyncSendsVisibleMachineNamesInArrangementOrder() async {
@@ -163,6 +219,7 @@ struct NetworkManagerTests {
         let modern = FakeTransport()
         let compatibility = FakeTransport()
         let settings = MBCompatibilitySettings(defaults: defaults)
+        settings.securityKey = "1234567890ABCDEF"
         settings.messagePort = 15111
         let manager = self.makeManager(
             defaults: defaults,

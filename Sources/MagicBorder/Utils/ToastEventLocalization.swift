@@ -11,8 +11,12 @@ extension MBToastEvent {
             localizedString("Switching to %@...", arguments: [name])
         case .connecting(let host):
             localizedString("Connecting to %@...", arguments: [host])
+        case .connected(let name):
+            localizedString("Connected to %@", arguments: [name])
         case .disconnected(let name):
             localizedString("Disconnected from %@", arguments: [name])
+        case .noConnectedDevices:
+            localizedString("No devices connected")
         case .reconnecting(let host):
             localizedString("Reconnecting to %@...", arguments: [host])
         case .reconnectStopped(let host):

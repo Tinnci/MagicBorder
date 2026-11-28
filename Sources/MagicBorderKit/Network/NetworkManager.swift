@@ -184,11 +184,12 @@ public final class MBNetworkManager: Observation.Observable {
 
         self.clipboardBridge = MBClipboardBridge(
             pasteboard: pasteboard,
+            hasConnectedPeers: { !(coordinatorBox()?.connectedMachines.isEmpty ?? true) },
             ignoreNextLocalChange: { inputManager.ignoreNextClipboardChange() },
             emitToast: { event in coordinatorBox()?.showToast(event) },
             sendClipboardText: { text in coordinatorBox()?.sendClipboardText(text) },
             sendClipboardImage: { data in coordinatorBox()?.sendClipboardImage(data) },
-            sendFileDrop: { urls in coordinatorBox()?.sendFileDrop(urls) })
+            sendFileDrop: { urls in coordinatorBox()?.sendFileDrop(urls) ?? false })
 
         coordinatorBox = { [weak self] in self }
 
@@ -317,10 +318,14 @@ public final class MBNetworkManager: Observation.Observable {
                     messagePort: self.compatibilitySettings.messagePort,
                     clipboardPort: self.compatibilitySettings.clipboardPort)
             }
+            let isNewPeer = !self.connectedMachines.contains(where: { $0.id == machine.id })
             if let index = self.connectedMachines.firstIndex(where: { $0.id == machine.id }) {
                 self.connectedMachines[index] = machine
             } else {
                 self.connectedMachines.append(machine)
+            }
+            if isNewPeer {
+                self.showToast(.connected(machine.name))
             }
         case .machineDisconnected(let id):
             let disconnected = self.connectedMachines.first(where: { $0.id == id })
@@ -448,6 +453,10 @@ public final class MBNetworkManager: Observation.Observable {
             self.showToast(.fileTransferDisabled)
             return false
         }
+        guard !self.connectedMachines.isEmpty else {
+            self.showToast(.noConnectedDevices)
+            return false
+        }
         guard !urls.isEmpty, let fileTransport = self.currentTransport as? any MBFileDropTransport else {
             return false
         }
@@ -499,6 +508,13 @@ public final class MBNetworkManager: Observation.Observable {
     public func connectToHost(ip: String, port: UInt16? = nil) {
         let trimmed = ip.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        if self.protocolMode == .mwbCompatibility {
+            let trimmedKey = self.compatibilitySettings.securityKey.replacingOccurrences(of: " ", with: "")
+            guard trimmedKey.count >= 16 else {
+                self.setPairingError("Security key must be at least 16 characters.")
+                return
+            }
+        }
         let resolvedPort =
             port
             ?? {

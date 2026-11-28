@@ -5,21 +5,21 @@ struct ToastOverlayView: View {
     let systemImage: String
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             Image(systemName: self.systemImage)
-                .font(.system(size: 28, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold))
             Text(self.message)
-                .font(.system(size: 18, weight: .medium))
+                .font(.system(size: 14, weight: .medium))
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .background(.ultraThinMaterial, in: Capsule())
-        .shadow(color: .black.opacity(0.2), radius: 12, x: 0, y: 6)
+        .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
         .overlay(
             Capsule()
                 .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
         )
-        .padding(24)  // Ensure window is large enough for shadow
+        .padding(16)  // Ensure window is large enough for shadow
         .accessibilityLabel(self.message)
     }
 }

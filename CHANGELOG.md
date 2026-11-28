@@ -11,6 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Interactive Border Seams & Machine Popovers**: Clicking any display tile opens a unified `MachineInspectorPopover` (actions, telemetry, Per-Peer Input Profile, and Per-Device Overlay Override) directly next to the node; clicking any `↔` / `↕` border seam or header pill opens focused rule popovers (`EdgeBehaviorPopover`, `ProtocolAndPairingPopover`, `ClipboardQuickPopover`, `EscapeQuickPopover`).
 - **Seamless Tiled List Mode**: Consolidated Grid + Spatial drag-and-drop into `SpatialArrangementView` (`⌘1`) and added `TiledMachineListView` (`⌘2`) with interactive category filter chips (`All`, `Online`, `Windows`, `Mac`, `Saved`, `Nearby`) and one-click connection actions.
 
+### Fixed
+- **Disconnected-State Accuracy & Quiet Clipboard Sync**: Prevented clipboard copy events from broadcasting or showing `"Synced clipboard ..."` toasts when no remote machines are connected, silenced routine automatic background copy toasts when connected (reserving toasts for explicit manual push actions), prevented redundant `"Returned to local machine"` and false `"Connection lost"` feedback when idle, gated manual file drop and MWB connect key validation honestly, refined `ToastOverlayView` HUD sizing with deduplication in `MBAppController`, and updated `DashboardView` / `MenuBarView` / machine tiles to reflect disconnected state accurately.
+
 ## [0.2.0] - 2026-11-28
 
 ### Added

@@ -69,7 +69,9 @@ struct SpatialArrangementView: View {
     @ViewBuilder
     private func displayNode(for machine: Machine) -> some View {
         let isLocal = machine.state == .local
-        let isFocused = (self.activeMachineID == nil && isLocal) || (self.activeMachineID == machine.id)
+        let hasRemotePeers = self.machines.count > 1
+        let isFocused =
+            hasRemotePeers && ((self.activeMachineID == nil && isLocal) || (self.activeMachineID == machine.id))
         let resolution = Self.effectiveResolution(for: machine)
         let boxSize = Self.scaledDisplaySize(for: resolution)
         let telemetry = self.telemetryByID[machine.id]

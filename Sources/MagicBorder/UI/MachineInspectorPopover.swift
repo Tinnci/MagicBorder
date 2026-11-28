@@ -22,9 +22,11 @@ struct MachineInspectorPopover: View {
         Group {
             if let machine = self.machine {
                 let isLocal = machine.state == .local
+                let hasRemotePeers = !self.networkManager.connectedMachines.isEmpty
                 let isFocused =
-                    (isLocal && self.networkManager.activeMachineId == nil)
-                    || (self.networkManager.activeMachineId == machine.id)
+                    hasRemotePeers
+                    && ((isLocal && self.networkManager.activeMachineId == nil)
+                        || (self.networkManager.activeMachineId == machine.id))
                 let telemetry = self.networkManager.peerTelemetry[machine.id]
 
                 ScrollView {
@@ -121,7 +123,7 @@ struct MachineInspectorPopover: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
-                .disabled(!isLocal && !machine.isOnline)
+                .disabled((!isLocal && !machine.isOnline) || (isLocal && self.networkManager.activeMachineId == nil))
 
                 Button {
                     self.networkManager.pushCurrentClipboard()

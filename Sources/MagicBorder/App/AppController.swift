@@ -43,6 +43,7 @@ final class MBAppController {
     var launchAtLoginError: String?
 
     private var observationTask: Task<Void, Never>?
+    private var lastPresentedToast: MBToastEvent?
 
     init() {
         let accessibility = MBAccessibilityService()
@@ -129,12 +130,16 @@ final class MBAppController {
     private func syncAppState() {
         self.syncInputCapture()
         self.networkManager.applyCompatibilitySettings()
-        if let toast = self.networkManager.toast {
-            self.toastPresenter.show(
-                message: toast.localizedMessage,
-                systemImage: toast.defaultSystemImage)
-        } else {
-            self.toastPresenter.hide()
+        let currentToast = self.networkManager.toast
+        if currentToast != self.lastPresentedToast {
+            self.lastPresentedToast = currentToast
+            if let currentToast {
+                self.toastPresenter.show(
+                    message: currentToast.localizedMessage,
+                    systemImage: currentToast.defaultSystemImage)
+            } else {
+                self.toastPresenter.hide()
+            }
         }
         self.syncDragDropOverlay()
     }
