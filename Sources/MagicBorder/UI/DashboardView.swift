@@ -24,93 +24,154 @@ import UniformTypeIdentifiers
 struct DashboardView: View {
     @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
     @Environment(MBAccessibilityService.self) private var accessibilityService
-    @State private var selection: SidebarItem? = .arrangement
-    @State private var searchText = ""
-    @State private var machines: [Machine] = []
-    @State private var showOnboarding = false
+    @Environment(MBOverlayPreferencesStore.self) private var overlayPreferences
 
-    var filteredMachines: [Machine] {
-        if self.searchText.isEmpty {
-            self.machines
-        } else {
-            self.machines.filter { $0.name.localizedStandardContains(self.searchText) }
-        }
+    @AppStorage("ui.dashboardMode") private var viewMode = "field"
+    @State private var machines: [Machine] = []
+    @State private var isFileDropTargeted = false
+    @State private var showOnboarding = false
+    @State private var showDoctor = false
+    @State private var doctorInitialHost = ""
+    @State private var showPairingPopover = false
+    @State private var showEdgePopover = false
+    @State private var showClipboardPopover = false
+    @State private var showEscapePopover = false
+    @State private var isNearbyRailExpanded = true
+    @State private var copiedLocalIP = false
+
+    private var isTwoRow: Bool {
+        !self.networkManager.compatibilitySettings.matrixOneRow
+    }
+
+    private var isSwap: Bool {
+        self.networkManager.compatibilitySettings.matrixCircle
     }
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: self.$selection) {
-                Section {
-                    ForEach(SidebarItem.allCases) { item in
-                        NavigationLink(value: item) {
-                            Label(item.title, systemImage: item.icon)
-                        }
+        ZStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    if !self.accessibilityService.isTrusted {
+                        AccessibilityWarningBanner(service: self.accessibilityService)
+                            .padding(.top, 4)
                     }
-                }
 
-                Section(localizedString("Machines")) {
-                    if self.filteredMachines.isEmpty {
-                        ContentUnavailableView.search(text: self.searchText)
-                            .listRowSeparator(.hidden)
+                    self.fieldCommandStrip()
+
+                    if self.viewMode == "list" {
+                        TiledMachineListView(
+                            machines: self.machines,
+                            onDiagnoseHost: { host in self.openDoctor(host: host) },
+                            onAddMachine: { self.showPairingPopover = true })
                     } else {
-                        ForEach(self.filteredMachines) { machine in
-                            NavigationLink(destination: MachineDetailView(machineID: machine.id)) {
-                                HStack {
-                                    Image(
-                                        systemName: machine.state == .local
-                                            ? "macbook" : (machine.mwbPeerID != nil ? "pc" : "desktopcomputer"))
-                                    Text(machine.name)
-                                    Spacer()
-                                    StatusDot(active: machine.isOnline || machine.state == .local)
+                        SpatialArrangementView(
+                            machines: self.$machines,
+                            twoRow: self.isTwoRow,
+                            activeMachineID: self.networkManager.activeMachineId,
+                            telemetryByID: self.networkManager.peerTelemetry,
+                            peerProfiles: self.networkManager.peerProfiles,
+                            overlayPreferences: self.overlayPreferences,
+                            edgeSettings: self.networkManager.compatibilitySettings,
+                            isInputPaused: self.networkManager.isInputPaused,
+                            isCursorLocked: self.networkManager.isCursorLocked,
+                            onSwitch: { machine in
+                                if machine.state == .local {
+                                    self.networkManager.forceReturnToLocal(reason: "field-double-click")
+                                } else {
+                                    self.networkManager.requestSwitch(to: machine.id)
                                 }
-                            }
-                        }
+                            },
+                            onSendClipboard: { self.networkManager.pushCurrentClipboard() },
+                            onReconnect: { self.networkManager.reconnect(machineId: $0.id) },
+                            onDisconnect: { self.networkManager.disconnect(machineId: $0.id) },
+                            onDiagnoseHost: { host in self.openDoctor(host: host) },
+                            onAddMachine: { self.showPairingPopover = true })
+
+                        Text(
+                            localizedString(
+                                "Click a display to inspect & tune. Click a border to edit edge rules. Drag to reorder."
+                            )
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                        self.nearbyAndSavedRail()
                     }
                 }
+                .padding(16)
             }
-            .listStyle(.sidebar)
-            .navigationTitle(localizedString("MagicBorder"))
-            .searchable(
-                text: self.$searchText,
-                placement: .sidebar,
-                prompt: localizedString("Search machines")
-            )
-            .toolbar {
-                ToolbarItem {
-                    Button {
-                        self.selection = .machines
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .help(localizedString("Add Machine"))
-                }
-                ToolbarItem {
-                    Button {
-                        self.showOnboarding = true
-                    } label: {
-                        Image(systemName: "sparkles")
-                    }
-                    .help(localizedString("Open Setup Assistant..."))
-                }
-            }
-        } detail: {
-            if let selection {
-                switch selection {
-                case .arrangement:
-                    ArrangementDetailView(
-                        machines: self.$machines,
-                        onSelectDiscovered: { self.selection = .machines })
-                case .machines:
-                    DiscoveredMachinesListView(networkManager: self.networkManager)
-                }
-            } else {
-                Text(localizedString("Select an item from the sidebar"))
-                    .foregroundStyle(.secondary)
+
+            if self.isFileDropTargeted {
+                FileDropZoneView()
+                    .transition(.opacity)
             }
         }
-        .frame(minWidth: 820, minHeight: 620)
+        .background {
+            VStack {
+                Button("") { self.viewMode = "field" }
+                    .keyboardShortcut("1", modifiers: .command)
+                Button("") { self.viewMode = "list" }
+                    .keyboardShortcut("2", modifiers: .command)
+            }
+            .frame(width: 0, height: 0)
+            .opacity(0)
+            .accessibilityHidden(true)
+        }
+        .frame(minWidth: 700, minHeight: 540)
+        .navigationTitle(localizedString("MagicBorder"))
+        .onDrop(of: [UTType.fileURL], isTargeted: self.$isFileDropTargeted) { providers in
+            self.handleFileDrop(providers)
+        }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker(localizedString("View"), selection: self.$viewMode) {
+                    Label(localizedString("Field"), systemImage: "rectangle.3.group").tag("field")
+                    Label(localizedString("Tiled List"), systemImage: "list.bullet.rectangle").tag("list")
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 196)
+            }
+
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    self.showPairingPopover.toggle()
+                } label: {
+                    Label(localizedString("Add Machine"), systemImage: "plus")
+                }
+                .help(localizedString("Pair a Machine"))
+
+                Button {
+                    self.presentFilePickerAndSend()
+                } label: {
+                    Label(localizedString("Send Files"), systemImage: "square.and.arrow.up")
+                }
+                .help(localizedString("Send Files via MWB"))
+
+                Button {
+                    self.openDoctor(host: self.networkManager.savedHosts.hosts.first?.address ?? "")
+                } label: {
+                    Label(localizedString("Connection Doctor"), systemImage: "stethoscope")
+                }
+                .help(localizedString("Run Connection Doctor..."))
+
+                Button {
+                    self.showOnboarding = true
+                } label: {
+                    Label(localizedString("Setup Guide"), systemImage: "sparkles")
+                }
+                .help(localizedString("Open Setup Assistant..."))
+
+                SettingsLink {
+                    Label(localizedString("Settings"), systemImage: "gear")
+                }
+                .help(localizedString("Open Settings"))
+            }
+        }
         .sheet(isPresented: self.$showOnboarding) {
             OnboardingView()
+        }
+        .sheet(isPresented: self.$showDoctor) {
+            ConnectionDoctorView(initialHost: self.doctorInitialHost)
         }
         .onAppear {
             self.networkManager.applyCompatibilitySettings()
@@ -125,165 +186,349 @@ struct DashboardView: View {
         .onChange(of: self.networkManager.arrangement) { _, _ in
             self.updateMachines()
         }
+        .onChange(of: self.machines) { _, newValue in
+            self.networkManager.syncArrangement(
+                machineIDs: newValue.map(\.id),
+                twoRow: self.isTwoRow,
+                swap: self.isSwap)
+        }
+        .onChange(of: self.networkManager.compatibilitySettings.matrixOneRow) { _, _ in
+            self.syncMatrix()
+        }
+        .onChange(of: self.networkManager.compatibilitySettings.matrixCircle) { _, _ in
+            self.syncMatrix()
+        }
+    }
+
+    @ViewBuilder
+    private func fieldCommandStrip() -> some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 6) {
+                StatusDot(active: !self.networkManager.isInputPaused)
+                Text(
+                    localizedString(
+                        "Active: %@",
+                        arguments: [self.networkManager.sessionCoordinator.activeMachineName])
+                )
+                .font(.subheadline.weight(.medium))
+                .lineLimit(1)
+            }
+
+            Divider()
+                .frame(height: 16)
+
+            Button {
+                self.showPairingPopover.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(self.isPairingKeyReady ? Color.green : Color.orange)
+                        .frame(width: 6, height: 6)
+                    Text(
+                        self.networkManager.compatibilitySettings.protocolMode == .mwbCompatibility
+                            ? "MWB" : localizedString("Mac-to-Mac")
+                    )
+                    .font(.caption.weight(.medium))
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.quaternary.opacity(0.6), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .help(localizedString("Protocol & Pairing"))
+            .popover(isPresented: self.$showPairingPopover, arrowEdge: .bottom) {
+                ProtocolAndPairingPopover()
+            }
+
+            Button {
+                self.showEdgePopover.toggle()
+            } label: {
+                Label(self.edgePillTitle, systemImage: "arrow.left.arrow.right")
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.quaternary.opacity(0.6), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .help(localizedString("Configure Edge Crossing"))
+            .popover(isPresented: self.$showEdgePopover, arrowEdge: .bottom) {
+                EdgeBehaviorPopover()
+            }
+
+            Button {
+                self.showClipboardPopover.toggle()
+            } label: {
+                Label(self.clipboardPillTitle, systemImage: "doc.on.clipboard")
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.quaternary.opacity(0.6), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .help(localizedString("Clipboard & Privacy"))
+            .popover(isPresented: self.$showClipboardPopover, arrowEdge: .bottom) {
+                ClipboardQuickPopover()
+            }
+
+            Button {
+                self.showEscapePopover.toggle()
+            } label: {
+                Label(self.escapePillTitle, systemImage: "escape")
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.quaternary.opacity(0.6), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .help(localizedString("Escape & Global Hotkeys"))
+            .popover(isPresented: self.$showEscapePopover, arrowEdge: .bottom) {
+                EscapeQuickPopover()
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                self.networkManager.toggleCursorLock()
+            } label: {
+                Label(
+                    self.networkManager.isCursorLocked ? localizedString("Unlock") : localizedString("Lock Screen"),
+                    systemImage: self.networkManager.isCursorLocked ? "lock.fill" : "lock.open")
+            }
+            .controlSize(.small)
+
+            Button {
+                self.networkManager.toggleInputPause()
+            } label: {
+                Label(
+                    self.networkManager.isInputPaused ? localizedString("Resume") : localizedString("Pause"),
+                    systemImage: self.networkManager.isInputPaused ? "play.fill" : "pause.fill")
+            }
+            .controlSize(.small)
+
+            Button {
+                self.networkManager.lockAllScreens()
+            } label: {
+                Label(localizedString("Lock All"), systemImage: "lock.shield")
+            }
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    @ViewBuilder
+    private func nearbyAndSavedRail() -> some View {
+        let savedHosts = self.networkManager.savedHosts.hosts
+        let discovered = self.networkManager.discoveredPeers
+        let localIP = self.networkManager.localIPv4Addresses().first
+
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Button {
+                    withAnimation(.snappy(duration: 0.16)) {
+                        self.isNearbyRailExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: self.isNearbyRailExpanded ? "chevron.down" : "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Text(localizedString("Nearby & Saved"))
+                            .font(.subheadline.weight(.semibold))
+                        Text("\(savedHosts.count + discovered.count)")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(.quaternary, in: Capsule())
+                    }
+                }
+                .buttonStyle(.plain)
+
+                if let localIP {
+                    Button {
+                        let pasteboard = NSPasteboard.general
+                        pasteboard.clearContents()
+                        pasteboard.setString(localIP, forType: .string)
+                        self.copiedLocalIP = true
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(1.5))
+                            self.copiedLocalIP = false
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: self.copiedLocalIP ? "checkmark" : "wifi")
+                                .font(.caption2)
+                            Text(localIP)
+                                .font(.caption.monospaced())
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(.quaternary.opacity(0.55), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .help(localizedString("Copy"))
+                }
+
+                Spacer()
+
+                Button {
+                    self.networkManager.rescanNetwork()
+                } label: {
+                    Label(localizedString("Rescan"), systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+
+                Button {
+                    self.showPairingPopover = true
+                } label: {
+                    Label(localizedString("Pair"), systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.mini)
+            }
+
+            if self.isNearbyRailExpanded {
+                if savedHosts.isEmpty && discovered.isEmpty {
+                    Text(localizedString("No saved or discovered machines yet. Click Pair to add one by IP."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 4)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(savedHosts) { host in
+                                Button {
+                                    self.networkManager.compatibilitySettings.protocolMode = host.protocolMode
+                                    self.networkManager.applyCompatibilitySettings()
+                                    self.networkManager.connectToHost(ip: host.address, port: host.messagePort)
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(
+                                            systemName: host.protocolMode == .mwbCompatibility
+                                                ? "pc" : "desktopcomputer"
+                                        )
+                                        .font(.caption)
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(host.name)
+                                                .font(.caption.weight(.medium))
+                                            Text(host.address)
+                                                .font(.caption2.monospaced())
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button(localizedString("Connect")) {
+                                        self.networkManager.compatibilitySettings.protocolMode = host.protocolMode
+                                        self.networkManager.applyCompatibilitySettings()
+                                        self.networkManager.connectToHost(ip: host.address, port: host.messagePort)
+                                    }
+                                    Button(localizedString("Diagnose")) {
+                                        self.openDoctor(host: host.address)
+                                    }
+                                    Divider()
+                                    Button(localizedString("Remove"), role: .destructive) {
+                                        self.networkManager.savedHosts.remove(id: host.id)
+                                    }
+                                }
+                            }
+
+                            ForEach(discovered) { peer in
+                                let isConnected = self.networkManager.connectedMachines.contains {
+                                    $0.name.caseInsensitiveCompare(peer.name) == .orderedSame
+                                }
+                                Button {
+                                    if !isConnected {
+                                        self.networkManager.connect(to: peer.endpoint)
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: peer.type == .scanned ? "pc" : "laptopcomputer")
+                                            .font(.caption)
+                                            .foregroundStyle(isConnected ? .green : Color.accentColor)
+                                        Text(peer.name)
+                                            .font(.caption.weight(.medium))
+                                        if isConnected {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.caption2)
+                                                .foregroundStyle(.green)
+                                        }
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 7)
+                                    .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(isConnected)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(.quaternary.opacity(0.32), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var isPairingKeyReady: Bool {
+        let trimmed = self.networkManager.compatibilitySettings.securityKey.replacingOccurrences(of: " ", with: "")
+        return self.networkManager.compatibilitySettings.protocolMode == .modern || trimmed.count >= 16
+    }
+
+    private var edgePillTitle: String {
+        let settings = self.networkManager.compatibilitySettings
+        if !settings.switchByMouse {
+            return localizedString("Edge: Off")
+        }
+        switch settings.edgeCrossingModifier {
+        case .command: return "⌘"
+        case .option: return "⌥"
+        case .control: return "⌃"
+        case .none:
+            if settings.edgeDwellSeconds > 0 {
+                return "\(Int((settings.edgeDwellSeconds * 1000).rounded()))ms"
+            }
+            return localizedString("Edge: Free")
+        }
+    }
+
+    private var clipboardPillTitle: String {
+        let settings = self.networkManager.compatibilitySettings
+        guard settings.shareClipboard else {
+            return localizedString("Clip: Off")
+        }
+        return settings.ignoreConcealedClipboard ? localizedString("Clip: Safe") : localizedString("Clip: On")
+    }
+
+    private var escapePillTitle: String {
+        switch self.networkManager.compatibilitySettings.escapeMode {
+        case .doubleTapEsc: "Esc ×2"
+        case .controlOptionEsc: "⌃⌥⎋"
+        case .singleEsc: "Esc ×1"
+        }
+    }
+
+    private func openDoctor(host: String) {
+        self.doctorInitialHost = host
+        self.showDoctor = true
     }
 
     private func updateMachines() {
         self.machines = self.networkManager.visibleMachines()
     }
-}
-
-struct ArrangementDetailView: View {
-    @Binding var machines: [Machine]
-    var onSelectDiscovered: () -> Void
-    @Environment(MBAccessibilityService.self) private var accessibilityService
-    @Environment(MagicBorderKit.MBNetworkManager.self) private var networkManager
-
-    @AppStorage("ui.arrangementCanvasMode") private var canvasMode = "grid"
-    @State private var isInspectorPresented = true
-    @State private var isFileDropTargeted = false
-    @State private var selectedMachineID: UUID?
-
-    private var matrixTwoRowBinding: Binding<Bool> {
-        Binding(
-            get: { !self.networkManager.compatibilitySettings.matrixOneRow },
-            set: { self.networkManager.compatibilitySettings.matrixOneRow = !$0 })
-    }
-
-    private var matrixSwapBinding: Binding<Bool> {
-        Binding(
-            get: { self.networkManager.compatibilitySettings.matrixCircle },
-            set: { self.networkManager.compatibilitySettings.matrixCircle = $0 })
-    }
-
-    var body: some View {
-        @Bindable var networkManager = networkManager
-
-        VStack(spacing: 0) {
-            ZStack {
-                ScrollView {
-                    VStack(spacing: 20) {
-                        if !self.accessibilityService.isTrusted {
-                            AccessibilityWarningBanner(service: self.accessibilityService)
-                                .padding(.top)
-                        }
-
-                        StatusHeaderStrip(
-                            networkManager: self.networkManager,
-                            activeName: self.networkManager.sessionCoordinator.activeMachineName,
-                            canvasMode: self.$canvasMode
-                        )
-                        .padding(.horizontal)
-
-                        if self.canvasMode == "spatial" {
-                            SpatialArrangementView(
-                                machines: self.machines,
-                                twoRow: self.matrixTwoRowBinding.wrappedValue,
-                                activeMachineID: self.networkManager.activeMachineId,
-                                telemetryByID: self.networkManager.peerTelemetry,
-                                onSwitch: { machine in
-                                    if machine.state == .local {
-                                        self.networkManager.forceReturnToLocal(reason: "spatial-double-click")
-                                    } else {
-                                        self.networkManager.requestSwitch(to: machine.id)
-                                    }
-                                },
-                                onSendClipboard: { self.networkManager.pushCurrentClipboard() },
-                                onReconnect: { self.networkManager.reconnect(machineId: $0.id) },
-                                onDisconnect: { self.networkManager.disconnect(machineId: $0.id) }
-                            )
-                            .padding(.horizontal)
-                        } else {
-                            MachineMatrixView(
-                                machines: self.$machines,
-                                columns: self.matrixTwoRowBinding.wrappedValue ? 2 : max(1, self.machines.count),
-                                activeMachineID: self.networkManager.activeMachineId,
-                                selectedMachineID: self.selectedMachineID,
-                                onSelect: { self.selectedMachineID = $0.id },
-                                onSwitch: { machine in
-                                    if machine.state == .local {
-                                        self.networkManager.forceReturnToLocal(reason: "topology-double-click")
-                                    } else {
-                                        self.networkManager.requestSwitch(to: machine.id)
-                                    }
-                                },
-                                onSendClipboard: { self.networkManager.pushCurrentClipboard() },
-                                onReconnect: { self.networkManager.reconnect(machineId: $0.id) },
-                                onDisconnect: { self.networkManager.disconnect(machineId: $0.id) },
-                                onAddMachine: self.onSelectDiscovered
-                            )
-                            .padding(.horizontal)
-                        }
-
-                        Text(
-                            localizedString(
-                                "Drag cards to match physical monitor order. Double-click or right-click a card to switch."
-                            )
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical)
-                }
-                if self.isFileDropTargeted {
-                    FileDropZoneView()
-                        .transition(.opacity)
-                }
-            }
-        }
-        .onDrop(of: [UTType.fileURL], isTargeted: self.$isFileDropTargeted) { providers in
-            self.handleFileDrop(providers)
-        }
-        .navigationTitle(localizedString("Arrangement"))
-        .inspector(isPresented: self.$isInspectorPresented) {
-            ArrangementInspector(
-                networkManager: networkManager,
-                matrixTwoRowBinding: self.matrixTwoRowBinding,
-                matrixSwapBinding: self.matrixSwapBinding)
-        }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    self.isInspectorPresented.toggle()
-                } label: {
-                    Label(localizedString("Inspector"), systemImage: "sidebar.right")
-                }
-            }
-
-            ToolbarItem {
-                Button {
-                    self.presentFilePickerAndSend()
-                } label: {
-                    Label(localizedString("Send Files"), systemImage: "square.and.arrow.up")
-                }
-                .help(localizedString("Send Files via MWB"))
-            }
-
-            ToolbarItem {
-                SettingsLink {
-                    Label(localizedString("Settings"), systemImage: "gear")
-                }
-                .help(localizedString("Open Settings"))
-            }
-        }
-        .onChange(of: self.machines) { _, newValue in
-            networkManager.syncArrangement(
-                machineIDs: newValue.map(\.id),
-                twoRow: self.matrixTwoRowBinding.wrappedValue,
-                swap: self.matrixSwapBinding.wrappedValue)
-        }
-        .onChange(of: networkManager.compatibilitySettings.matrixOneRow) { _, _ in
-            self.syncMatrix()
-        }
-        .onChange(of: networkManager.compatibilitySettings.matrixCircle) { _, _ in
-            self.syncMatrix()
-        }
-    }
 
     private func syncMatrix() {
         self.networkManager.syncArrangement(
             machineIDs: self.machines.map(\.id),
-            twoRow: self.matrixTwoRowBinding.wrappedValue,
-            swap: self.matrixSwapBinding.wrappedValue)
+            twoRow: self.isTwoRow,
+            swap: self.isSwap)
     }
 
     private func handleFileDrop(_ providers: [NSItemProvider]) -> Bool {
@@ -342,57 +587,6 @@ struct ArrangementDetailView: View {
     }
 }
 
-private struct StatusHeaderStrip: View {
-    var networkManager: MBNetworkManager
-    var activeName: String
-    @Binding var canvasMode: String
-
-    var body: some View {
-        HStack(spacing: 10) {
-            StatusDot(active: !self.networkManager.isInputPaused)
-            Text(localizedString("Active: %@", arguments: [self.activeName]))
-                .font(.subheadline.weight(.medium))
-
-            Spacer()
-
-            Picker("", selection: self.$canvasMode) {
-                Text(localizedString("Grid")).tag("grid")
-                Text(localizedString("Spatial")).tag("spatial")
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 120)
-
-            Button {
-                self.networkManager.toggleCursorLock()
-            } label: {
-                Label(
-                    self.networkManager.isCursorLocked ? localizedString("Unlock") : localizedString("Lock Screen"),
-                    systemImage: self.networkManager.isCursorLocked ? "lock.fill" : "lock.open")
-            }
-            .controlSize(.small)
-
-            Button {
-                self.networkManager.toggleInputPause()
-            } label: {
-                Label(
-                    self.networkManager.isInputPaused ? localizedString("Resume") : localizedString("Pause"),
-                    systemImage: self.networkManager.isInputPaused ? "play.fill" : "pause.fill")
-            }
-            .controlSize(.small)
-
-            Button {
-                self.networkManager.lockAllScreens()
-            } label: {
-                Label(localizedString("Lock All"), systemImage: "lock.shield")
-            }
-            .controlSize(.small)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
-    }
-}
-
 struct AccessibilityWarningBanner: View {
     let service: MBAccessibilityService
 
@@ -420,58 +614,5 @@ struct AccessibilityWarningBanner: View {
             }
             .padding(4)
         }
-        .padding(.horizontal)
-    }
-}
-
-struct ArrangementInspector: View {
-    @Bindable var networkManager: MagicBorderKit.MBNetworkManager
-    var matrixTwoRowBinding: Binding<Bool>
-    var matrixSwapBinding: Binding<Bool>
-
-    var body: some View {
-        @Bindable var sessionCoordinator = self.networkManager.sessionCoordinator
-
-        Form {
-            Section(localizedString("Status")) {
-                LabeledContent(localizedString("Active Machine"), value: sessionCoordinator.activeMachineName)
-                LabeledContent(localizedString("State"), value: sessionCoordinator.switchState.rawValue.capitalized)
-                Picker(localizedString("Protocol Mode"), selection: $networkManager.compatibilitySettings.protocolMode)
-                {
-                    Text(localizedString("Windows (MWB)")).tag(MBProtocolMode.mwbCompatibility)
-                    Text(localizedString("Mac-to-Mac")).tag(MBProtocolMode.modern)
-                }
-            }
-
-            Section(localizedString("Layout Options")) {
-                Toggle(localizedString("Two Row Matrix"), isOn: self.matrixTwoRowBinding)
-                Toggle(localizedString("Cycle Through Screens"), isOn: self.matrixSwapBinding)
-            }
-
-            Section(localizedString("Pairing")) {
-                PairingFlowView(securityKey: self.$networkManager.compatibilitySettings.securityKey)
-            }
-
-            Section(localizedString("Connected Devices")) {
-                if self.networkManager.connectedMachines.isEmpty {
-                    Text(localizedString("No devices connected"))
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                } else {
-                    ForEach(self.networkManager.connectedMachines) { machine in
-                        HStack {
-                            Text(machine.name)
-                            Spacer()
-                            Button(localizedString("Switch")) {
-                                self.networkManager.requestSwitch(to: machine.id)
-                            }
-                            .controlSize(.mini)
-                            .buttonStyle(.borderless)
-                        }
-                    }
-                }
-            }
-        }
-        .inspectorColumnWidth(min: 310, ideal: 360, max: 460)
     }
 }

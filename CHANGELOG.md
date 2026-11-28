@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+- **Unified Field UI Redesign**: Removed the legacy 3-pane `NavigationSplitView` sidebar and permanent right inspector in favor of a compact, sidebar-free **Field** window (`minWidth: 700, minHeight: 540`) with near-cursor popovers.
+- **Interactive Border Seams & Machine Popovers**: Clicking any display tile opens a unified `MachineInspectorPopover` (actions, telemetry, Per-Peer Input Profile, and Per-Device Overlay Override) directly next to the node; clicking any `↔` / `↕` border seam or header pill opens focused rule popovers (`EdgeBehaviorPopover`, `ProtocolAndPairingPopover`, `ClipboardQuickPopover`, `EscapeQuickPopover`).
+- **Seamless Tiled List Mode**: Consolidated Grid + Spatial drag-and-drop into `SpatialArrangementView` (`⌘1`) and added `TiledMachineListView` (`⌘2`) with interactive category filter chips (`All`, `Online`, `Windows`, `Mac`, `Saved`, `Nearby`) and one-click connection actions.
+
 ## [0.2.0] - 2026-11-28
 
 ### Added

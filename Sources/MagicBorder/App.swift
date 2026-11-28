@@ -40,6 +40,7 @@ struct MagicBorderApp: App {
                 .environment(self.controller.overlayPreferences)
                 .environment(\.locale, self.currentLocale)
         }
+        .defaultSize(width: 780, height: 580)
 
         Settings {
             SettingsView()

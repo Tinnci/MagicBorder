@@ -274,6 +274,13 @@ private struct OverlaySettingsTab: View {
             Divider()
 
             SettingsSection(localizedString("Per-Device Override")) {
+                Text(
+                    localizedString(
+                        "You can also edit per-device overrides directly by clicking any display in the Field view.")
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
                 HStack {
                     Text(localizedString("Target Device"))
                     Picker("", selection: self.$selectedDevice) {
